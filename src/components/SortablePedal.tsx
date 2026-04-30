@@ -21,6 +21,7 @@ export function SortablePedal({ pedal }: SortablePedalProps) {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    zIndex: isDragging ? 5 : undefined,
   };
 
   return (

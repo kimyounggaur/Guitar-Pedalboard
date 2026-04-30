@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import {
   closestCenter,
   DndContext,
@@ -10,18 +11,29 @@ import {
 } from '@dnd-kit/core';
 import {
   arrayMove,
+  horizontalListSortingStrategy,
   SortableContext,
   sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { AudioEngine } from '../audio/AudioEngine';
 import { usePedalStore } from '../store/pedalStore';
 import { SortablePedal } from './SortablePedal';
 
 export function PedalBoard() {
+  const [showChainToast, setShowChainToast] = useState(false);
+  const toastTimerRef = useRef<number | null>(null);
   const pedals = usePedalStore((state) => state.pedals);
   const reorderPedals = usePedalStore((state) => state.reorderPedals);
   const setDraggingPedal = usePedalStore((state) => state.setDraggingPedal);
+  const chainText = ['Guitar Input', ...pedals.map((pedal) => pedal.name), 'Output'].join(' \u2192 ');
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
@@ -48,6 +60,16 @@ export function PedalBoard() {
 
     reorderPedals(oldIndex, newIndex);
     void AudioEngine.getInstance().rebuildChain(nextPedals);
+    setShowChainToast(true);
+
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+
+    toastTimerRef.current = window.setTimeout(() => {
+      setShowChainToast(false);
+      toastTimerRef.current = null;
+    }, 1800);
   };
 
   return (
@@ -60,6 +82,10 @@ export function PedalBoard() {
         <span className="hint">드래그 종료 후 체인을 재연결합니다</span>
       </div>
 
+      <div className="signal-chain-text" aria-live="polite">
+        {chainText}
+      </div>
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -67,7 +93,7 @@ export function PedalBoard() {
         onDragCancel={() => setDraggingPedal(null)}
         onDragEnd={handleDragEnd}
       >
-        <SortableContext items={pedals.map((pedal) => pedal.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={pedals.map((pedal) => pedal.id)} strategy={horizontalListSortingStrategy}>
           <div className="pedal-board">
             {pedals.map((pedal) => (
               <SortablePedal key={pedal.id} pedal={pedal} />
@@ -75,6 +101,12 @@ export function PedalBoard() {
           </div>
         </SortableContext>
       </DndContext>
+
+      {showChainToast && (
+        <div className="chain-toast" role="status">
+          Signal Chain Updated
+        </div>
+      )}
     </section>
   );
 }

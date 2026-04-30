@@ -360,7 +360,7 @@ export class AudioEngine {
 
       let previous: AudioNode = this.chainInput;
 
-      pedals.forEach((pedal) => {
+      pedals.filter((pedal) => pedal.enabled).forEach((pedal) => {
         const effect = this.createEffect(pedal.type, pedal.id);
         previous.connect(effect.input);
         previous = effect.output;

@@ -56,6 +56,7 @@ button:disabled {
 }
 
 .board-section {
+  position: relative;
   min-width: 0;
 }
 
@@ -115,10 +116,25 @@ h2 {
   text-align: right;
 }
 
+.signal-chain-text {
+  overflow-x: auto;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #303945;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .pedal-board {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  display: flex;
   gap: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
   min-height: 580px;
   padding: 16px;
   border: 1px solid #171a20;
@@ -129,10 +145,15 @@ h2 {
     var(--board);
   background-size: 32px 32px;
   box-shadow: var(--shadow);
+  overscroll-behavior-x: contain;
+  scroll-padding: 16px;
+  touch-action: pan-x;
 }
 
 .sortable-pedal {
-  min-width: 0;
+  flex: 0 0 286px;
+  min-width: 286px;
+  scroll-snap-align: start;
 }
 
 .pedal-card {
@@ -155,8 +176,14 @@ h2 {
   opacity: 0.62;
 }
 
+.pedal-card.is-disabled {
+  filter: grayscale(0.8);
+  opacity: 0.48;
+}
+
 .pedal-card.is-dragging {
-  transform: scale(0.98);
+  opacity: 0.6;
+  transform: scale(1.03);
 }
 
 .pedal-header {
@@ -174,14 +201,26 @@ h2 {
   border-radius: 8px;
   background: #f7f9fc;
   color: #525d6a;
+  cursor: grab;
   font-weight: 800;
   line-height: 1;
   touch-action: none;
+  user-select: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .pedal-controls {
   display: grid;
   gap: 12px;
+}
+
+.pedal-switches {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
 }
 
 .slider-control {
@@ -510,6 +549,20 @@ select,
   font-weight: 800;
 }
 
+.chain-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 20;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #1e2329;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 900;
+  box-shadow: 0 12px 30px rgba(30, 35, 41, 0.24);
+}
+
 .preset-form {
   gap: 8px;
 }
@@ -572,9 +625,20 @@ select,
   }
 
   .pedal-board {
-    grid-template-columns: 1fr;
     min-height: auto;
     padding: 10px;
+  }
+
+  .sortable-pedal {
+    flex-basis: 272px;
+    min-width: 272px;
+  }
+
+  .chain-toast {
+    right: 14px;
+    bottom: 14px;
+    left: 14px;
+    text-align: center;
   }
 
   .sidebar {

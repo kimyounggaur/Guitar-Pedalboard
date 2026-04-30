@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, CSSProperties } from 'react';
+import type { ButtonHTMLAttributes, CSSProperties, SyntheticEvent } from 'react';
 import type {
   CompressorParams,
   DelayParams,
@@ -28,7 +28,17 @@ interface PedalCardProps {
 export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalCardProps) {
   const setActivePedal = usePedalStore((state) => state.setActivePedal);
   const setPedalBypass = usePedalStore((state) => state.setPedalBypass);
+  const togglePedal = usePedalStore((state) => state.togglePedal);
   const updatePedalParam = usePedalStore((state) => state.updatePedalParam);
+
+  const stopControlEvent = (event: SyntheticEvent) => {
+    event.stopPropagation();
+  };
+
+  const toggleEnabled = () => {
+    togglePedal(pedal.id);
+    void AudioEngine.getInstance().rebuildChain(usePedalStore.getState().pedals);
+  };
 
   const commitParam = (key: string, value: number | boolean) => {
     if (key === 'bypass' && typeof value === 'boolean') {
@@ -44,6 +54,8 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
   return (
     <article
       className={`pedal-card${pedal.bypassed ? ' is-bypassed' : ''}${
+        !pedal.enabled ? ' is-disabled' : ''
+      }${
         isDragging ? ' is-dragging' : ''
       }`}
       style={{ '--pedal-color': pedal.color } as CSSProperties}
@@ -56,20 +68,35 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
           aria-label={`${pedal.name} 순서 변경`}
           {...(dragHandleProps as ButtonHTMLAttributes<HTMLButtonElement>)}
         >
-          ::
+          ≡
         </button>
         <div>
           <p className="pedal-kicker">{pedal.type}</p>
           <h2>{pedal.name}</h2>
         </div>
-        <ToggleSwitch
-          label="Bypass"
-          checked={pedal.bypassed}
-          onChange={(checked) => commitParam('bypass', checked)}
-        />
+        <div
+          className="pedal-switches"
+          onPointerDown={stopControlEvent}
+          onMouseDown={stopControlEvent}
+          onTouchStart={stopControlEvent}
+          onKeyDown={stopControlEvent}
+        >
+          <ToggleSwitch label="On" checked={pedal.enabled} onChange={toggleEnabled} />
+          <ToggleSwitch
+            label="Bypass"
+            checked={pedal.bypassed}
+            onChange={(checked) => commitParam('bypass', checked)}
+          />
+        </div>
       </header>
 
-      <div className="pedal-controls">
+      <div
+        className="pedal-controls"
+        onPointerDown={stopControlEvent}
+        onMouseDown={stopControlEvent}
+        onTouchStart={stopControlEvent}
+        onKeyDown={stopControlEvent}
+      >
         <SliderControl
           label="Mix"
           value={pedal.params.mix}
