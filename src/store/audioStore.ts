@@ -5,9 +5,13 @@ import type { LevelReading, PedalState, PitchReading } from '../audio/types';
 const silentLevel: LevelReading = { db: -120, linear: 0 };
 const emptyPitch: PitchReading = { frequency: null, note: null, cents: 0 };
 
+type InputMode = 'idle' | 'device' | 'file';
+
 interface AudioStore {
   devices: MediaDeviceInfo[];
   selectedDeviceId: string;
+  inputMode: InputMode;
+  uploadedFileName: string | null;
   isRunning: boolean;
   isLoading: boolean;
   error: string | null;
@@ -17,6 +21,7 @@ interface AudioStore {
   loadDevices: () => Promise<void>;
   setSelectedDevice: (deviceId: string, pedals?: PedalState[]) => Promise<void>;
   start: (pedals: PedalState[]) => Promise<void>;
+  startFile: (file: File, pedals: PedalState[]) => Promise<void>;
   stop: () => Promise<void>;
   refreshMeters: () => void;
 }
@@ -24,6 +29,14 @@ interface AudioStore {
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return '오디오 장치를 시작하지 못했습니다.';
+}
+
+function resetReadings() {
+  return {
+    inputLevel: silentLevel,
+    outputLevel: silentLevel,
+    pitch: emptyPitch,
+  };
 }
 
 async function connectWithDevice(deviceId: string, pedals: PedalState[]) {
@@ -39,6 +52,8 @@ async function switchInputDevice(deviceId: string) {
 export const useAudioStore = create<AudioStore>((set, get) => ({
   devices: [],
   selectedDeviceId: '',
+  inputMode: 'idle',
+  uploadedFileName: null,
   isRunning: false,
   isLoading: false,
   error: null,
@@ -68,6 +83,8 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       set({
         devices,
         isRunning: true,
+        inputMode: 'device',
+        uploadedFileName: null,
         isLoading: false,
         error: null,
       });
@@ -75,10 +92,9 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       set({
         error: toErrorMessage(error),
         isRunning: false,
+        inputMode: 'idle',
         isLoading: false,
-        inputLevel: silentLevel,
-        outputLevel: silentLevel,
-        pitch: emptyPitch,
+        ...resetReadings(),
       });
     }
   },
@@ -92,6 +108,8 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       set({
         devices,
         isRunning: true,
+        inputMode: 'device',
+        uploadedFileName: null,
         isLoading: false,
         error: null,
       });
@@ -99,6 +117,43 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       set({
         error: toErrorMessage(error),
         isRunning: false,
+        inputMode: 'idle',
+        isLoading: false,
+      });
+    }
+  },
+
+  startFile: async (file, pedals) => {
+    set({ isLoading: true, error: null });
+
+    try {
+      const engine = AudioEngine.getInstance();
+      engine.setPlaybackEndedHandler(() => {
+        void engine.stop();
+        set({
+          isRunning: false,
+          inputMode: 'idle',
+          uploadedFileName: null,
+          isLoading: false,
+          ...resetReadings(),
+        });
+      });
+
+      await engine.startFile(file, pedals);
+      set({
+        isRunning: true,
+        inputMode: 'file',
+        uploadedFileName: file.name,
+        isLoading: false,
+        error: null,
+      });
+    } catch (error) {
+      await AudioEngine.getInstance().stop();
+      set({
+        error: toErrorMessage(error),
+        isRunning: false,
+        inputMode: 'idle',
+        uploadedFileName: null,
         isLoading: false,
       });
     }
@@ -109,10 +164,10 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     await AudioEngine.getInstance().stop();
     set({
       isRunning: false,
+      inputMode: 'idle',
+      uploadedFileName: null,
       isLoading: false,
-      inputLevel: silentLevel,
-      outputLevel: silentLevel,
-      pitch: emptyPitch,
+      ...resetReadings(),
     });
   },
 

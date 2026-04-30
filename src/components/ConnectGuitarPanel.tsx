@@ -6,10 +6,13 @@ import { DeviceSelector } from './DeviceSelector';
 export function ConnectGuitarPanel() {
   const pedals = usePedalStore((state) => state.pedals);
   const isRunning = useAudioStore((state) => state.isRunning);
+  const inputMode = useAudioStore((state) => state.inputMode);
+  const uploadedFileName = useAudioStore((state) => state.uploadedFileName);
   const isLoading = useAudioStore((state) => state.isLoading);
   const error = useAudioStore((state) => state.error);
   const inputLevel = useAudioStore((state) => state.inputLevel);
   const start = useAudioStore((state) => state.start);
+  const startFile = useAudioStore((state) => state.startFile);
   const stop = useAudioStore((state) => state.stop);
   const loadDevices = useAudioStore((state) => state.loadDevices);
   const isClipping = isRunning && inputLevel.db > -1;
@@ -27,25 +30,57 @@ export function ConnectGuitarPanel() {
 
       <DeviceSelector />
 
-      <div className="connect-actions">
-        {!isRunning ? (
-          <button
-            type="button"
-            className="primary-button"
-            disabled={isLoading}
-            onClick={() => void start(pedals)}
-          >
-            {isLoading ? '연결 중...' : '기타 연결하기'}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="danger-button"
-            disabled={isLoading}
-            onClick={() => void stop()}
-          >
-            연결 해제
-          </button>
+      {inputMode !== 'file' && (
+        <div className="connect-actions">
+          {!isRunning ? (
+            <button
+              type="button"
+              className="primary-button"
+              disabled={isLoading}
+              onClick={() => void start(pedals)}
+            >
+              {isLoading ? '연결 중...' : '기타 연결하기'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="danger-button"
+              disabled={isLoading}
+              onClick={() => void stop()}
+            >
+              연결 해제
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="audio-file-upload">
+        <label htmlFor="audio-file">음원 파일</label>
+        <input
+          id="audio-file"
+          type="file"
+          accept="audio/*"
+          disabled={isLoading}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            if (file) {
+              void startFile(file, pedals);
+            }
+            event.currentTarget.value = '';
+          }}
+        />
+        {inputMode === 'file' && uploadedFileName && (
+          <div className="file-playback-row">
+            <span>{uploadedFileName}</span>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={isLoading}
+              onClick={() => void stop()}
+            >
+              정지
+            </button>
+          </div>
         )}
       </div>
 

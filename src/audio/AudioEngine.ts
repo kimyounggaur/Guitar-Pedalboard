@@ -76,7 +76,9 @@ export class AudioEngine {
 
   private context: AudioContext | null = null;
   private stream: MediaStream | null = null;
-  private source: MediaStreamAudioSourceNode | null = null;
+  private source: MediaStreamAudioSourceNode | MediaElementAudioSourceNode | null = null;
+  private audioElement: HTMLAudioElement | null = null;
+  private audioFileUrl: string | null = null;
   private inputGain: GainNode | null = null;
   private chainInput: GainNode | null = null;
   private masterGain: GainNode | null = null;
@@ -90,6 +92,7 @@ export class AudioEngine {
   private masterVolume = 0.9;
   private workletsLoaded = false;
   private workletUrls: string[] = [];
+  private playbackEndedHandler: (() => void) | null = null;
 
   static getInstance(): AudioEngine {
     if (!AudioEngine.instance) {
@@ -99,7 +102,11 @@ export class AudioEngine {
   }
 
   get isRunning(): boolean {
-    return !!this.context && this.context.state !== 'closed' && !!this.stream;
+    return !!this.context && this.context.state !== 'closed' && (!!this.stream || !!this.audioElement);
+  }
+
+  setPlaybackEndedHandler(handler: (() => void) | null): void {
+    this.playbackEndedHandler = handler;
   }
 
   async listInputDevices(): Promise<MediaDeviceInfo[]> {
@@ -133,23 +140,35 @@ export class AudioEngine {
     });
 
     this.source = this.context.createMediaStreamSource(this.stream);
-    this.inputGain = this.context.createGain();
-    this.chainInput = this.context.createGain();
-    this.masterGain = this.context.createGain();
-    this.inputMeter = new MeterNode(this.context);
-    this.outputMeter = new MeterNode(this.context);
-    this.tuner = new TunerNode(this.context);
-
-    this.masterGain.gain.value = 0;
-
-    this.source.connect(this.inputGain);
-    this.inputGain.connect(this.inputMeter.input);
-    this.inputGain.connect(this.tuner.input);
-    this.inputGain.connect(this.chainInput);
-    this.masterGain.connect(this.outputMeter.input);
-    this.masterGain.connect(this.context.destination);
+    this.createProcessingGraph(this.source);
 
     await this.context.resume();
+  }
+
+  async startFile(file: File, pedals: PedalState[]): Promise<void> {
+    if (file.type && !file.type.startsWith('audio/')) {
+      throw new Error('오디오 파일만 업로드할 수 있습니다.');
+    }
+
+    this.currentPedals = this.clonePedals(pedals);
+    this.dispose();
+
+    this.context = new AudioContext({ latencyHint: 'interactive' });
+    await this.loadWorklets();
+
+    this.audioFileUrl = URL.createObjectURL(file);
+    this.audioElement = new Audio(this.audioFileUrl);
+    this.audioElement.preload = 'auto';
+    this.audioElement.addEventListener('ended', () => {
+      this.playbackEndedHandler?.();
+    });
+
+    this.source = this.context.createMediaElementSource(this.audioElement);
+    this.createProcessingGraph(this.source);
+
+    await this.context.resume();
+    this.rebuildChain(pedals);
+    await this.audioElement.play();
   }
 
   async setInputDevice(deviceId: string): Promise<void> {
@@ -226,6 +245,14 @@ export class AudioEngine {
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
 
+    this.audioElement?.pause();
+    this.audioElement = null;
+
+    if (this.audioFileUrl) {
+      URL.revokeObjectURL(this.audioFileUrl);
+      this.audioFileUrl = null;
+    }
+
     if (this.context && this.context.state !== 'closed') {
       void this.context.close();
     }
@@ -298,6 +325,26 @@ export class AudioEngine {
     const url = URL.createObjectURL(new Blob([source], { type: 'application/javascript' }));
     this.workletUrls.push(url);
     return url;
+  }
+
+  private createProcessingGraph(source: AudioNode): void {
+    if (!this.context) return;
+
+    this.inputGain = this.context.createGain();
+    this.chainInput = this.context.createGain();
+    this.masterGain = this.context.createGain();
+    this.inputMeter = new MeterNode(this.context);
+    this.outputMeter = new MeterNode(this.context);
+    this.tuner = new TunerNode(this.context);
+
+    this.masterGain.gain.value = 0;
+
+    source.connect(this.inputGain);
+    this.inputGain.connect(this.inputMeter.input);
+    this.inputGain.connect(this.tuner.input);
+    this.inputGain.connect(this.chainInput);
+    this.masterGain.connect(this.outputMeter.input);
+    this.masterGain.connect(this.context.destination);
   }
 
   private async rebuildNow(pedals: PedalState[]): Promise<void> {

@@ -5,9 +5,11 @@ export function DeviceSelector() {
   const pedals = usePedalStore((state) => state.pedals);
   const devices = useAudioStore((state) => state.devices);
   const selectedDeviceId = useAudioStore((state) => state.selectedDeviceId);
+  const inputMode = useAudioStore((state) => state.inputMode);
   const setSelectedDevice = useAudioStore((state) => state.setSelectedDevice);
   const loadDevices = useAudioStore((state) => state.loadDevices);
   const isLoading = useAudioStore((state) => state.isLoading);
+  const isFilePlaying = inputMode === 'file';
 
   return (
     <div className="device-selector">
@@ -16,7 +18,7 @@ export function DeviceSelector() {
         <select
           id="audio-device"
           value={selectedDeviceId}
-          disabled={isLoading}
+          disabled={isLoading || isFilePlaying}
           onChange={(event) => void setSelectedDevice(event.currentTarget.value, pedals)}
         >
           <option value="">기본 입력 장치</option>
@@ -29,7 +31,7 @@ export function DeviceSelector() {
         <button
           type="button"
           className="secondary-button"
-          disabled={isLoading}
+          disabled={isLoading || isFilePlaying}
           onClick={() => void loadDevices()}
         >
           새로고침

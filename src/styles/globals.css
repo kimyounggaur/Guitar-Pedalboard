@@ -278,7 +278,8 @@ input[type="range"] {
   gap: 8px;
 }
 
-.device-selector label {
+.device-selector label,
+.audio-file-upload label {
   color: var(--ink-muted);
   font-size: 0.78rem;
   font-weight: 800;
@@ -299,6 +300,51 @@ select,
   background: #fbfcfe;
   color: #1e2329;
   padding: 0 10px;
+}
+
+.audio-file-upload {
+  display: grid;
+  gap: 8px;
+}
+
+.audio-file-upload input[type="file"] {
+  width: 100%;
+  min-width: 0;
+  color: var(--ink-muted);
+  font-size: 0.84rem;
+}
+
+.audio-file-upload input[type="file"]::file-selector-button {
+  height: 40px;
+  margin-right: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #edf2f8;
+  color: #233042;
+  font: inherit;
+  font-weight: 800;
+}
+
+.file-playback-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.file-playback-row span {
+  overflow: hidden;
+  color: #303945;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .primary-button,
