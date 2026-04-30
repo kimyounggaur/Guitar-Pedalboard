@@ -15,7 +15,7 @@ interface AudioStore {
   outputLevel: LevelReading;
   pitch: PitchReading;
   loadDevices: () => Promise<void>;
-  setSelectedDevice: (deviceId: string) => void;
+  setSelectedDevice: (deviceId: string, pedals?: PedalState[]) => Promise<void>;
   start: (pedals: PedalState[]) => Promise<void>;
   stop: () => Promise<void>;
   refreshMeters: () => void;
@@ -24,6 +24,11 @@ interface AudioStore {
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return '오디오 장치를 시작하지 못했습니다.';
+}
+
+async function connectWithDevice(deviceId: string, pedals: PedalState[]) {
+  await AudioEngine.getInstance().start(pedals, deviceId || undefined);
+  return AudioEngine.getInstance().listInputDevices();
 }
 
 export const useAudioStore = create<AudioStore>((set, get) => ({
@@ -45,15 +50,40 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     }
   },
 
-  setSelectedDevice: (deviceId) => set({ selectedDeviceId: deviceId }),
+  setSelectedDevice: async (deviceId, pedals) => {
+    const wasRunning = get().isRunning;
+    set({ selectedDeviceId: deviceId, error: null });
+
+    if (!wasRunning || !pedals) return;
+
+    set({ isLoading: true });
+
+    try {
+      const devices = await connectWithDevice(deviceId, pedals);
+      set({
+        devices,
+        isRunning: true,
+        isLoading: false,
+        error: null,
+      });
+    } catch (error) {
+      set({
+        error: toErrorMessage(error),
+        isRunning: false,
+        isLoading: false,
+        inputLevel: silentLevel,
+        outputLevel: silentLevel,
+        pitch: emptyPitch,
+      });
+    }
+  },
 
   start: async (pedals) => {
     const { selectedDeviceId } = get();
     set({ isLoading: true, error: null });
 
     try {
-      await AudioEngine.getInstance().start(pedals, selectedDeviceId || undefined);
-      const devices = await AudioEngine.getInstance().listInputDevices();
+      const devices = await connectWithDevice(selectedDeviceId, pedals);
       set({
         devices,
         isRunning: true,

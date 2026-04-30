@@ -104,7 +104,8 @@ h2 {
 .hint,
 .panel-copy,
 .empty-copy,
-.error-message {
+.error-message,
+.warning-message {
   color: var(--ink-muted);
   font-size: 0.9rem;
   line-height: 1.5;
@@ -352,6 +353,16 @@ select,
 .error-message {
   margin: 0;
   color: var(--danger);
+}
+
+.warning-message {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #e4b34b;
+  border-radius: 8px;
+  background: #fff7df;
+  color: #7b4e00;
+  font-weight: 800;
 }
 
 .meter-panel {
