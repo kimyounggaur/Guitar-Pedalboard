@@ -7,6 +7,7 @@ export function PresetPanel() {
   const [name, setName] = useState('Clean Board');
   const pedals = usePedalStore((state) => state.pedals);
   const setPedals = usePedalStore((state) => state.setPedals);
+  const resetPedalOrder = usePedalStore((state) => state.resetPedalOrder);
   const presets = usePresetStore((state) => state.presets);
   const savePreset = usePresetStore((state) => state.savePreset);
   const deletePreset = usePresetStore((state) => state.deletePreset);
@@ -19,7 +20,7 @@ export function PresetPanel() {
 
   const reset = () => {
     const nextPedals = clonePedals(initialPedals);
-    setPedals(nextPedals);
+    resetPedalOrder();
     void AudioEngine.getInstance().rebuildChain(nextPedals);
   };
 

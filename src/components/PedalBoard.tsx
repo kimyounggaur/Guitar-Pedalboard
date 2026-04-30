@@ -20,8 +20,8 @@ import { SortablePedal } from './SortablePedal';
 
 export function PedalBoard() {
   const pedals = usePedalStore((state) => state.pedals);
-  const setPedals = usePedalStore((state) => state.setPedals);
-  const setDraggingId = usePedalStore((state) => state.setDraggingId);
+  const reorderPedals = usePedalStore((state) => state.reorderPedals);
+  const setDraggingPedal = usePedalStore((state) => state.setDraggingPedal);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
@@ -32,19 +32,21 @@ export function PedalBoard() {
   );
 
   const handleDragStart = (event: DragStartEvent) => {
-    setDraggingId(String(event.active.id));
+    setDraggingPedal(String(event.active.id));
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    setDraggingId(null);
+    setDraggingPedal(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
     const oldIndex = pedals.findIndex((pedal) => pedal.id === active.id);
     const newIndex = pedals.findIndex((pedal) => pedal.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+
     const nextPedals = arrayMove(pedals, oldIndex, newIndex);
 
-    setPedals(nextPedals);
+    reorderPedals(oldIndex, newIndex);
     void AudioEngine.getInstance().rebuildChain(nextPedals);
   };
 
@@ -62,7 +64,7 @@ export function PedalBoard() {
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
-        onDragCancel={() => setDraggingId(null)}
+        onDragCancel={() => setDraggingPedal(null)}
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={pedals.map((pedal) => pedal.id)} strategy={verticalListSortingStrategy}>

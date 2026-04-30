@@ -26,28 +26,28 @@ interface PedalCardProps {
 }
 
 export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalCardProps) {
-  const updatePedal = usePedalStore((state) => state.updatePedal);
+  const setActivePedal = usePedalStore((state) => state.setActivePedal);
+  const setPedalBypass = usePedalStore((state) => state.setPedalBypass);
+  const updatePedalParam = usePedalStore((state) => state.updatePedalParam);
 
   const commitParam = (key: string, value: number | boolean) => {
-    const nextPedal: PedalState = {
-      ...pedal,
-      bypassed: key === 'bypass' && typeof value === 'boolean' ? value : pedal.bypassed,
-      params: {
-        ...pedal.params,
-        [key]: value,
-      } as PedalState['params'],
-    };
+    if (key === 'bypass' && typeof value === 'boolean') {
+      setPedalBypass(pedal.id, value);
+      AudioEngine.getInstance().setPedalBypass(pedal.id, value);
+      return;
+    }
 
-    updatePedal(nextPedal);
-    AudioEngine.getInstance().updatePedal(nextPedal);
+    updatePedalParam(pedal.id, key, value);
+    AudioEngine.getInstance().setPedalParam(pedal.id, key, value);
   };
 
   return (
     <article
-      className={`pedal-card${pedal.params.bypass ? ' is-bypassed' : ''}${
+      className={`pedal-card${pedal.bypassed ? ' is-bypassed' : ''}${
         isDragging ? ' is-dragging' : ''
       }`}
       style={{ '--pedal-color': pedal.color } as CSSProperties}
+      onClick={() => setActivePedal(pedal.id)}
     >
       <header className="pedal-header">
         <button
@@ -64,7 +64,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         </div>
         <ToggleSwitch
           label="Bypass"
-          checked={pedal.params.bypass}
+          checked={pedal.bypassed}
           onChange={(checked) => commitParam('bypass', checked)}
         />
       </header>

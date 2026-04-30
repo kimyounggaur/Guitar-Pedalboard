@@ -1,10 +1,18 @@
+import { useEffect } from 'react';
 import { ChainText } from './ChainText';
 import { ConnectGuitarPanel } from './ConnectGuitarPanel';
 import { Meter } from './Meter';
 import { PedalBoard } from './PedalBoard';
 import { PresetPanel } from './PresetPanel';
+import { usePedalStore } from '../store/pedalStore';
 
 export function AppShell() {
+  const loadPedalsFromStorage = usePedalStore((state) => state.loadPedalsFromStorage);
+
+  useEffect(() => {
+    loadPedalsFromStorage();
+  }, [loadPedalsFromStorage]);
+
   return (
     <main className="app-shell">
       <div className="workspace">
