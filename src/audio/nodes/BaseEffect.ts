@@ -1,0 +1,109 @@
+import type { BasePedalParams, EffectType, PedalParamValue, PedalState } from '../types';
+import { clamp } from '../utils/db';
+import { smoothParam } from '../utils/smoothing';
+
+export class BaseEffect {
+  readonly id: string;
+  readonly type: EffectType;
+  readonly input: GainNode;
+  readonly output: GainNode;
+
+  protected readonly context: AudioContext;
+  protected readonly effectInput: GainNode;
+  protected readonly effectOutput: GainNode;
+  protected readonly dryGain: GainNode;
+  protected readonly wetGain: GainNode;
+  protected readonly levelGain: GainNode;
+  protected commonParams: BasePedalParams = {
+    bypass: false,
+    mix: 1,
+    level: 1,
+  };
+
+  constructor(context: AudioContext, pedal: PedalState) {
+    this.context = context;
+    this.id = pedal.id;
+    this.type = pedal.type;
+
+    this.input = context.createGain();
+    this.output = context.createGain();
+    this.effectInput = context.createGain();
+    this.effectOutput = context.createGain();
+    this.dryGain = context.createGain();
+    this.wetGain = context.createGain();
+    this.levelGain = context.createGain();
+
+    this.input.connect(this.dryGain);
+    this.input.connect(this.effectInput);
+    this.dryGain.connect(this.levelGain);
+    this.effectOutput.connect(this.wetGain);
+    this.wetGain.connect(this.levelGain);
+    this.levelGain.connect(this.output);
+
+    this.updateCommon(pedal.params);
+  }
+
+  connect(destination: AudioNode): void {
+    this.output.connect(destination);
+  }
+
+  disconnect(): void {
+    this.output.disconnect();
+  }
+
+  setParam(name: string, value: PedalParamValue): void {
+    if (name === 'bypass' && typeof value === 'boolean') {
+      this.setBypass(value);
+      return;
+    }
+
+    if ((name === 'mix' || name === 'level') && typeof value === 'number') {
+      this.updateCommon({
+        ...this.commonParams,
+        [name]: value,
+      });
+    }
+  }
+
+  setBypass(bypassed: boolean): void {
+    this.updateCommon({
+      ...this.commonParams,
+      bypass: bypassed,
+    });
+  }
+
+  update(pedal: PedalState): void {
+    this.updateCommon(pedal.params);
+  }
+
+  dispose(): void {
+    this.input.disconnect();
+    this.output.disconnect();
+    this.effectInput.disconnect();
+    this.effectOutput.disconnect();
+    this.dryGain.disconnect();
+    this.wetGain.disconnect();
+    this.levelGain.disconnect();
+  }
+
+  protected updateCommon(params: BasePedalParams): void {
+    this.commonParams = {
+      bypass: params.bypass,
+      mix: params.mix,
+      level: params.level,
+    };
+
+    const mix = clamp(params.mix, 0, 1);
+    const dry = params.bypass ? 1 : 1 - mix;
+    const wet = params.bypass ? 0 : mix;
+    const level = clamp(params.level, 0, 2);
+
+    smoothParam(this.dryGain.gain, dry, this.context);
+    smoothParam(this.wetGain.gain, wet, this.context);
+    smoothParam(this.levelGain.gain, level, this.context);
+  }
+
+  protected connectPassthrough(): void {
+    this.effectInput.connect(this.effectOutput);
+  }
+}
