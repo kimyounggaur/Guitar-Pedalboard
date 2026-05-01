@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Pedal, PedalParamValue, PedalParams, PedalState } from '../audio/types';
+import type { Pedal, PedalParamValue, PedalParams, PedalState, PedalType } from '../audio/types';
 
 const STORAGE_KEY = 'guitar-pedalboard:pedals';
 
@@ -14,11 +14,15 @@ export const initialPedals: PedalState[] = [
     bypassed: false,
     color: '#3f8f85',
     params: {
-      bypass: false,
-      mix: 1,
-      level: 1,
-      threshold: -54,
-      release: 0.09,
+      bypassed: false,
+      mix: 100,
+      level: 100,
+      thresholdDb: -54,
+      reductionDb: -80,
+      attackMs: 6,
+      holdMs: 70,
+      releaseMs: 180,
+      hysteresisDb: 4,
     },
   },
   {
@@ -29,13 +33,15 @@ export const initialPedals: PedalState[] = [
     bypassed: false,
     color: '#b48a3c',
     params: {
-      bypass: false,
-      mix: 0.75,
-      level: 1,
+      bypassed: false,
+      mix: 75,
+      level: 100,
       threshold: -24,
       ratio: 4,
       attack: 0.006,
       release: 0.18,
+      knee: 18,
+      sustain: 35,
     },
   },
   {
@@ -46,11 +52,13 @@ export const initialPedals: PedalState[] = [
     bypassed: false,
     color: '#bd5d45',
     params: {
-      bypass: false,
-      mix: 0.88,
-      level: 0.95,
-      drive: 0.42,
-      tone: 0.55,
+      bypassed: false,
+      mix: 88,
+      level: 95,
+      mode: 'overdrive',
+      drive: 42,
+      tone: 55,
+      bias: 0.08,
     },
   },
   {
@@ -61,12 +69,16 @@ export const initialPedals: PedalState[] = [
     bypassed: false,
     color: '#526fb3',
     params: {
-      bypass: false,
-      mix: 1,
-      level: 1,
-      low: 1.5,
-      mid: -0.5,
-      high: 1.8,
+      bypassed: false,
+      mix: 100,
+      level: 100,
+      lowCut: 70,
+      bassGain: 1.5,
+      midFreq: 800,
+      midGain: -0.5,
+      midQ: 0.9,
+      trebleGain: 1.8,
+      presenceGain: 1,
     },
   },
   {
@@ -77,12 +89,16 @@ export const initialPedals: PedalState[] = [
     bypassed: true,
     color: '#6a7d4f',
     params: {
-      bypass: true,
-      mix: 0.3,
-      level: 1,
-      time: 0.28,
+      bypassed: true,
+      mix: 30,
+      level: 100,
+      mode: 'digital',
+      timeMs: 280,
       feedback: 0.34,
-      tone: 0.6,
+      tone: 60,
+      sync: false,
+      bpm: 120,
+      division: '1/4',
     },
   },
   {
@@ -93,11 +109,14 @@ export const initialPedals: PedalState[] = [
     bypassed: true,
     color: '#8b6f9f',
     params: {
-      bypass: true,
-      mix: 0.25,
-      level: 1,
+      bypassed: true,
+      mix: 25,
+      level: 100,
+      mode: 'hall',
       decay: 1.8,
-      tone: 0.68,
+      preDelay: 24,
+      lowCut: 120,
+      highCut: 7200,
     },
   },
 ];
@@ -107,12 +126,14 @@ export function clonePedals(pedals: PedalState[]): PedalState[] {
 }
 
 function clonePedal(pedal: PedalState): PedalState {
+  const bypassed = pedal.bypassed ?? Boolean(pedal.params.bypassed ?? pedal.params.bypass);
+
   return {
     ...pedal,
-    bypassed: pedal.bypassed ?? Boolean(pedal.params.bypass),
+    bypassed,
     params: {
       ...pedal.params,
-      bypass: pedal.bypassed ?? Boolean(pedal.params.bypass),
+      bypassed,
     } as PedalParams,
   };
 }
@@ -176,11 +197,7 @@ function mergeStoredPedals(storedPedals: StoredPedal[] | null): PedalState[] {
         ...defaultPedal,
         enabled: storedPedal.enabled,
         bypassed: storedPedal.bypassed,
-        params: {
-          ...defaultPedal.params,
-          ...storedPedal.params,
-          bypass: storedPedal.bypassed,
-        } as PedalParams,
+        params: normalizeStoredParams(defaultPedal.type, defaultPedal.params, storedPedal),
       }),
     );
   });
@@ -192,6 +209,67 @@ function mergeStoredPedals(storedPedals: StoredPedal[] | null): PedalState[] {
   });
 
   return restored;
+}
+
+function normalizePercent(value: PedalParamValue | undefined, fallback: number): number {
+  return typeof value === 'number' ? (value <= 2 ? Math.round(value * 100) : value) : fallback;
+}
+
+function normalizeStoredParams(
+  type: PedalType,
+  defaultParams: PedalParams,
+  storedPedal: StoredPedal,
+): PedalParams {
+  const storedParams = storedPedal.params;
+  const params = {
+    ...defaultParams,
+    ...storedParams,
+    bypassed: storedPedal.bypassed,
+    mix: normalizePercent(storedParams.mix, Number(defaultParams.mix)),
+    level: normalizePercent(storedParams.level, Number(defaultParams.level)),
+  } as Record<string, PedalParamValue>;
+
+  if (type === 'noiseGate') {
+    params.thresholdDb = typeof storedParams.thresholdDb === 'number' ? storedParams.thresholdDb : (storedParams.threshold as number) ?? params.thresholdDb;
+    params.releaseMs =
+      typeof storedParams.releaseMs === 'number'
+        ? storedParams.releaseMs
+        : typeof storedParams.release === 'number'
+          ? Math.round(storedParams.release * 1000)
+          : params.releaseMs;
+  }
+
+  if (type === 'drive') {
+    params.drive = normalizePercent(storedParams.drive, Number(params.drive));
+    params.tone = normalizePercent(storedParams.tone, Number(params.tone));
+  }
+
+  if (type === 'eq') {
+    params.bassGain = typeof storedParams.bassGain === 'number' ? storedParams.bassGain : (storedParams.low as number) ?? params.bassGain;
+    params.midGain = typeof storedParams.midGain === 'number' ? storedParams.midGain : (storedParams.mid as number) ?? params.midGain;
+    params.trebleGain = typeof storedParams.trebleGain === 'number' ? storedParams.trebleGain : (storedParams.high as number) ?? params.trebleGain;
+  }
+
+  if (type === 'delay') {
+    params.timeMs =
+      typeof storedParams.timeMs === 'number'
+        ? storedParams.timeMs
+        : typeof storedParams.time === 'number'
+          ? Math.round(storedParams.time * 1000)
+          : params.timeMs;
+    params.tone = normalizePercent(storedParams.tone, Number(params.tone));
+  }
+
+  if (type === 'reverb') {
+    params.highCut =
+      typeof storedParams.highCut === 'number'
+        ? storedParams.highCut
+        : typeof storedParams.tone === 'number'
+          ? 1000 + normalizePercent(storedParams.tone, 60) * 110
+          : params.highCut;
+  }
+
+  return params as PedalParams;
 }
 
 function movePedal(pedals: PedalState[], oldIndex: number, newIndex: number): PedalState[] {
@@ -262,7 +340,7 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
               bypassed,
               params: {
                 ...pedal.params,
-                bypass: bypassed,
+                bypassed,
               } as PedalParams,
             })
           : clonePedal(pedal),
@@ -276,7 +354,10 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
       const pedals = state.pedals.map((pedal) => {
         if (pedal.id !== id) return clonePedal(pedal);
 
-        const bypassed = paramName === 'bypass' && typeof value === 'boolean' ? value : pedal.bypassed;
+        const bypassed =
+          (paramName === 'bypass' || paramName === 'bypassed') && typeof value === 'boolean'
+            ? value
+            : pedal.bypassed;
 
         return clonePedal({
           ...pedal,
@@ -284,7 +365,7 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
           params: {
             ...pedal.params,
             [paramName]: value,
-            bypass: bypassed,
+            bypassed,
           } as PedalParams,
         });
       });

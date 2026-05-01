@@ -40,8 +40,8 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
     void AudioEngine.getInstance().rebuildChain(usePedalStore.getState().pedals);
   };
 
-  const commitParam = (key: string, value: number | boolean) => {
-    if (key === 'bypass' && typeof value === 'boolean') {
+  const commitParam = (key: string, value: number | string | boolean) => {
+    if ((key === 'bypass' || key === 'bypassed') && typeof value === 'boolean') {
       setPedalBypass(pedal.id, value);
       AudioEngine.getInstance().setPedalBypass(pedal.id, value);
       return;
@@ -85,7 +85,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
           <ToggleSwitch
             label="Bypass"
             checked={pedal.bypassed}
-            onChange={(checked) => commitParam('bypass', checked)}
+            onChange={(checked) => commitParam('bypassed', checked)}
           />
         </div>
       </header>
@@ -101,18 +101,18 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
           label="Mix"
           value={pedal.params.mix}
           min={0}
-          max={1}
-          step={0.01}
-          displayValue={`${Math.round(pedal.params.mix * 100)}%`}
+          max={100}
+          step={1}
+          displayValue={`${Math.round(pedal.params.mix)}%`}
           onChange={(value) => commitParam('mix', value)}
         />
         <SliderControl
           label="Level"
           value={pedal.params.level}
           min={0}
-          max={2}
-          step={0.01}
-          displayValue={`${Math.round(pedal.params.level * 100)}%`}
+          max={100}
+          step={1}
+          displayValue={`${Math.round(pedal.params.level)}%`}
           onChange={(value) => commitParam('level', value)}
         />
 

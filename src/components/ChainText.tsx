@@ -14,7 +14,7 @@ export function ChainText() {
           <li key={pedal.id}>
             <span>{index + 1}</span>
             <strong>{pedal.name}</strong>
-            {pedal.params.bypass && <em>Bypass</em>}
+            {pedal.bypassed && <em>Bypass</em>}
           </li>
         ))}
       </ol>

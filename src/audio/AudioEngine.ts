@@ -24,50 +24,69 @@ const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve,
 
 const defaultParamsByType: Record<PedalType, PedalParams> = {
   noiseGate: {
-    bypass: false,
-    mix: 1,
-    level: 1,
-    threshold: -54,
-    release: 0.09,
+    bypassed: false,
+    mix: 100,
+    level: 100,
+    thresholdDb: -54,
+    reductionDb: -80,
+    attackMs: 6,
+    holdMs: 70,
+    releaseMs: 180,
+    hysteresisDb: 4,
   },
   compressor: {
-    bypass: false,
-    mix: 0.75,
-    level: 1,
+    bypassed: false,
+    mix: 75,
+    level: 100,
     threshold: -24,
     ratio: 4,
     attack: 0.006,
     release: 0.18,
+    knee: 18,
+    sustain: 35,
   },
   drive: {
-    bypass: false,
-    mix: 0.88,
-    level: 0.95,
-    drive: 0.42,
-    tone: 0.55,
+    bypassed: false,
+    mix: 88,
+    level: 95,
+    mode: 'overdrive',
+    drive: 42,
+    tone: 55,
+    bias: 0.08,
   },
   eq: {
-    bypass: false,
-    mix: 1,
-    level: 1,
-    low: 1.5,
-    mid: -0.5,
-    high: 1.8,
+    bypassed: false,
+    mix: 100,
+    level: 100,
+    lowCut: 70,
+    bassGain: 1.5,
+    midFreq: 800,
+    midGain: -0.5,
+    midQ: 0.9,
+    trebleGain: 1.8,
+    presenceGain: 1,
   },
   delay: {
-    bypass: true,
-    mix: 0.3,
-    level: 1,
-    time: 0.28,
+    bypassed: true,
+    mix: 30,
+    level: 100,
+    mode: 'digital',
+    timeMs: 280,
     feedback: 0.34,
-    tone: 0.6,
+    tone: 60,
+    sync: false,
+    bpm: 120,
+    division: '1/4',
   },
   reverb: {
-    bypass: true,
-    mix: 0.25,
-    level: 1,
+    bypassed: true,
+    mix: 25,
+    level: 100,
+    mode: 'hall',
     decay: 1.8,
-    tone: 0.68,
+    preDelay: 24,
+    lowCut: 120,
+    highCut: 7200,
   },
 };
 
@@ -216,10 +235,16 @@ export class AudioEngine {
 
     const nextPedal = {
       ...pedal,
-      bypassed: paramName === 'bypass' && typeof value === 'boolean' ? value : pedal.bypassed,
+      bypassed:
+        (paramName === 'bypass' || paramName === 'bypassed') && typeof value === 'boolean'
+          ? value
+          : pedal.bypassed,
       params: {
         ...pedal.params,
         [paramName]: value,
+        ...(((paramName === 'bypass' || paramName === 'bypassed') && typeof value === 'boolean'
+          ? { bypassed: value }
+          : {}) as Partial<PedalParams>),
       } as PedalParams,
     };
 
@@ -229,7 +254,7 @@ export class AudioEngine {
   }
 
   setPedalBypass(pedalId: string, bypassed: boolean): void {
-    this.setPedalParam(pedalId, 'bypass', bypassed);
+    this.setPedalParam(pedalId, 'bypassed', bypassed);
   }
 
   setMasterVolume(value: number): void {
@@ -393,7 +418,7 @@ export class AudioEngine {
       type,
       name: type,
       enabled: true,
-      bypassed: defaultParamsByType[type].bypass,
+      bypassed: defaultParamsByType[type].bypassed,
       color: '#6b7280',
       params: { ...defaultParamsByType[type] } as PedalParams,
     };
@@ -406,7 +431,7 @@ export class AudioEngine {
   private clonePedal(pedal: PedalState): PedalState {
     return {
       ...pedal,
-      bypassed: pedal.params.bypass,
+      bypassed: Boolean(pedal.params.bypassed ?? pedal.bypassed),
       params: { ...pedal.params } as PedalParams,
     };
   }

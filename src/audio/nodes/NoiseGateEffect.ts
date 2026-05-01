@@ -14,10 +14,26 @@ export class NoiseGateEffect extends BaseEffect {
       numberOfOutputs: 1,
       outputChannelCount: [2],
       parameterData: {
-        threshold: params.threshold,
-        release: params.release,
+        thresholdDb: params.thresholdDb,
+        reductionDb: params.reductionDb,
+        attackMs: params.attackMs,
+        holdMs: params.holdMs,
+        releaseMs: params.releaseMs,
+        hysteresisDb: params.hysteresisDb,
       },
     });
+
+    this.gate.port.onmessage = (event: MessageEvent<{ type: string; state: string }>) => {
+      if (event.data.type !== 'gate-state') return;
+      window.dispatchEvent(
+        new CustomEvent('noise-gate-state', {
+          detail: {
+            id: this.id,
+            state: event.data.state,
+          },
+        }),
+      );
+    };
 
     this.effectInput.connect(this.gate);
     this.gate.connect(this.effectOutput);
@@ -27,14 +43,22 @@ export class NoiseGateEffect extends BaseEffect {
   override update(pedal: PedalState): void {
     super.update(pedal);
     const params = pedal.params as NoiseGateParams;
-    const threshold = this.gate.parameters.get('threshold');
-    const release = this.gate.parameters.get('release');
 
-    if (threshold) smoothParam(threshold, params.threshold, this.context);
-    if (release) smoothParam(release, params.release, this.context);
+    this.setWorkletParam('thresholdDb', params.thresholdDb);
+    this.setWorkletParam('reductionDb', params.reductionDb);
+    this.setWorkletParam('attackMs', params.attackMs);
+    this.setWorkletParam('holdMs', params.holdMs);
+    this.setWorkletParam('releaseMs', params.releaseMs);
+    this.setWorkletParam('hysteresisDb', params.hysteresisDb);
+  }
+
+  private setWorkletParam(name: string, value: number): void {
+    const param = this.gate.parameters.get(name);
+    if (param) smoothParam(param, value, this.context);
   }
 
   override dispose(): void {
+    this.gate.port.onmessage = null;
     this.gate.disconnect();
     super.dispose();
   }

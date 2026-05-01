@@ -15,9 +15,9 @@ export class BaseEffect {
   protected readonly wetGain: GainNode;
   protected readonly levelGain: GainNode;
   protected commonParams: BasePedalParams = {
-    bypass: false,
-    mix: 1,
-    level: 1,
+    bypassed: false,
+    mix: 100,
+    level: 100,
   };
 
   constructor(context: AudioContext, pedal: PedalState) {
@@ -52,7 +52,7 @@ export class BaseEffect {
   }
 
   setParam(name: string, value: PedalParamValue): void {
-    if (name === 'bypass' && typeof value === 'boolean') {
+    if ((name === 'bypass' || name === 'bypassed') && typeof value === 'boolean') {
       this.setBypass(value);
       return;
     }
@@ -68,7 +68,7 @@ export class BaseEffect {
   setBypass(bypassed: boolean): void {
     this.updateCommon({
       ...this.commonParams,
-      bypass: bypassed,
+      bypassed,
     });
   }
 
@@ -88,15 +88,16 @@ export class BaseEffect {
 
   protected updateCommon(params: BasePedalParams): void {
     this.commonParams = {
-      bypass: params.bypass,
+      bypassed: Boolean(params.bypassed ?? params.bypass),
       mix: params.mix,
       level: params.level,
     };
 
-    const mix = clamp(params.mix, 0, 1);
-    const dry = params.bypass ? 1 : 1 - mix;
-    const wet = params.bypass ? 0 : mix;
-    const level = clamp(params.level, 0, 2);
+    const mix = clamp(params.mix / 100, 0, 1);
+    const bypassed = Boolean(params.bypassed ?? params.bypass);
+    const dry = bypassed ? 1 : 1 - mix;
+    const wet = bypassed ? 0 : mix;
+    const level = clamp(params.level / 100, 0, 2);
 
     smoothParam(this.dryGain.gain, dry, this.context);
     smoothParam(this.wetGain.gain, wet, this.context);

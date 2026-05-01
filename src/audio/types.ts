@@ -19,15 +19,19 @@ export type Pedal = {
   params: Record<string, PedalParamValue>;
 };
 
-export interface BasePedalParams extends Record<string, number | boolean> {
-  bypass: boolean;
+export interface BasePedalParams extends Record<string, PedalParamValue> {
+  bypassed: boolean;
   mix: number;
   level: number;
 }
 
 export interface NoiseGateParams extends BasePedalParams {
-  threshold: number;
-  release: number;
+  thresholdDb: number;
+  reductionDb: number;
+  attackMs: number;
+  holdMs: number;
+  releaseMs: number;
+  hysteresisDb: number;
 }
 
 export interface CompressorParams extends BasePedalParams {
@@ -35,28 +39,44 @@ export interface CompressorParams extends BasePedalParams {
   ratio: number;
   attack: number;
   release: number;
+  knee: number;
+  sustain: number;
 }
 
 export interface DriveParams extends BasePedalParams {
+  mode: 'overdrive' | 'crunch' | 'distortion' | 'fuzz';
   drive: number;
   tone: number;
+  bias: number;
 }
 
 export interface EQParams extends BasePedalParams {
-  low: number;
-  mid: number;
-  high: number;
+  lowCut: number;
+  bassGain: number;
+  midFreq: number;
+  midGain: number;
+  midQ: number;
+  trebleGain: number;
+  presenceGain: number;
 }
 
 export interface DelayParams extends BasePedalParams {
-  time: number;
+  mode: 'digital' | 'analog' | 'tape' | 'slapback' | 'pingpong';
+  timeMs: number;
   feedback: number;
+  mix: number;
   tone: number;
+  sync: boolean;
+  bpm: number;
+  division: '1/4' | '1/8' | 'dotted1/8' | '1/16';
 }
 
 export interface ReverbParams extends BasePedalParams {
+  mode: 'room' | 'hall' | 'plate' | 'spring' | 'ambient';
   decay: number;
-  tone: number;
+  preDelay: number;
+  lowCut: number;
+  highCut: number;
 }
 
 export type PedalParams =

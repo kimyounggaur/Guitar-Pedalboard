@@ -228,6 +228,18 @@ h2 {
   gap: 8px;
 }
 
+.select-control {
+  display: grid;
+  gap: 8px;
+  color: #37404a;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.select-control select {
+  height: 36px;
+}
+
 .control-row {
   justify-content: space-between;
   gap: 8px;
@@ -245,6 +257,65 @@ h2 {
 input[type="range"] {
   width: 100%;
   accent-color: var(--pedal-color, var(--accent));
+}
+
+.preset-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-buttons .text-button {
+  padding: 4px 0;
+  font-size: 0.78rem;
+}
+
+.effect-status {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.effect-status.state-open {
+  color: #26755f;
+}
+
+.effect-status.state-closing {
+  color: #9a6b00;
+}
+
+.effect-status.state-closed {
+  color: #8a3028;
+}
+
+.gain-reduction-meter {
+  display: grid;
+  gap: 8px;
+}
+
+.eq-curve {
+  width: 100%;
+  height: 68px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.eq-curve path {
+  stroke: #d5dbe5;
+  stroke-width: 1;
+}
+
+.eq-curve polyline {
+  fill: none;
+  stroke: var(--pedal-color, var(--accent));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
 }
 
 .toggle-switch {
