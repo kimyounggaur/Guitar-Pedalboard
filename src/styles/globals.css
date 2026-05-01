@@ -194,6 +194,37 @@ h2 {
   transform: scale(1.03);
 }
 
+.pedal-card-drive {
+  overflow: hidden;
+  border: 1px solid #1f6f32;
+  border-top: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 30%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.14), transparent 10%, transparent 90%, rgba(0, 0, 0, 0.18)),
+    #43b64e;
+  color: #102213;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -14px 24px rgba(14, 83, 28, 0.35),
+    0 18px 36px rgba(0, 0, 0, 0.32);
+}
+
+.pedal-card-drive .pedal-header {
+  color: #102213;
+}
+
+.pedal-card-drive .pedal-kicker,
+.pedal-card-drive .control-row,
+.pedal-card-drive .select-control {
+  color: #16331b;
+}
+
+.pedal-card-drive .drag-handle {
+  border-color: rgba(9, 55, 20, 0.35);
+  background: rgba(255, 255, 255, 0.18);
+  color: #123117;
+}
+
 .pedal-header {
   justify-content: flex-start;
   gap: 10px;
@@ -232,6 +263,167 @@ h2 {
   margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+}
+
+.tube-drive-ui {
+  display: grid;
+  gap: 12px;
+}
+
+.tube-knob-deck {
+  display: grid;
+  grid-template-columns: 1fr 0.82fr 1fr;
+  gap: 8px;
+  align-items: end;
+  padding: 2px 0 6px;
+}
+
+.tube-knob {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: #142a18;
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.tube-knob-shell {
+  position: relative;
+  display: grid;
+  width: 74px;
+  height: 74px;
+  place-items: center;
+  border: 7px solid #141619;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 40% 35%, #f8f3e9 0 24%, #d9d3ca 25% 48%, #111318 49% 100%);
+  box-shadow:
+    0 10px 14px rgba(19, 63, 25, 0.42),
+    inset 0 2px 3px rgba(255, 255, 255, 0.5);
+}
+
+.tube-knob-small .tube-knob-shell {
+  width: 66px;
+  height: 66px;
+}
+
+.tube-knob-shell::before {
+  content: "";
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from -135deg, #101216 0 8deg, transparent 8deg 17deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 62%, #000 63% 72%, transparent 73%);
+  mask: radial-gradient(circle, transparent 0 62%, #000 63% 72%, transparent 73%);
+}
+
+.tube-knob-shell::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 4px;
+  height: 25px;
+  border-radius: 999px;
+  background: #0e1115;
+  transform: translateX(-50%) rotate(var(--knob-rotation));
+  transform-origin: 50% 28px;
+}
+
+.tube-knob-shell input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.tube-knob-shell i {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e8e2d8;
+}
+
+.tube-brand-plate {
+  display: grid;
+  gap: 2px;
+  min-height: 70px;
+  place-items: center;
+  border: 7px solid #202328;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(230, 232, 229, 0.74)),
+    #edf0ee;
+  box-shadow:
+    inset 0 0 22px rgba(255, 255, 255, 0.75),
+    0 5px 0 rgba(13, 82, 25, 0.28);
+  text-align: center;
+}
+
+.tube-brand-plate strong {
+  color: #2a75a8;
+  font-size: 1.55rem;
+  font-style: italic;
+  line-height: 1;
+}
+
+.tube-brand-plate span {
+  color: #f3f6f2;
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.tube-footswitch-pad {
+  display: grid;
+  min-height: 108px;
+  padding: 10px;
+  border: 7px solid #202328;
+  border-radius: 8px;
+  background: #f0f0ed;
+}
+
+.tube-footswitch-pad span {
+  border-radius: 4px;
+  background:
+    repeating-linear-gradient(180deg, #f9faf8 0 3px, #d9ddd9 3px 5px),
+    #ecefeb;
+  box-shadow: inset 0 0 22px rgba(183, 190, 184, 0.55);
+}
+
+.tube-utility-controls {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(16, 52, 20, 0.22);
+  border-radius: 8px;
+  background: rgba(230, 255, 224, 0.2);
+}
+
+.tube-preset-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tube-preset-row button {
+  min-height: 34px;
+  border: 1px solid rgba(15, 56, 22, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.24);
+  color: #122b17;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.pedal-card-drive .pedal-switches {
+  border-top-color: rgba(18, 74, 28, 0.25);
 }
 
 .slider-control {

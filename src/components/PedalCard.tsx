@@ -53,9 +53,9 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
 
   return (
     <article
-      className={`pedal-card${pedal.bypassed ? ' is-bypassed' : ''}${
-        !pedal.enabled ? ' is-disabled' : ''
-      }${isDragging ? ' is-dragging' : ''}`}
+      className={`pedal-card${pedal.type === 'drive' ? ' pedal-card-drive' : ''}${
+        pedal.bypassed ? ' is-bypassed' : ''
+      }${!pedal.enabled ? ' is-disabled' : ''}${isDragging ? ' is-dragging' : ''}`}
       style={{ '--pedal-color': pedal.color } as CSSProperties}
       onClick={() => setActivePedal(pedal.id)}
     >
@@ -81,24 +81,28 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         onTouchStart={stopControlEvent}
         onKeyDown={stopControlEvent}
       >
-        <SliderControl
-          label="Mix"
-          value={pedal.params.mix}
-          min={0}
-          max={100}
-          step={1}
-          displayValue={`${Math.round(pedal.params.mix)}%`}
-          onChange={(value) => commitParam('mix', value)}
-        />
-        <SliderControl
-          label="Level"
-          value={pedal.params.level}
-          min={0}
-          max={100}
-          step={1}
-          displayValue={`${Math.round(pedal.params.level)}%`}
-          onChange={(value) => commitParam('level', value)}
-        />
+        {pedal.type !== 'drive' && (
+          <>
+            <SliderControl
+              label="Mix"
+              value={pedal.params.mix}
+              min={0}
+              max={100}
+              step={1}
+              displayValue={`${Math.round(pedal.params.mix)}%`}
+              onChange={(value) => commitParam('mix', value)}
+            />
+            <SliderControl
+              label="Level"
+              value={pedal.params.level}
+              min={0}
+              max={100}
+              step={1}
+              displayValue={`${Math.round(pedal.params.level)}%`}
+              onChange={(value) => commitParam('level', value)}
+            />
+          </>
+        )}
 
         {pedal.type === 'noiseGate' && (
           <NoiseGatePedal
