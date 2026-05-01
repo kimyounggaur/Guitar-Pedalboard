@@ -461,14 +461,16 @@ select,
 .secondary-button,
 .danger-button,
 .text-button,
-.icon-button {
+.icon-button,
+.panic-button {
   border: 0;
   border-radius: 8px;
   font-weight: 800;
 }
 
 .primary-button,
-.danger-button {
+.danger-button,
+.panic-button {
   width: 100%;
   height: 44px;
   color: #ffffff;
@@ -480,6 +482,12 @@ select,
 
 .danger-button {
   background: var(--danger);
+}
+
+.panic-button {
+  background: #171a20;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 .secondary-button {
@@ -531,6 +539,7 @@ select,
 }
 
 .meter-track {
+  position: relative;
   overflow: hidden;
   height: 10px;
   border-radius: 999px;
@@ -545,6 +554,54 @@ select,
   border-radius: inherit;
   background: linear-gradient(90deg, #3f8f85, #d2a33d, #bd3f32);
   transition: transform 90ms linear;
+}
+
+.meter-track i {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  border-radius: 999px;
+  background: #1e2329;
+  transform: translateX(-50%);
+}
+
+.meter-track.is-clipping {
+  box-shadow: 0 0 0 2px rgba(189, 63, 50, 0.25);
+}
+
+.clip-indicator {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfe;
+  color: #26755f;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.clip-indicator.is-active {
+  border-color: #e0a09a;
+  background: #fff0ee;
+  color: var(--danger);
+}
+
+.cpu-meter {
+  display: grid;
+  gap: 8px;
+}
+
+.waveform-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.waveform-panel canvas {
+  width: 100%;
+  height: 84px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfe;
 }
 
 .tuner-display {

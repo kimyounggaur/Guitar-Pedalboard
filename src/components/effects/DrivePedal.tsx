@@ -1,5 +1,7 @@
 import type { DriveParams, PedalParamValue } from '../../audio/types';
+import { useAudioStore } from '../../store/audioStore';
 import { SliderControl } from '../SliderControl';
+import { WaveformCanvas } from '../WaveformCanvas';
 
 interface DrivePedalProps {
   params: DriveParams;
@@ -14,6 +16,9 @@ const presets: Record<string, Pick<DriveParams, 'mode' | 'drive' | 'tone' | 'lev
 };
 
 export function DrivePedal({ params, onChange }: DrivePedalProps) {
+  const inputWaveform = useAudioStore((state) => state.inputWaveform);
+  const outputWaveform = useAudioStore((state) => state.outputWaveform);
+
   const applyPreset = (name: string) => {
     const preset = presets[name];
     Object.entries(preset).forEach(([key, value]) => onChange(key as keyof DriveParams, value));
@@ -21,6 +26,7 @@ export function DrivePedal({ params, onChange }: DrivePedalProps) {
 
   return (
     <>
+      <WaveformCanvas input={inputWaveform} output={outputWaveform} />
       <label className="select-control">
         <span>Mode</span>
         <select value={params.mode} onChange={(event) => onChange('mode', event.currentTarget.value)}>

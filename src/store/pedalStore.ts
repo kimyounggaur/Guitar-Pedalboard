@@ -358,13 +358,17 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
           (paramName === 'bypass' || paramName === 'bypassed') && typeof value === 'boolean'
             ? value
             : pedal.bypassed;
+        const nextValue =
+          pedal.type === 'delay' && paramName === 'feedback' && typeof value === 'number'
+            ? Math.min(0.95, Math.max(0, value))
+            : value;
 
         return clonePedal({
           ...pedal,
           bypassed,
           params: {
             ...pedal.params,
-            [paramName]: value,
+            [paramName]: nextValue,
             bypassed,
           } as PedalParams,
         });

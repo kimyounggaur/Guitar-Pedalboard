@@ -14,6 +14,7 @@ export function ConnectGuitarPanel() {
   const start = useAudioStore((state) => state.start);
   const startFile = useAudioStore((state) => state.startFile);
   const stop = useAudioStore((state) => state.stop);
+  const panic = useAudioStore((state) => state.panic);
   const loadDevices = useAudioStore((state) => state.loadDevices);
   const isClipping = isRunning && inputLevel.db > -1;
 
@@ -54,6 +55,12 @@ export function ConnectGuitarPanel() {
         </div>
       )}
 
+      {isRunning && (
+        <button type="button" className="panic-button" onClick={panic}>
+          Panic
+        </button>
+      )}
+
       <div className="audio-file-upload">
         <label htmlFor="audio-file">음원 파일</label>
         <input
@@ -91,8 +98,8 @@ export function ConnectGuitarPanel() {
       )}
 
       <p className="panel-copy">
-        스피커 피드백을 막기 위해 헤드폰 사용을 권장합니다. 버튼을 누르면 브라우저 권한 승인 후
-        입력 장치 목록을 다시 불러옵니다.
+        초기 테스트는 헤드폰 사용을 권장합니다. 오디오 인터페이스의 Direct Monitor가 켜져 있으면
+        생톤과 처리음이 함께 들릴 수 있습니다.
       </p>
 
       {error && <p className="error-message">{error}</p>}

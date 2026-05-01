@@ -2,7 +2,13 @@ import { create } from 'zustand';
 import { AudioEngine } from '../audio/AudioEngine';
 import type { LevelReading, PedalState, PitchReading } from '../audio/types';
 
-const silentLevel: LevelReading = { db: -120, linear: 0 };
+const silentLevel: LevelReading = {
+  db: -120,
+  linear: 0,
+  peakDb: -120,
+  peakLinear: 0,
+  isClipping: false,
+};
 const emptyPitch: PitchReading = { frequency: null, note: null, cents: 0 };
 
 type InputMode = 'idle' | 'device' | 'file';
@@ -17,12 +23,16 @@ interface AudioStore {
   error: string | null;
   inputLevel: LevelReading;
   outputLevel: LevelReading;
+  inputWaveform: number[];
+  outputWaveform: number[];
+  cpuLoad: number;
   pitch: PitchReading;
   loadDevices: () => Promise<void>;
   setSelectedDevice: (deviceId: string, pedals?: PedalState[]) => Promise<void>;
   start: (pedals: PedalState[]) => Promise<void>;
   startFile: (file: File, pedals: PedalState[]) => Promise<void>;
   stop: () => Promise<void>;
+  panic: () => void;
   refreshMeters: () => void;
 }
 
@@ -35,6 +45,9 @@ function resetReadings() {
   return {
     inputLevel: silentLevel,
     outputLevel: silentLevel,
+    inputWaveform: [],
+    outputWaveform: [],
+    cpuLoad: 0,
     pitch: emptyPitch,
   };
 }
@@ -59,6 +72,9 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   error: null,
   inputLevel: silentLevel,
   outputLevel: silentLevel,
+  inputWaveform: [],
+  outputWaveform: [],
+  cpuLoad: 0,
   pitch: emptyPitch,
 
   loadDevices: async () => {
@@ -171,12 +187,35 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     });
   },
 
-  refreshMeters: () => {
-    const engine = AudioEngine.getInstance();
+  panic: () => {
+    AudioEngine.getInstance().panic();
     set({
-      inputLevel: engine.readInputLevel(),
-      outputLevel: engine.readOutputLevel(),
-      pitch: engine.readPitch(),
+      isRunning: false,
+      inputMode: 'idle',
+      uploadedFileName: null,
+      isLoading: false,
+      error: 'Panic: 모든 오디오 노드를 차단하고 master output을 0으로 내렸습니다.',
+      ...resetReadings(),
+    });
+  },
+
+  refreshMeters: () => {
+    const startedAt = performance.now();
+    const engine = AudioEngine.getInstance();
+    const inputLevel = engine.readInputLevel();
+    const outputLevel = engine.readOutputLevel();
+    const inputWaveform = engine.readInputWaveform();
+    const outputWaveform = engine.readOutputWaveform();
+    const pitch = engine.readPitch();
+    const elapsed = performance.now() - startedAt;
+
+    set({
+      inputLevel,
+      outputLevel,
+      inputWaveform,
+      outputWaveform,
+      pitch,
+      cpuLoad: Math.min(100, Math.round((elapsed / 90) * 100)),
     });
   },
 }));

@@ -264,6 +264,15 @@ export class AudioEngine {
     }
   }
 
+  panic(): void {
+    if (this.masterGain && this.context && this.context.state !== 'closed') {
+      this.masterGain.gain.cancelScheduledValues(this.context.currentTime);
+      this.masterGain.gain.setValueAtTime(0, this.context.currentTime);
+    }
+
+    this.panicDisconnect();
+  }
+
   dispose(): void {
     this.panicDisconnect();
 
@@ -323,11 +332,31 @@ export class AudioEngine {
   }
 
   readInputLevel(): LevelReading {
-    return this.inputMeter?.read() ?? { db: -120, linear: 0 };
+    return this.inputMeter?.read() ?? {
+      db: -120,
+      linear: 0,
+      peakDb: -120,
+      peakLinear: 0,
+      isClipping: false,
+    };
   }
 
   readOutputLevel(): LevelReading {
-    return this.outputMeter?.read() ?? { db: -120, linear: 0 };
+    return this.outputMeter?.read() ?? {
+      db: -120,
+      linear: 0,
+      peakDb: -120,
+      peakLinear: 0,
+      isClipping: false,
+    };
+  }
+
+  readInputWaveform(): number[] {
+    return this.inputMeter?.readWaveform() ?? [];
+  }
+
+  readOutputWaveform(): number[] {
+    return this.outputMeter?.readWaveform() ?? [];
   }
 
   readPitch(): PitchReading {

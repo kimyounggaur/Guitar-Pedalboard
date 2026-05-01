@@ -113,6 +113,9 @@ export interface EffectNodeWrapper {
 export interface LevelReading {
   db: number;
   linear: number;
+  peakDb: number;
+  peakLinear: number;
+  isClipping: boolean;
 }
 
 export interface PitchReading {
