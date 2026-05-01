@@ -54,8 +54,10 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
   return (
     <article
       className={`pedal-card${pedal.type === 'drive' ? ' pedal-card-drive' : ''}${
-        pedal.bypassed ? ' is-bypassed' : ''
-      }${!pedal.enabled ? ' is-disabled' : ''}${isDragging ? ' is-dragging' : ''}`}
+        pedal.type === 'delay' ? ' pedal-card-delay' : ''
+      }${pedal.bypassed ? ' is-bypassed' : ''}${!pedal.enabled ? ' is-disabled' : ''}${
+        isDragging ? ' is-dragging' : ''
+      }`}
       style={{ '--pedal-color': pedal.color } as CSSProperties}
       onClick={() => setActivePedal(pedal.id)}
     >
@@ -81,7 +83,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         onTouchStart={stopControlEvent}
         onKeyDown={stopControlEvent}
       >
-        {pedal.type !== 'drive' && (
+        {pedal.type !== 'drive' && pedal.type !== 'delay' && (
           <>
             <SliderControl
               label="Mix"

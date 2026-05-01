@@ -426,6 +426,199 @@ h2 {
   border-top-color: rgba(18, 74, 28, 0.25);
 }
 
+.pedal-card-delay {
+  overflow: hidden;
+  border: 1px solid #4c9eba;
+  border-top: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 20%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12), transparent 12%, transparent 88%, rgba(0, 0, 0, 0.14)),
+    #60c7ec;
+  color: #0b1014;
+  box-shadow:
+    inset 0 0 0 10px rgba(63, 147, 178, 0.45),
+    inset 0 -24px 34px rgba(50, 140, 174, 0.34),
+    0 18px 36px rgba(0, 0, 0, 0.32);
+}
+
+.pedal-card-delay .pedal-header,
+.pedal-card-delay .control-row,
+.pedal-card-delay .select-control {
+  color: #0a1115;
+}
+
+.pedal-card-delay .pedal-kicker {
+  color: rgba(4, 23, 31, 0.72);
+}
+
+.pedal-card-delay .drag-handle {
+  border-color: rgba(18, 93, 121, 0.38);
+  background: rgba(255, 255, 255, 0.2);
+  color: #071014;
+}
+
+.delay-echo-ui {
+  position: relative;
+  display: grid;
+  gap: 12px;
+}
+
+.delay-led {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  z-index: 1;
+  width: 42px;
+  height: 42px;
+  border: 8px solid #16191d;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 25%, #ff7b78 0 28%, transparent 29%),
+    #ff1015;
+  box-shadow: 0 7px 12px rgba(23, 69, 90, 0.42);
+  transform: translateX(-50%);
+}
+
+.delay-knob-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 18px;
+  padding-top: 28px;
+}
+
+.delay-knob {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #04070a;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.02rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.delay-knob-shell {
+  position: relative;
+  display: grid;
+  width: 100px;
+  height: 100px;
+  place-items: center;
+  border: 18px solid #17191b;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #f4f4f4 0 42%, transparent 43%),
+    #17191b;
+  box-shadow:
+    0 10px 14px rgba(44, 112, 139, 0.52),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.delay-knob-shell::before {
+  content: "";
+  position: absolute;
+  inset: -18px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(#414244 0 16deg, #17191b 16deg 36deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 64%, #000 65% 83%, transparent 84%);
+  mask: radial-gradient(circle, transparent 0 64%, #000 65% 83%, transparent 84%);
+}
+
+.delay-knob-shell::after {
+  content: "";
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  width: 18px;
+  height: 42px;
+  background: #17191b;
+  transform: translateX(-50%) rotate(var(--knob-rotation));
+  transform-origin: 50% 30px;
+  clip-path: polygon(0 0, 100% 0, 78% 100%, 22% 100%);
+}
+
+.delay-knob-shell input {
+  position: absolute;
+  inset: -14px;
+  width: calc(100% + 28px);
+  height: calc(100% + 28px);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.delay-knob-shell i {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #f4f4f4;
+}
+
+.delay-brand-strip {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 92px;
+  padding: 12px 16px;
+  border-top: 9px solid rgba(56, 145, 179, 0.62);
+  border-bottom: 9px solid rgba(56, 145, 179, 0.62);
+  color: #04070a;
+}
+
+.delay-brand-strip strong {
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.delay-brand-strip em {
+  justify-self: center;
+  color: #04070a;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 2.08rem;
+  font-style: normal;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.delay-arrow {
+  width: 0;
+  height: 0;
+  border-top: 16px solid transparent;
+  border-bottom: 16px solid transparent;
+}
+
+.delay-arrow-left {
+  border-right: 28px solid #090d10;
+}
+
+.delay-arrow-right {
+  border-left: 28px solid #090d10;
+}
+
+.delay-footswitch-pad {
+  min-height: 180px;
+  margin: 6px 12px 0;
+  border-radius: 2px;
+  background: #171919;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 5px 0 rgba(45, 126, 157, 0.42);
+}
+
+.delay-utility-controls {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(32, 105, 134, 0.26);
+  border-radius: 8px;
+  background: rgba(224, 248, 255, 0.24);
+}
+
+.pedal-card-delay .pedal-switches {
+  border-top-color: rgba(30, 108, 139, 0.28);
+}
+
 .slider-control {
   display: grid;
   gap: 8px;
