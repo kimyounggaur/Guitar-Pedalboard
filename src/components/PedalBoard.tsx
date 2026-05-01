@@ -25,7 +25,7 @@ export function PedalBoard() {
   const pedals = usePedalStore((state) => state.pedals);
   const reorderPedals = usePedalStore((state) => state.reorderPedals);
   const setDraggingPedal = usePedalStore((state) => state.setDraggingPedal);
-  const chainText = ['Guitar Input', ...pedals.map((pedal) => pedal.name), 'Output'].join(' \u2192 ');
+  const chainText = ['Guitar Input', ...pedals.map((pedal) => pedal.name), 'Output'].join(' -> ');
 
   useEffect(() => {
     return () => {
@@ -34,6 +34,7 @@ export function PedalBoard() {
       }
     };
   }, []);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },

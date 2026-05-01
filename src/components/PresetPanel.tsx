@@ -100,7 +100,9 @@ export function PresetPanel() {
           <div className="preset-item" key={preset.id}>
             <button type="button" onClick={() => loadPreset(preset.pedals)}>
               <strong>{preset.name}</strong>
-              <span>{preset.isFactory ? 'Default Preset' : new Date(preset.updatedAt).toLocaleDateString('ko-KR')}</span>
+              <span>
+                {preset.isFactory ? 'Default Preset' : new Date(preset.updatedAt).toLocaleDateString('ko-KR')}
+              </span>
             </button>
             {!preset.isFactory && (
               <button

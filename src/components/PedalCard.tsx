@@ -55,9 +55,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
     <article
       className={`pedal-card${pedal.bypassed ? ' is-bypassed' : ''}${
         !pedal.enabled ? ' is-disabled' : ''
-      }${
-        isDragging ? ' is-dragging' : ''
-      }`}
+      }${isDragging ? ' is-dragging' : ''}`}
       style={{ '--pedal-color': pedal.color } as CSSProperties}
       onClick={() => setActivePedal(pedal.id)}
     >
@@ -68,7 +66,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
           aria-label={`${pedal.name} 순서 변경`}
           {...(dragHandleProps as ButtonHTMLAttributes<HTMLButtonElement>)}
         >
-          ≡
+          ::
         </button>
         <div>
           <p className="pedal-kicker">{pedal.type}</p>

@@ -25,8 +25,22 @@ export function Meter() {
         <h2>미터 & 튜너</h2>
       </div>
 
-      <LevelBar label="Input" db={inputLevel.db} peakDb={inputLevel.peakDb} value={inputLevel.linear} peak={inputLevel.peakLinear} clipping={inputLevel.isClipping} />
-      <LevelBar label="Output" db={outputLevel.db} peakDb={outputLevel.peakDb} value={outputLevel.linear} peak={outputLevel.peakLinear} clipping={outputLevel.isClipping} />
+      <LevelBar
+        label="Input"
+        db={inputLevel.db}
+        peakDb={inputLevel.peakDb}
+        value={inputLevel.linear}
+        peak={inputLevel.peakLinear}
+        clipping={inputLevel.isClipping}
+      />
+      <LevelBar
+        label="Output"
+        db={outputLevel.db}
+        peakDb={outputLevel.peakDb}
+        value={outputLevel.linear}
+        peak={outputLevel.peakLinear}
+        clipping={outputLevel.isClipping}
+      />
 
       <div className={`clip-indicator${isClipping ? ' is-active' : ''}`}>
         {isClipping ? 'Clipping' : 'Headroom OK'}
@@ -34,7 +48,7 @@ export function Meter() {
 
       {outputNearClip && (
         <p className="warning-message">
-          Master output이 0dBFS에 가깝습니다. pedal level 또는 interface output을 낮추세요.
+          Master output이 0 dBFS에 가깝습니다. pedal level 또는 interface output을 낮추세요.
         </p>
       )}
 
@@ -73,7 +87,10 @@ function LevelBar({ label, db, peakDb, value, peak, clipping }: LevelBarProps) {
     <div className="level-row">
       <span className="control-row">
         <span>{label}</span>
-        <output>{db <= -100 ? '-inf' : `${db.toFixed(1)} dB`} / {peakDb <= -100 ? '-inf' : `${peakDb.toFixed(1)} dBpk`}</output>
+        <output>
+          {db <= -100 ? '-inf' : `${db.toFixed(1)} dB`} /{' '}
+          {peakDb <= -100 ? '-inf' : `${peakDb.toFixed(1)} dBpk`}
+        </output>
       </span>
       <div className={`meter-track${clipping ? ' is-clipping' : ''}`}>
         <span style={{ transform: `scaleX(${value})` }} />
