@@ -74,20 +74,6 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
           <p className="pedal-kicker">{pedal.type}</p>
           <h2>{pedal.name}</h2>
         </div>
-        <div
-          className="pedal-switches"
-          onPointerDown={stopControlEvent}
-          onMouseDown={stopControlEvent}
-          onTouchStart={stopControlEvent}
-          onKeyDown={stopControlEvent}
-        >
-          <ToggleSwitch label="On" checked={pedal.enabled} onChange={toggleEnabled} />
-          <ToggleSwitch
-            label="Bypass"
-            checked={pedal.bypassed}
-            onChange={(checked) => commitParam('bypassed', checked)}
-          />
-        </div>
       </header>
 
       <div
@@ -153,6 +139,21 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
           />
         )}
       </div>
+
+      <footer
+        className="pedal-switches"
+        onPointerDown={stopControlEvent}
+        onMouseDown={stopControlEvent}
+        onTouchStart={stopControlEvent}
+        onKeyDown={stopControlEvent}
+      >
+        <ToggleSwitch label="On" checked={pedal.enabled} onChange={toggleEnabled} />
+        <ToggleSwitch
+          label="Bypass"
+          checked={pedal.bypassed}
+          onChange={(checked) => commitParam('bypassed', checked)}
+        />
+      </footer>
     </article>
   );
 }
