@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core';
 import {
   arrayMove,
-  horizontalListSortingStrategy,
+  rectSortingStrategy,
   SortableContext,
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
@@ -94,7 +94,7 @@ export function PedalBoard() {
         onDragCancel={() => setDraggingPedal(null)}
         onDragEnd={handleDragEnd}
       >
-        <SortableContext items={pedals.map((pedal) => pedal.id)} strategy={horizontalListSortingStrategy}>
+        <SortableContext items={pedals.map((pedal) => pedal.id)} strategy={rectSortingStrategy}>
           <div className="pedal-board">
             {pedals.map((pedal) => (
               <SortablePedal key={pedal.id} pedal={pedal} />
