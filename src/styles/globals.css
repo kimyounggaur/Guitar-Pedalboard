@@ -619,6 +619,205 @@ h2 {
   border-top-color: rgba(30, 108, 139, 0.28);
 }
 
+.pedal-card-reverb {
+  overflow: hidden;
+  border: 1px solid #087d7e;
+  border-top: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 24%),
+    #079c9e;
+  color: #ffffff;
+  box-shadow:
+    inset 0 0 0 8px rgba(4, 114, 117, 0.42),
+    inset 0 -18px 28px rgba(4, 89, 91, 0.34),
+    0 18px 36px rgba(0, 0, 0, 0.32);
+}
+
+.pedal-card-reverb .pedal-header,
+.pedal-card-reverb .control-row,
+.pedal-card-reverb .select-control {
+  color: #ffffff;
+}
+
+.pedal-card-reverb .pedal-kicker {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.pedal-card-reverb .drag-handle {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(0, 95, 97, 0.34);
+  color: #ffffff;
+}
+
+.reverb-stomp-ui {
+  display: grid;
+  gap: 12px;
+}
+
+.reverb-wave-panel {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 14px;
+  min-height: 322px;
+  padding: 18px 15px 20px;
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 28% 0%, transparent 0 20px, #e4c833 21px 24px, transparent 25px 38px, #e4c833 39px 42px, transparent 43px 56px, #e4c833 57px 60px, transparent 61px),
+    radial-gradient(circle at 84% 86%, transparent 0 18px, #e4c833 19px 22px, transparent 23px 36px, #e4c833 37px 40px, transparent 41px 54px, #e4c833 55px 58px, transparent 59px),
+    repeating-linear-gradient(112deg, transparent 0 17px, rgba(228, 200, 51, 0.95) 18px 21px, transparent 22px 36px),
+    linear-gradient(180deg, #11a9ac, #0a989a);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    inset 0 -18px 34px rgba(0, 83, 86, 0.26);
+}
+
+.reverb-wave-panel::before {
+  content: "";
+  position: absolute;
+  inset: -28px;
+  background:
+    repeating-radial-gradient(circle at 12% 52%, transparent 0 13px, rgba(228, 200, 51, 0.92) 14px 17px, transparent 18px 29px),
+    repeating-radial-gradient(circle at 96% 34%, transparent 0 16px, rgba(228, 200, 51, 0.78) 17px 20px, transparent 21px 34px);
+  opacity: 0.78;
+  pointer-events: none;
+}
+
+.reverb-led {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 2;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #df2221;
+  box-shadow:
+    0 0 0 2px rgba(91, 36, 31, 0.28),
+    0 0 8px rgba(255, 39, 36, 0.74);
+  transform: translateX(-50%);
+}
+
+.reverb-knob-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 34px;
+  align-items: start;
+}
+
+.reverb-knob {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: #ffffff;
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  text-shadow: 0 1px 1px rgba(0, 81, 84, 0.54);
+}
+
+.reverb-knob-shell {
+  position: relative;
+  display: grid;
+  width: 62px;
+  height: 62px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.74);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 38% 30%, #ffffff 0 20%, #f3f5ef 21% 55%, #d5d8d1 56% 100%);
+  box-shadow:
+    0 8px 14px rgba(0, 83, 86, 0.28),
+    inset 0 -3px 7px rgba(144, 151, 143, 0.48);
+}
+
+.reverb-knob-shell::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 3px;
+  height: 21px;
+  border-radius: 999px;
+  background: #0f6b70;
+  transform: translateX(-50%) rotate(var(--knob-rotation));
+  transform-origin: 50% 24px;
+}
+
+.reverb-knob-shell input {
+  position: absolute;
+  inset: -8px;
+  width: calc(100% + 16px);
+  height: calc(100% + 16px);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.reverb-knob-shell i {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.reverb-knob output {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.reverb-title {
+  position: relative;
+  z-index: 1;
+  align-self: end;
+  justify-self: center;
+  margin-top: auto;
+  color: #ffffff;
+  font-size: 1.62rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  text-shadow: 0 2px 0 rgba(0, 91, 94, 0.42);
+}
+
+.reverb-footswitch {
+  display: grid;
+  justify-items: center;
+  margin-top: -34px;
+  pointer-events: none;
+}
+
+.reverb-footswitch span {
+  position: relative;
+  z-index: 2;
+  width: 46px;
+  height: 46px;
+  border: 5px solid #c5c8c7;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 42% 35%, #f7f7f2 0 32%, #d7d8d2 33% 62%, #9ea3a1 63% 100%);
+  box-shadow:
+    0 7px 13px rgba(0, 64, 67, 0.34),
+    inset 0 1px 4px rgba(255, 255, 255, 0.72);
+}
+
+.reverb-utility-controls {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(0, 81, 84, 0.22);
+  border-radius: 8px;
+  background: rgba(207, 241, 235, 0.2);
+}
+
+.pedal-card-reverb .pedal-switches {
+  border-top-color: rgba(255, 255, 255, 0.28);
+}
+
 .slider-control {
   display: grid;
   gap: 8px;
