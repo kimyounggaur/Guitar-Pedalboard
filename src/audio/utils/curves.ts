@@ -34,3 +34,22 @@ export function createDriveCurve(
 
   return curve;
 }
+
+export function createCrunchCurve(gain: number, samples = 4096): Float32Array {
+  const curve = new Float32Array(samples);
+  const drive = 1.6 + (gain / 100) * 34;
+  const hardClip = 0.86 - (gain / 100) * 0.36;
+  const sag = 0.08 + (gain / 100) * 0.12;
+
+  for (let i = 0; i < samples; i += 1) {
+    const x = (i * 2) / (samples - 1) - 1;
+    const asymmetrical = x + (x > 0 ? sag * 0.18 : -sag * 0.08);
+    const soft = Math.tanh(asymmetrical * drive) / Math.tanh(drive);
+    const clipped = Math.max(-hardClip, Math.min(hardClip, soft)) / hardClip;
+    const body = Math.tanh((soft * 0.7 + clipped * 0.3) * 1.08);
+
+    curve[i] = Math.max(-1, Math.min(1, body));
+  }
+
+  return curve;
+}

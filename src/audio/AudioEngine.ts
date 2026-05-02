@@ -1,4 +1,5 @@
 import { CompressorEffect } from './nodes/CompressorEffect';
+import { CrunchEffect } from './nodes/CrunchEffect';
 import { DelayEffect } from './nodes/DelayEffect';
 import { DriveEffect } from './nodes/DriveEffect';
 import { EQEffect } from './nodes/EQEffect';
@@ -53,6 +54,17 @@ const defaultParamsByType: Record<PedalType, PedalParams> = {
     drive: 42,
     tone: 55,
     bias: 0.08,
+  },
+  crunch: {
+    bypassed: false,
+    mix: 85,
+    level: 90,
+    volume: 80,
+    gain: 55,
+    tone: 55,
+    presence: 45,
+    lowCut: 80,
+    mode: 'crunch',
   },
   eq: {
     bypassed: false,
@@ -242,6 +254,8 @@ export class AudioEngine {
         return new CompressorEffect(this.context, pedal);
       case 'drive':
         return new DriveEffect(this.context, pedal);
+      case 'crunch':
+        return new CrunchEffect(this.context, pedal);
       case 'eq':
         return new EQEffect(this.context, pedal);
       case 'delay':

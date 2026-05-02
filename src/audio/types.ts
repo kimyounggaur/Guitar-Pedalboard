@@ -2,6 +2,7 @@ export type PedalType =
   | 'noiseGate'
   | 'compressor'
   | 'drive'
+  | 'crunch'
   | 'eq'
   | 'delay'
   | 'reverb';
@@ -50,6 +51,15 @@ export interface DriveParams extends BasePedalParams {
   bias: number;
 }
 
+export interface CrunchParams extends BasePedalParams {
+  mode: 'crunch';
+  volume: number;
+  gain: number;
+  tone: number;
+  presence: number;
+  lowCut: number;
+}
+
 export interface EQParams extends BasePedalParams {
   lowCut: number;
   bassGain: number;
@@ -83,6 +93,7 @@ export type PedalParams =
   | NoiseGateParams
   | CompressorParams
   | DriveParams
+  | CrunchParams
   | EQParams
   | DelayParams
   | ReverbParams;

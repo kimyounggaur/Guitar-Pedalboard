@@ -62,6 +62,25 @@ export const initialPedals: PedalState[] = [
     },
   },
   {
+    id: 'crunch',
+    type: 'crunch',
+    name: 'Crunch',
+    enabled: true,
+    bypassed: false,
+    color: '#b9231f',
+    params: {
+      bypassed: false,
+      mix: 85,
+      level: 90,
+      volume: 80,
+      gain: 55,
+      tone: 55,
+      presence: 45,
+      lowCut: 80,
+      mode: 'crunch',
+    },
+  },
+  {
     id: 'eq',
     type: 'eq',
     name: 'EQ',
@@ -242,6 +261,13 @@ function normalizeStoredParams(
   if (type === 'drive') {
     params.drive = normalizePercent(storedParams.drive, Number(params.drive));
     params.tone = normalizePercent(storedParams.tone, Number(params.tone));
+  }
+
+  if (type === 'crunch') {
+    params.volume = normalizePercent(storedParams.volume, Number(params.volume));
+    params.gain = normalizePercent(storedParams.gain, Number(params.gain));
+    params.tone = normalizePercent(storedParams.tone, Number(params.tone));
+    params.presence = normalizePercent(storedParams.presence, Number(params.presence));
   }
 
   if (type === 'eq') {
