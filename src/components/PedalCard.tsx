@@ -25,7 +25,7 @@ interface PedalCardProps {
   isDragging?: boolean;
 }
 
-const customPedalChrome = new Set(['compressor', 'drive', 'delay', 'reverb']);
+const customPedalChrome = new Set<PedalState['type']>(['compressor', 'drive', 'eq', 'delay', 'reverb']);
 
 export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalCardProps) {
   const setActivePedal = usePedalStore((state) => state.setActivePedal);
@@ -57,7 +57,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
     <article
       className={`pedal-card${pedal.type === 'compressor' ? ' pedal-card-compressor' : ''}${
         pedal.type === 'drive' ? ' pedal-card-drive' : ''
-      }${pedal.type === 'delay' ? ' pedal-card-delay' : ''}${
+      }${pedal.type === 'eq' ? ' pedal-card-eq' : ''}${pedal.type === 'delay' ? ' pedal-card-delay' : ''}${
         pedal.type === 'reverb' ? ' pedal-card-reverb' : ''
       }${pedal.bypassed ? ' is-bypassed' : ''}${!pedal.enabled ? ' is-disabled' : ''}${
         isDragging ? ' is-dragging' : ''

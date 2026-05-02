@@ -470,6 +470,214 @@ h2 {
   border-top-color: rgba(255, 255, 255, 0.28);
 }
 
+.pedal-card-eq {
+  overflow: hidden;
+  border: 1px solid #00692f;
+  border-top: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 24%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent 12%, transparent 88%, rgba(0, 0, 0, 0.16)),
+    #007d39;
+  color: #020604;
+  box-shadow:
+    inset 0 0 0 8px rgba(0, 93, 43, 0.56),
+    inset 0 -22px 32px rgba(0, 80, 38, 0.38),
+    0 18px 36px rgba(0, 0, 0, 0.32);
+}
+
+.pedal-card-eq .pedal-header,
+.pedal-card-eq .control-row,
+.pedal-card-eq .select-control {
+  color: #07110a;
+}
+
+.pedal-card-eq .pedal-kicker {
+  color: rgba(2, 31, 13, 0.72);
+}
+
+.pedal-card-eq .drag-handle {
+  border-color: rgba(0, 62, 28, 0.38);
+  background: rgba(255, 255, 255, 0.18);
+  color: #041207;
+}
+
+.graphic-eq-ui {
+  display: grid;
+  gap: 11px;
+}
+
+.graphic-eq-slider-panel {
+  position: relative;
+  display: grid;
+  min-height: 330px;
+  padding: 48px 6px 16px;
+  border-radius: 4px;
+  background: #06b659;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    inset 0 -16px 28px rgba(0, 113, 51, 0.28);
+}
+
+.graphic-eq-led {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  z-index: 2;
+  width: 52px;
+  height: 52px;
+  border: 9px solid #151719;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 23%, #ff807d 0 27%, transparent 28%),
+    #ff1212;
+  box-shadow: 0 8px 14px rgba(0, 82, 39, 0.44);
+  transform: translateX(-50%);
+}
+
+.graphic-eq-fader-bank {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 5px;
+  align-items: end;
+}
+
+.graphic-eq-fader {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: #020604;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.83rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.graphic-eq-fader > span:first-child {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graphic-eq-slot {
+  position: relative;
+  display: block;
+  width: 28px;
+  height: 196px;
+}
+
+.graphic-eq-slot::before {
+  content: "";
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  width: 38px;
+  height: 4px;
+  background: #050807;
+  transform: translateX(-50%);
+}
+
+.graphic-eq-scale {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 23px, #050807 23px 27px, transparent 27px 45px),
+    linear-gradient(90deg, transparent 0 8px, #2a2d2c 8px 20px, transparent 20px 100%);
+}
+
+.graphic-eq-thumb {
+  position: absolute;
+  left: 50%;
+  z-index: 1;
+  width: 42px;
+  height: 48px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, transparent 0 42%, #007236 43% 57%, transparent 58%),
+    #1a1d1d;
+  box-shadow: 0 6px 10px rgba(0, 68, 31, 0.36);
+  transform: translate(-50%, -50%);
+}
+
+.graphic-eq-slot input {
+  position: absolute;
+  inset: -8px -12px;
+  z-index: 2;
+  width: calc(100% + 24px);
+  height: calc(100% + 16px);
+  opacity: 0;
+  cursor: ns-resize;
+  writing-mode: vertical-lr;
+}
+
+.graphic-eq-fader output {
+  overflow: hidden;
+  max-width: 42px;
+  min-height: 12px;
+  color: rgba(2, 6, 4, 0.72);
+  font-family: system-ui, sans-serif;
+  font-size: 0.49rem;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graphic-eq-brand-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px 18px;
+  border-top: 9px solid #005d2b;
+  border-bottom: 9px solid #005d2b;
+  background: #06b659;
+  color: #020604;
+}
+
+.graphic-eq-io-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.92rem;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.graphic-eq-brand-panel strong {
+  color: #020604;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 2.18rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 0.95;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.graphic-eq-footswitch-pad {
+  min-height: 178px;
+  margin: 2px 14px 0;
+  border-radius: 2px;
+  background: #1a1d1d;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 5px 0 rgba(0, 81, 38, 0.42);
+}
+
+.graphic-eq-utility-controls {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(0, 71, 32, 0.28);
+  border-radius: 8px;
+  background: rgba(198, 247, 213, 0.18);
+}
+
+.pedal-card-eq .pedal-switches {
+  border-top-color: rgba(1, 71, 32, 0.28);
+}
+
 .tube-drive-ui {
   display: grid;
   gap: 12px;

@@ -6,12 +6,47 @@ interface EQPedalProps {
   onChange: (key: keyof EQParams, value: PedalParamValue) => void;
 }
 
+interface EQFaderProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  displayValue: string;
+  onChange: (value: number) => void;
+}
+
 const presets: Record<string, Partial<EQParams>> = {
   Clean: { lowCut: 70, bassGain: 0, midFreq: 800, midGain: 0, midQ: 0.9, trebleGain: 1, presenceGain: 1 },
   Warm: { lowCut: 55, bassGain: 3, midFreq: 650, midGain: 1.5, midQ: 0.8, trebleGain: -1, presenceGain: -2 },
   Rock: { lowCut: 80, bassGain: 2, midFreq: 900, midGain: -2, midQ: 1.1, trebleGain: 3, presenceGain: 2 },
   Metal: { lowCut: 95, bassGain: 4, midFreq: 700, midGain: -6, midQ: 1.6, trebleGain: 4, presenceGain: 5 },
 };
+
+function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFaderProps) {
+  const progress = (value - min) / (max - min);
+  const position = 100 - Math.min(Math.max(progress, 0), 1) * 100;
+
+  return (
+    <label className="graphic-eq-fader">
+      <span>{label}</span>
+      <span className="graphic-eq-slot">
+        <span className="graphic-eq-scale" aria-hidden="true" />
+        <span className="graphic-eq-thumb" style={{ top: `${position}%` }} aria-hidden="true" />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          aria-label={label}
+          onChange={(event) => onChange(Number(event.currentTarget.value))}
+        />
+      </span>
+      <output>{displayValue}</output>
+    </label>
+  );
+}
 
 export function EQPedal({ params, onChange }: EQPedalProps) {
   const applyPreset = (name: string) => {
@@ -21,37 +56,117 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
   };
 
   return (
-    <>
-      <EQCurve params={params} />
-      <div className="preset-buttons">
-        {Object.keys(presets).map((name) => (
-          <button type="button" className="text-button" key={name} onClick={() => applyPreset(name)}>
-            {name}
-          </button>
-        ))}
+    <div className="graphic-eq-ui" aria-label="Graphic Equalizer controls">
+      <section className="graphic-eq-slider-panel">
+        <div className="graphic-eq-led" aria-hidden="true" />
+        <div className="graphic-eq-fader-bank">
+          <EQFader
+            label="100"
+            value={params.lowCut}
+            min={40}
+            max={160}
+            step={1}
+            displayValue={`${Math.round(params.lowCut)}Hz`}
+            onChange={(value) => onChange('lowCut', value)}
+          />
+          <EQFader
+            label="200"
+            value={params.bassGain}
+            min={-12}
+            max={12}
+            step={0.5}
+            displayValue={`${params.bassGain.toFixed(1)}dB`}
+            onChange={(value) => onChange('bassGain', value)}
+          />
+          <EQFader
+            label="400"
+            value={params.midGain}
+            min={-12}
+            max={12}
+            step={0.5}
+            displayValue={`${params.midGain.toFixed(1)}dB`}
+            onChange={(value) => onChange('midGain', value)}
+          />
+          <EQFader
+            label="800"
+            value={params.midFreq}
+            min={250}
+            max={1500}
+            step={10}
+            displayValue={`${Math.round(params.midFreq)}Hz`}
+            onChange={(value) => onChange('midFreq', value)}
+          />
+          <EQFader
+            label="1.6k"
+            value={params.midQ}
+            min={0.3}
+            max={4}
+            step={0.1}
+            displayValue={`Q ${params.midQ.toFixed(1)}`}
+            onChange={(value) => onChange('midQ', value)}
+          />
+          <EQFader
+            label="3.2k"
+            value={params.trebleGain}
+            min={-12}
+            max={12}
+            step={0.5}
+            displayValue={`${params.trebleGain.toFixed(1)}dB`}
+            onChange={(value) => onChange('trebleGain', value)}
+          />
+          <EQFader
+            label="6.4k"
+            value={params.presenceGain}
+            min={-12}
+            max={12}
+            step={0.5}
+            displayValue={`${params.presenceGain.toFixed(1)}dB`}
+            onChange={(value) => onChange('presenceGain', value)}
+          />
+          <EQFader
+            label="Level"
+            value={params.level}
+            min={0}
+            max={100}
+            step={1}
+            displayValue={`${Math.round(params.level)}%`}
+            onChange={(value) => onChange('level', value)}
+          />
+        </div>
+      </section>
+
+      <section className="graphic-eq-brand-panel">
+        <div className="graphic-eq-io-row">
+          <span>← OUT</span>
+          <span>IN ←</span>
+        </div>
+        <strong>
+          Graphic
+          <br />
+          Equalizer
+        </strong>
+      </section>
+
+      <div className="graphic-eq-footswitch-pad" aria-hidden="true" />
+
+      <div className="graphic-eq-utility-controls">
+        <div className="preset-buttons">
+          {Object.keys(presets).map((name) => (
+            <button type="button" className="text-button" key={name} onClick={() => applyPreset(name)}>
+              {name}
+            </button>
+          ))}
+        </div>
+        <SliderControl
+          label="Mix"
+          value={params.mix}
+          min={0}
+          max={100}
+          step={1}
+          displayValue={`${Math.round(params.mix)}%`}
+          onChange={(value) => onChange('mix', value)}
+        />
       </div>
-      <SliderControl label="Low Cut" value={params.lowCut} min={40} max={160} step={1} unit=" Hz" onChange={(value) => onChange('lowCut', value)} />
-      <SliderControl label="Bass" value={params.bassGain} min={-12} max={12} step={0.5} unit=" dB" onChange={(value) => onChange('bassGain', value)} />
-      <SliderControl label="Mid Freq" value={params.midFreq} min={250} max={1500} step={10} unit=" Hz" onChange={(value) => onChange('midFreq', value)} />
-      <SliderControl label="Mid" value={params.midGain} min={-12} max={12} step={0.5} unit=" dB" onChange={(value) => onChange('midGain', value)} />
-      <SliderControl label="Mid Q" value={params.midQ} min={0.3} max={4} step={0.1} onChange={(value) => onChange('midQ', value)} />
-      <SliderControl label="Treble" value={params.trebleGain} min={-12} max={12} step={0.5} unit=" dB" onChange={(value) => onChange('trebleGain', value)} />
-      <SliderControl label="Presence" value={params.presenceGain} min={-12} max={12} step={0.5} unit=" dB" onChange={(value) => onChange('presenceGain', value)} />
-    </>
-  );
-}
-
-function EQCurve({ params }: { params: EQParams }) {
-  const points = [params.bassGain, params.midGain, params.trebleGain, params.presenceGain].map((gain, index) => {
-    const x = 8 + index * 48;
-    const y = 34 - gain * 1.8;
-    return `${x},${Math.max(8, Math.min(60, y))}`;
-  });
-
-  return (
-    <svg className="eq-curve" viewBox="0 0 160 68" role="img" aria-label="EQ curve">
-      <path d="M0 34H160" />
-      <polyline points={points.join(' ')} />
-    </svg>
+    </div>
   );
 }
