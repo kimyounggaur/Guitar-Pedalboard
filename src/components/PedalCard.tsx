@@ -25,6 +25,8 @@ interface PedalCardProps {
   isDragging?: boolean;
 }
 
+const customPedalChrome = new Set(['compressor', 'drive', 'delay', 'reverb']);
+
 export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalCardProps) {
   const setActivePedal = usePedalStore((state) => state.setActivePedal);
   const setPedalBypass = usePedalStore((state) => state.setPedalBypass);
@@ -53,11 +55,13 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
 
   return (
     <article
-      className={`pedal-card${pedal.type === 'drive' ? ' pedal-card-drive' : ''}${
-        pedal.type === 'delay' ? ' pedal-card-delay' : ''
-      }${pedal.type === 'reverb' ? ' pedal-card-reverb' : ''}${pedal.bypassed ? ' is-bypassed' : ''}${
-        !pedal.enabled ? ' is-disabled' : ''
-      }${isDragging ? ' is-dragging' : ''}`}
+      className={`pedal-card${pedal.type === 'compressor' ? ' pedal-card-compressor' : ''}${
+        pedal.type === 'drive' ? ' pedal-card-drive' : ''
+      }${pedal.type === 'delay' ? ' pedal-card-delay' : ''}${
+        pedal.type === 'reverb' ? ' pedal-card-reverb' : ''
+      }${pedal.bypassed ? ' is-bypassed' : ''}${!pedal.enabled ? ' is-disabled' : ''}${
+        isDragging ? ' is-dragging' : ''
+      }`}
       style={{ '--pedal-color': pedal.color } as CSSProperties}
       onClick={() => setActivePedal(pedal.id)}
     >
@@ -83,7 +87,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         onTouchStart={stopControlEvent}
         onKeyDown={stopControlEvent}
       >
-        {pedal.type !== 'drive' && pedal.type !== 'delay' && pedal.type !== 'reverb' && (
+        {!customPedalChrome.has(pedal.type) && (
           <>
             <SliderControl
               label="Mix"

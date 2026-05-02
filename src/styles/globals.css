@@ -225,6 +225,36 @@ h2 {
   color: #123117;
 }
 
+.pedal-card-compressor {
+  overflow: hidden;
+  border: 1px solid #045f9d;
+  border-top: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 26%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.1), transparent 12%, transparent 88%, rgba(0, 0, 0, 0.16)),
+    #0b82cf;
+  color: #ffffff;
+  box-shadow:
+    inset 0 -18px 28px rgba(1, 73, 126, 0.42),
+    0 18px 36px rgba(0, 0, 0, 0.32);
+}
+
+.pedal-card-compressor .pedal-header,
+.pedal-card-compressor .control-row,
+.pedal-card-compressor .select-control {
+  color: #ffffff;
+}
+
+.pedal-card-compressor .pedal-kicker {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.pedal-card-compressor .drag-handle {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(0, 56, 95, 0.34);
+  color: #ffffff;
+}
+
 .pedal-header {
   justify-content: flex-start;
   gap: 10px;
@@ -263,6 +293,181 @@ h2 {
   margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+}
+
+.compressor-stomp-ui {
+  display: grid;
+  gap: 10px;
+}
+
+.compressor-control-deck {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 9px 7px 8px;
+  border-radius: 4px 4px 2px 2px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 26%),
+    #141719;
+  color: #ffffff;
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 255, 255, 0.12),
+    0 5px 0 rgba(0, 72, 122, 0.32);
+}
+
+.compressor-check-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  min-height: 10px;
+  color: #ff302d;
+  font-size: 0.52rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.compressor-check-row i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff2622;
+  box-shadow: 0 0 8px rgba(255, 42, 36, 0.8);
+}
+
+.compressor-knob-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  align-items: start;
+}
+
+.compressor-knob {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 0;
+  color: #ffffff;
+  font-size: 0.48rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.compressor-knob-shell {
+  position: relative;
+  display: grid;
+  width: 43px;
+  height: 43px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 36% 28%, #ffffff 0 20%, #f4f4ef 21% 58%, #d3d5cf 59% 100%);
+  box-shadow:
+    0 6px 9px rgba(0, 0, 0, 0.38),
+    inset 0 -2px 5px rgba(130, 135, 132, 0.46);
+}
+
+.compressor-knob-shell::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 3px;
+  height: 16px;
+  border-radius: 999px;
+  background: #111417;
+  transform: translateX(-50%) rotate(var(--knob-rotation));
+  transform-origin: 50% 17px;
+}
+
+.compressor-knob-shell input {
+  position: absolute;
+  inset: -7px;
+  width: calc(100% + 14px);
+  height: calc(100% + 14px);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.compressor-knob-shell i {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.46);
+}
+
+.compressor-knob output {
+  overflow: hidden;
+  max-width: 52px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.44rem;
+  font-weight: 800;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compressor-minmax-row {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 1px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.42rem;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.compressor-brand-panel {
+  display: grid;
+  gap: 14px;
+  padding: 8px 11px 10px;
+  background: #0b82cf;
+}
+
+.compressor-io-row {
+  display: flex;
+  justify-content: space-between;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.compressor-brand-panel strong {
+  color: #ffffff;
+  font-size: 1.2rem;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 0.95;
+  text-align: left;
+}
+
+.compressor-footswitch-pad {
+  min-height: 160px;
+  margin: 0 2px;
+  border: 5px solid #0b82cf;
+  border-radius: 4px;
+  background: #1a1d1e;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    inset 0 18px 30px rgba(255, 255, 255, 0.02);
+}
+
+.compressor-utility-controls {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(0, 64, 113, 0.28);
+  border-radius: 8px;
+  background: rgba(192, 228, 255, 0.16);
+}
+
+.pedal-card-compressor .pedal-switches {
+  border-top-color: rgba(255, 255, 255, 0.28);
 }
 
 .tube-drive-ui {
