@@ -18,6 +18,9 @@ interface AudioStore {
   selectedDeviceId: string;
   inputMode: InputMode;
   uploadedFileName: string | null;
+  fileCurrentTime: number;
+  fileDuration: number;
+  isFilePaused: boolean;
   isRunning: boolean;
   isLoading: boolean;
   error: string | null;
@@ -31,6 +34,9 @@ interface AudioStore {
   setSelectedDevice: (deviceId: string, pedals?: PedalState[]) => Promise<void>;
   start: (pedals: PedalState[]) => Promise<void>;
   startFile: (file: File, pedals: PedalState[]) => Promise<void>;
+  playFile: () => Promise<void>;
+  pauseFile: () => void;
+  seekFile: (deltaSeconds: number) => void;
   stop: () => Promise<void>;
   panic: () => void;
   refreshMeters: () => void;
@@ -49,6 +55,9 @@ function resetReadings() {
     outputWaveform: [],
     cpuLoad: 0,
     pitch: emptyPitch,
+    fileCurrentTime: 0,
+    fileDuration: 0,
+    isFilePaused: true,
   };
 }
 
@@ -67,6 +76,9 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   selectedDeviceId: '',
   inputMode: 'idle',
   uploadedFileName: null,
+  fileCurrentTime: 0,
+  fileDuration: 0,
+  isFilePaused: true,
   isRunning: false,
   isLoading: false,
   error: null,
@@ -101,6 +113,9 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         isRunning: true,
         inputMode: 'device',
         uploadedFileName: null,
+        fileCurrentTime: 0,
+        fileDuration: 0,
+        isFilePaused: true,
         isLoading: false,
         error: null,
       });
@@ -126,6 +141,9 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         isRunning: true,
         inputMode: 'device',
         uploadedFileName: null,
+        fileCurrentTime: 0,
+        fileDuration: 0,
+        isFilePaused: true,
         isLoading: false,
         error: null,
       });
@@ -156,10 +174,14 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       });
 
       await engine.startFile(file, pedals);
+      const playback = engine.readFilePlayback();
       set({
         isRunning: true,
         inputMode: 'file',
         uploadedFileName: file.name,
+        fileCurrentTime: playback.currentTime,
+        fileDuration: playback.duration,
+        isFilePaused: playback.isPaused,
         isLoading: false,
         error: null,
       });
@@ -170,9 +192,57 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         isRunning: false,
         inputMode: 'idle',
         uploadedFileName: null,
+        fileCurrentTime: 0,
+        fileDuration: 0,
+        isFilePaused: true,
         isLoading: false,
       });
     }
+  },
+
+  playFile: async () => {
+    set({ isLoading: true, error: null });
+
+    try {
+      const engine = AudioEngine.getInstance();
+      await engine.playUploadedFile();
+      const playback = engine.readFilePlayback();
+      set({
+        isRunning: true,
+        inputMode: 'file',
+        fileCurrentTime: playback.currentTime,
+        fileDuration: playback.duration,
+        isFilePaused: playback.isPaused,
+        isLoading: false,
+      });
+    } catch (error) {
+      set({
+        error: toErrorMessage(error),
+        isLoading: false,
+      });
+    }
+  },
+
+  pauseFile: () => {
+    const engine = AudioEngine.getInstance();
+    engine.pauseUploadedFile();
+    const playback = engine.readFilePlayback();
+    set({
+      fileCurrentTime: playback.currentTime,
+      fileDuration: playback.duration,
+      isFilePaused: playback.isPaused,
+    });
+  },
+
+  seekFile: (deltaSeconds) => {
+    const engine = AudioEngine.getInstance();
+    engine.seekUploadedFile(deltaSeconds);
+    const playback = engine.readFilePlayback();
+    set({
+      fileCurrentTime: playback.currentTime,
+      fileDuration: playback.duration,
+      isFilePaused: playback.isPaused,
+    });
   },
 
   stop: async () => {
@@ -207,6 +277,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     const inputWaveform = engine.readInputWaveform();
     const outputWaveform = engine.readOutputWaveform();
     const pitch = engine.readPitch();
+    const playback = engine.readFilePlayback();
     const elapsed = performance.now() - startedAt;
 
     set({
@@ -215,6 +286,9 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       inputWaveform,
       outputWaveform,
       pitch,
+      fileCurrentTime: playback.currentTime,
+      fileDuration: playback.duration,
+      isFilePaused: playback.isPaused,
       cpuLoad: Math.min(100, Math.round((elapsed / 90) * 100)),
     });
   },

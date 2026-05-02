@@ -3,16 +3,33 @@ import { useAudioStore } from '../store/audioStore';
 import { usePedalStore } from '../store/pedalStore';
 import { DeviceSelector } from './DeviceSelector';
 
+function formatPlaybackTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0:00';
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60)
+    .toString()
+    .padStart(2, '0');
+
+  return `${minutes}:${remainingSeconds}`;
+}
+
 export function ConnectGuitarPanel() {
   const pedals = usePedalStore((state) => state.pedals);
   const isRunning = useAudioStore((state) => state.isRunning);
   const inputMode = useAudioStore((state) => state.inputMode);
   const uploadedFileName = useAudioStore((state) => state.uploadedFileName);
+  const fileCurrentTime = useAudioStore((state) => state.fileCurrentTime);
+  const fileDuration = useAudioStore((state) => state.fileDuration);
+  const isFilePaused = useAudioStore((state) => state.isFilePaused);
   const isLoading = useAudioStore((state) => state.isLoading);
   const error = useAudioStore((state) => state.error);
   const inputLevel = useAudioStore((state) => state.inputLevel);
   const start = useAudioStore((state) => state.start);
   const startFile = useAudioStore((state) => state.startFile);
+  const playFile = useAudioStore((state) => state.playFile);
+  const pauseFile = useAudioStore((state) => state.pauseFile);
+  const seekFile = useAudioStore((state) => state.seekFile);
   const stop = useAudioStore((state) => state.stop);
   const panic = useAudioStore((state) => state.panic);
   const loadDevices = useAudioStore((state) => state.loadDevices);
@@ -76,17 +93,60 @@ export function ConnectGuitarPanel() {
             event.currentTarget.value = '';
           }}
         />
+
         {inputMode === 'file' && uploadedFileName && (
-          <div className="file-playback-row">
-            <span>{uploadedFileName}</span>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={isLoading}
-              onClick={() => void stop()}
-            >
-              정지
-            </button>
+          <div className="file-player" aria-label="업로드 음원 플레이어">
+            <div className="file-playback-row">
+              <span>{uploadedFileName}</span>
+              <span className="file-playback-time">
+                {formatPlaybackTime(fileCurrentTime)} / {formatPlaybackTime(fileDuration)}
+              </span>
+            </div>
+            <div className="file-transport-controls">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={isLoading}
+                onClick={() => seekFile(-10)}
+              >
+                뒤로 10초
+              </button>
+              {isFilePaused ? (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={isLoading}
+                  onClick={() => void playFile()}
+                >
+                  재생
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={isLoading}
+                  onClick={pauseFile}
+                >
+                  일시정지
+                </button>
+              )}
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={isLoading}
+                onClick={() => void stop()}
+              >
+                정지
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={isLoading}
+                onClick={() => seekFile(10)}
+              >
+                앞으로 10초
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -99,7 +159,7 @@ export function ConnectGuitarPanel() {
 
       <p className="panel-copy">
         초기 테스트는 헤드폰 사용을 권장합니다. 오디오 인터페이스의 Direct Monitor가 켜져 있으면
-        생톤과 처리음이 함께 들릴 수 있습니다.
+        원음과 처리음이 함께 들릴 수 있습니다.
       </p>
 
       {error && <p className="error-message">{error}</p>}

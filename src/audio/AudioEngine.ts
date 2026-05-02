@@ -190,6 +190,39 @@ export class AudioEngine {
     await this.audioElement.play();
   }
 
+  async playUploadedFile(): Promise<void> {
+    if (!this.audioElement) {
+      throw new Error('재생할 업로드 음원이 없습니다.');
+    }
+
+    if (this.context?.state === 'suspended') {
+      await this.context.resume();
+    }
+
+    await this.audioElement.play();
+  }
+
+  pauseUploadedFile(): void {
+    this.audioElement?.pause();
+  }
+
+  seekUploadedFile(deltaSeconds: number): void {
+    if (!this.audioElement) return;
+
+    const duration = Number.isFinite(this.audioElement.duration) ? this.audioElement.duration : Infinity;
+    const nextTime = Math.min(Math.max(this.audioElement.currentTime + deltaSeconds, 0), duration);
+    this.audioElement.currentTime = nextTime;
+  }
+
+  readFilePlayback(): { currentTime: number; duration: number; isPaused: boolean } {
+    return {
+      currentTime: this.audioElement?.currentTime ?? 0,
+      duration:
+        this.audioElement && Number.isFinite(this.audioElement.duration) ? this.audioElement.duration : 0,
+      isPaused: this.audioElement?.paused ?? true,
+    };
+  }
+
   async setInputDevice(deviceId: string): Promise<void> {
     await this.init(deviceId);
     this.rebuildChain(this.currentPedals);
