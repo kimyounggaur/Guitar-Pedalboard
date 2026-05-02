@@ -53,3 +53,30 @@ export function createCrunchCurve(gain: number, samples = 4096): Float32Array {
 
   return curve;
 }
+
+export function createFuzzCurve(
+  mode: 'classic' | 'gated' | 'velcro',
+  fuzz: number,
+  bias: number,
+  samples = 4096,
+): Float32Array {
+  const curve = new Float32Array(samples);
+  const amount = 2 + (fuzz / 100) * 92;
+  const asymmetry = (bias - 50) / 100;
+  const threshold = Math.max(0.055, 0.42 - (fuzz / 100) * 0.34);
+  const starve = mode === 'velcro' ? 0.22 : mode === 'gated' ? 0.12 : 0.04;
+
+  for (let i = 0; i < samples; i += 1) {
+    const x = (i * 2) / (samples - 1) - 1;
+    const shifted = x + asymmetry * 0.28;
+    const folded = shifted > 0.74 ? 1.48 - shifted : shifted < -0.82 ? -1.64 - shifted : shifted;
+    const hard = Math.max(-threshold, Math.min(threshold, folded * amount * 0.09)) / threshold;
+    const square = hard >= 0 ? 1 - Math.exp(-Math.abs(hard) * 2.6) : -1 + Math.exp(-Math.abs(hard) * 2.2);
+    const sputter = Math.abs(x) < starve ? 0 : square;
+    const shaped = mode === 'classic' ? hard * 0.38 + square * 0.62 : sputter;
+
+    curve[i] = Math.max(-1, Math.min(1, shaped - asymmetry * 0.16));
+  }
+
+  return curve;
+}

@@ -81,6 +81,25 @@ export const initialPedals: PedalState[] = [
     },
   },
   {
+    id: 'fuzz',
+    type: 'fuzz',
+    name: 'Fuzz',
+    enabled: true,
+    bypassed: false,
+    color: '#9fa8aa',
+    params: {
+      bypassed: false,
+      mix: 90,
+      level: 90,
+      fuzz: 60,
+      tone: 55,
+      mode: 'classic',
+      bias: 50,
+      gate: 15,
+      lowCut: 70,
+    },
+  },
+  {
     id: 'eq',
     type: 'eq',
     name: 'EQ',
@@ -268,6 +287,13 @@ function normalizeStoredParams(
     params.gain = normalizePercent(storedParams.gain, Number(params.gain));
     params.tone = normalizePercent(storedParams.tone, Number(params.tone));
     params.presence = normalizePercent(storedParams.presence, Number(params.presence));
+  }
+
+  if (type === 'fuzz') {
+    params.fuzz = normalizePercent(storedParams.fuzz, Number(params.fuzz));
+    params.tone = normalizePercent(storedParams.tone, Number(params.tone));
+    params.bias = normalizePercent(storedParams.bias, Number(params.bias));
+    params.gate = normalizePercent(storedParams.gate, Number(params.gate));
   }
 
   if (type === 'eq') {

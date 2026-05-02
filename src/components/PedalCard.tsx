@@ -5,6 +5,7 @@ import type {
   DelayParams,
   DriveParams,
   EQParams,
+  FuzzParams,
   NoiseGateParams,
   PedalState,
   ReverbParams,
@@ -18,6 +19,7 @@ import { CompressorPedal } from './effects/CompressorPedal';
 import { CrunchPedal } from './effects/CrunchPedal';
 import { DrivePedal } from './effects/DrivePedal';
 import { EQPedal } from './effects/EQPedal';
+import { FuzzPedal } from './effects/FuzzPedal';
 import { DelayPedal } from './effects/DelayPedal';
 import { ReverbPedal } from './effects/ReverbPedal';
 
@@ -31,6 +33,7 @@ const customPedalChrome = new Set<PedalState['type']>([
   'compressor',
   'drive',
   'crunch',
+  'fuzz',
   'eq',
   'delay',
   'reverb',
@@ -66,9 +69,9 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
     <article
       className={`pedal-card${pedal.type === 'compressor' ? ' pedal-card-compressor' : ''}${
         pedal.type === 'drive' ? ' pedal-card-drive' : ''
-      }${pedal.type === 'crunch' ? ' pedal-card-crunch' : ''}${pedal.type === 'eq' ? ' pedal-card-eq' : ''}${
-        pedal.type === 'delay' ? ' pedal-card-delay' : ''
-      }${
+      }${pedal.type === 'crunch' ? ' pedal-card-crunch' : ''}${
+        pedal.type === 'fuzz' ? ' pedal-card-fuzz' : ''
+      }${pedal.type === 'eq' ? ' pedal-card-eq' : ''}${pedal.type === 'delay' ? ' pedal-card-delay' : ''}${
         pedal.type === 'reverb' ? ' pedal-card-reverb' : ''
       }${pedal.bypassed ? ' is-bypassed' : ''}${!pedal.enabled ? ' is-disabled' : ''}${
         isDragging ? ' is-dragging' : ''
@@ -142,6 +145,12 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         {pedal.type === 'crunch' && (
           <CrunchPedal
             params={pedal.params as CrunchParams}
+            onChange={(key, value) => commitParam(String(key), value)}
+          />
+        )}
+        {pedal.type === 'fuzz' && (
+          <FuzzPedal
+            params={pedal.params as FuzzParams}
             onChange={(key, value) => commitParam(String(key), value)}
           />
         )}

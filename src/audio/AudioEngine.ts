@@ -3,6 +3,7 @@ import { CrunchEffect } from './nodes/CrunchEffect';
 import { DelayEffect } from './nodes/DelayEffect';
 import { DriveEffect } from './nodes/DriveEffect';
 import { EQEffect } from './nodes/EQEffect';
+import { FuzzEffect } from './nodes/FuzzEffect';
 import { MeterNode } from './nodes/MeterNode';
 import { NoiseGateEffect } from './nodes/NoiseGateEffect';
 import { ReverbEffect } from './nodes/ReverbEffect';
@@ -65,6 +66,17 @@ const defaultParamsByType: Record<PedalType, PedalParams> = {
     presence: 45,
     lowCut: 80,
     mode: 'crunch',
+  },
+  fuzz: {
+    bypassed: false,
+    mix: 90,
+    level: 90,
+    fuzz: 60,
+    tone: 55,
+    mode: 'classic',
+    bias: 50,
+    gate: 15,
+    lowCut: 70,
   },
   eq: {
     bypassed: false,
@@ -256,6 +268,8 @@ export class AudioEngine {
         return new DriveEffect(this.context, pedal);
       case 'crunch':
         return new CrunchEffect(this.context, pedal);
+      case 'fuzz':
+        return new FuzzEffect(this.context, pedal);
       case 'eq':
         return new EQEffect(this.context, pedal);
       case 'delay':

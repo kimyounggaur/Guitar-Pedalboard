@@ -3,6 +3,7 @@ export type PedalType =
   | 'compressor'
   | 'drive'
   | 'crunch'
+  | 'fuzz'
   | 'eq'
   | 'delay'
   | 'reverb';
@@ -60,6 +61,15 @@ export interface CrunchParams extends BasePedalParams {
   lowCut: number;
 }
 
+export interface FuzzParams extends BasePedalParams {
+  mode: 'classic' | 'gated' | 'velcro';
+  fuzz: number;
+  tone: number;
+  bias: number;
+  gate: number;
+  lowCut: number;
+}
+
 export interface EQParams extends BasePedalParams {
   lowCut: number;
   bassGain: number;
@@ -94,6 +104,7 @@ export type PedalParams =
   | CompressorParams
   | DriveParams
   | CrunchParams
+  | FuzzParams
   | EQParams
   | DelayParams
   | ReverbParams;
