@@ -17,6 +17,7 @@ import {
 } from '@dnd-kit/sortable';
 import { AudioEngine } from '../audio/AudioEngine';
 import { usePedalStore } from '../store/pedalStore';
+import { PedalIcon } from './PedalIcon';
 import { SortablePedal } from './SortablePedal';
 
 export function PedalBoard() {
@@ -78,13 +79,30 @@ export function PedalBoard() {
       <div className="section-heading">
         <div>
           <p className="eyebrow">Pedalboard</p>
-          <h1>Web Guitar Multi-Effects</h1>
+          <h1>Guitar Pedal-Boafd</h1>
         </div>
         <span className="hint">드래그 종료 후 체인을 재연결합니다</span>
       </div>
 
-      <div className="signal-chain-text" aria-live="polite">
-        {chainText}
+      <div className="signal-chain-text" aria-live="polite" aria-label={chainText}>
+        <span className="chain-endpoint">Guitar Input</span>
+        {pedals.map((pedal) => (
+          <span className="signal-chain-hop" key={pedal.id}>
+            <span className="chain-arrow" aria-hidden="true">
+              -&gt;
+            </span>
+            <span className="chain-effect-pill">
+              <PedalIcon type={pedal.type} color={pedal.color} />
+              <span>{pedal.name}</span>
+            </span>
+          </span>
+        ))}
+        <span className="signal-chain-hop">
+          <span className="chain-arrow" aria-hidden="true">
+            -&gt;
+          </span>
+          <span className="chain-endpoint">Output</span>
+        </span>
       </div>
 
       <DndContext

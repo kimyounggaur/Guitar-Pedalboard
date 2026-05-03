@@ -1,4 +1,5 @@
 import { usePedalStore } from '../store/pedalStore';
+import { PedalIcon } from './PedalIcon';
 
 export function ChainText() {
   const pedals = usePedalStore((state) => state.pedals);
@@ -13,7 +14,10 @@ export function ChainText() {
         {pedals.map((pedal, index) => (
           <li key={pedal.id}>
             <span>{index + 1}</span>
-            <strong>{pedal.name}</strong>
+            <strong>
+              <PedalIcon type={pedal.type} color={pedal.color} />
+              {pedal.name}
+            </strong>
             {pedal.bypassed && <em>Bypass</em>}
           </li>
         ))}

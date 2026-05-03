@@ -126,6 +126,9 @@ h2 {
 }
 
 .signal-chain-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   overflow-x: auto;
   margin-bottom: 12px;
   padding: 10px 12px;
@@ -137,6 +140,55 @@ h2 {
   font-weight: 800;
   line-height: 1.4;
   white-space: nowrap;
+}
+
+.signal-chain-hop,
+.chain-effect-pill,
+.chain-list strong {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.signal-chain-hop {
+  gap: 8px;
+}
+
+.chain-arrow {
+  color: var(--ink-muted);
+  font-weight: 900;
+}
+
+.chain-effect-pill {
+  gap: 6px;
+  padding: 4px 7px 4px 5px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.chain-list strong {
+  gap: 8px;
+}
+
+.chain-endpoint {
+  color: #f0f5ff;
+}
+
+.pedal-type-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.85;
+}
+
+.chain-effect-pill .pedal-type-icon,
+.chain-list .pedal-type-icon {
+  color: var(--pedal-icon-color, currentColor);
 }
 
 .pedal-board {
@@ -819,62 +871,6 @@ h2 {
   max-width: 100%;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.graphic-eq-knob-shell {
-  position: relative;
-  display: grid;
-  width: 54px;
-  height: 54px;
-  place-items: center;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 36% 28%, #e8fff0 0 18%, #d7f5df 19% 56%, #9bcba9 57% 100%),
-    conic-gradient(from 225deg, #08120b 0 var(--knob-fill), rgba(4, 35, 16, 0.28) var(--knob-fill) 75%, transparent 75% 100%);
-  box-shadow:
-    0 7px 10px rgba(0, 72, 32, 0.34),
-    inset 0 -3px 7px rgba(62, 115, 73, 0.38);
-}
-
-.graphic-eq-knob-shell::before {
-  content: "";
-  position: absolute;
-  inset: -6px;
-  border-radius: 50%;
-  background: conic-gradient(from 225deg, #061009 0 var(--knob-fill), rgba(2, 6, 4, 0.22) var(--knob-fill) 75%, transparent 75% 100%);
-  -webkit-mask: radial-gradient(circle, transparent 0 58%, #000 59% 70%, transparent 71%);
-  mask: radial-gradient(circle, transparent 0 58%, #000 59% 70%, transparent 71%);
-}
-
-.graphic-eq-knob-shell::after {
-  content: "";
-  position: absolute;
-  top: 7px;
-  left: 50%;
-  width: 4px;
-  height: 22px;
-  border-radius: 999px;
-  background: #07110a;
-  transform: translateX(-50%) rotate(var(--knob-rotation));
-  transform-origin: 50% 20px;
-}
-
-.graphic-eq-knob-shell input {
-  position: absolute;
-  inset: -10px;
-  z-index: 2;
-  width: calc(100% + 20px);
-  height: calc(100% + 20px);
-  opacity: 0;
-  cursor: pointer;
-  touch-action: none;
-}
-
-.graphic-eq-knob-shell i {
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.42);
 }
 
 .graphic-eq-slot {

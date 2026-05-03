@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import type { EQParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 
@@ -27,21 +26,14 @@ const presets: Record<string, Partial<EQParams>> = {
 function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFaderProps) {
   const progress = max === min ? 0 : (value - min) / (max - min);
   const clampedProgress = Math.min(Math.max(progress, 0), 1);
-  const rotation = -135 + clampedProgress * 270;
+  const position = 100 - clampedProgress * 100;
 
   return (
     <label className="graphic-eq-fader">
       <span>{label}</span>
-      <span
-        className="graphic-eq-knob-shell"
-        style={
-          {
-            '--knob-rotation': `${rotation}deg`,
-            '--knob-fill': `${clampedProgress * 75}%`,
-          } as CSSProperties
-        }
-      >
-        <i aria-hidden="true" />
+      <span className="graphic-eq-slot">
+        <span className="graphic-eq-scale" aria-hidden="true" />
+        <span className="graphic-eq-thumb" style={{ top: `${position}%` }} aria-hidden="true" />
         <input
           type="range"
           min={min}
