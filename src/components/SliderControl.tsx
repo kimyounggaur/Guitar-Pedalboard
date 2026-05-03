@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 interface SliderControlProps {
   label: string;
   value: number;
@@ -20,21 +22,36 @@ export function SliderControl({
   onChange,
 }: SliderControlProps) {
   const shownValue = displayValue ?? `${Number(value.toFixed(2))}${unit}`;
+  const progress = max === min ? 0 : (value - min) / (max - min);
+  const clampedProgress = Math.min(Math.max(progress, 0), 1);
+  const rotation = -135 + clampedProgress * 270;
 
   return (
-    <label className="slider-control">
-      <span className="control-row">
+    <label className="slider-control knob-control">
+      <span className="knob-control-head">
         <span>{label}</span>
         <output>{shownValue}</output>
       </span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(Number(event.currentTarget.value))}
-      />
+      <span
+        className="knob-control-shell"
+        style={
+          {
+            '--knob-rotation': `${rotation}deg`,
+            '--knob-fill': `${clampedProgress * 75}%`,
+          } as CSSProperties
+        }
+      >
+        <i aria-hidden="true" />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          aria-label={label}
+          onChange={(event) => onChange(Number(event.currentTarget.value))}
+        />
+      </span>
     </label>
   );
 }
