@@ -2240,7 +2240,7 @@ h2 {
 }
 
 .noise-gate-face {
-  min-height: 232px;
+  min-height: 284px;
   padding: 9px;
   border-width: 9px;
   border-radius: 12px;
@@ -2262,18 +2262,20 @@ h2 {
 }
 
 .noise-gate-led {
-  top: 24px;
+  top: 18px;
   width: 34px;
   height: 34px;
   border-width: 7px;
 }
 
 .noise-gate-knob-layout {
-  top: 56px;
+  top: 60px;
   right: 12px;
   left: 12px;
-  row-gap: 9px;
-  column-gap: 16px;
+  grid-template-areas: "threshold mode decay";
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  row-gap: 0;
+  column-gap: 10px;
 }
 
 .noise-gate-knob {
@@ -2282,15 +2284,15 @@ h2 {
 }
 
 .noise-gate-knob-shell {
-  width: 70px;
-  height: 70px;
+  width: 64px;
+  height: 64px;
 }
 
 .noise-gate-brand-panel {
-  bottom: 68px;
+  bottom: 70px;
   gap: 5px;
-  min-height: 50px;
-  padding: 8px 12px;
+  min-height: 46px;
+  padding: 7px 12px;
   border-top-width: 6px;
   border-bottom-width: 6px;
 }
@@ -2300,7 +2302,7 @@ h2 {
 }
 
 .noise-gate-brand-panel em {
-  font-size: 1.28rem;
+  font-size: 1.14rem;
 }
 
 .noise-gate-arrow {
@@ -2320,7 +2322,7 @@ h2 {
   right: 10px;
   bottom: 12px;
   left: 10px;
-  height: 46px;
+  height: 44px;
 }
 
 .graphic-eq-slider-panel {
