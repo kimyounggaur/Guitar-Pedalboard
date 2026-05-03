@@ -79,7 +79,7 @@ export function PedalBoard() {
   return (
     <section className="board-section" aria-label="페달보드">
       <div className="section-heading">
-        <div>
+        <div className="brand-lockup">
           <p className="eyebrow">Pedalboard</p>
           <h1 className="app-logo-title">
             <img src={guitarPedalBoardLogo} alt="Guitar Pedal Board" />
