@@ -30,6 +30,7 @@ interface PedalCardProps {
 }
 
 const customPedalChrome = new Set<PedalState['type']>([
+  'noiseGate',
   'compressor',
   'drive',
   'crunch',
@@ -69,7 +70,9 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
     <article
       className={`pedal-card${pedal.type === 'compressor' ? ' pedal-card-compressor' : ''}${
         pedal.type === 'drive' ? ' pedal-card-drive' : ''
-      }${pedal.type === 'crunch' ? ' pedal-card-crunch' : ''}${
+      }${pedal.type === 'noiseGate' ? ' pedal-card-noise-gate' : ''}${
+        pedal.type === 'crunch' ? ' pedal-card-crunch' : ''
+      }${
         pedal.type === 'fuzz' ? ' pedal-card-fuzz' : ''
       }${pedal.type === 'eq' ? ' pedal-card-eq' : ''}${pedal.type === 'delay' ? ' pedal-card-delay' : ''}${
         pedal.type === 'reverb' ? ' pedal-card-reverb' : ''
