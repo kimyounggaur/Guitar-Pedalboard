@@ -148,26 +148,148 @@ h2 {
 
 .section-heading .preset-panel {
   display: grid;
-  grid-template-columns: auto minmax(210px, 0.9fr) auto minmax(280px, 1.35fr) auto;
-  align-items: center;
+  grid-template-columns: minmax(170px, 0.42fr) minmax(0, 1fr);
+  align-items: stretch;
   width: 100%;
-  gap: 8px;
+  min-height: 250px;
+  gap: 12px;
   padding: 10px;
   border-color: rgba(148, 163, 184, 0.18);
   background: rgba(17, 23, 34, 0.68);
   box-shadow: none;
 }
 
-.section-heading .preset-panel .panel-title {
+.preset-library-column,
+.preset-browser-main {
   display: grid;
-  justify-items: start;
-  gap: 1px;
+  min-width: 0;
+}
+
+.preset-library-column {
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  padding-right: 10px;
+  border-right: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.section-heading .preset-panel .panel-title {
+  justify-content: space-between;
+  gap: 8px;
   min-height: 0;
 }
 
 .section-heading .preset-panel .panel-title h2 {
   font-size: 0.86rem;
   white-space: nowrap;
+}
+
+.preset-library-list {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+}
+
+.preset-library-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #d8e1ee;
+  text-align: left;
+}
+
+.preset-library-list button:hover,
+.preset-library-list button.is-active {
+  border-color: rgba(106, 169, 255, 0.32);
+  background: rgba(106, 169, 255, 0.12);
+}
+
+.preset-library-list strong,
+.preset-library-list small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-library-list strong {
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.preset-library-list small {
+  color: var(--ink-muted);
+  font-size: 0.66rem;
+  line-height: 1.2;
+}
+
+.preset-library-list em {
+  display: grid;
+  min-width: 24px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.14);
+  color: #aebbd0;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.preset-browser-main {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.preset-browser-heading,
+.preset-browser-toolbar {
+  display: grid;
+  align-items: end;
+  gap: 8px;
+}
+
+.preset-browser-heading {
+  grid-template-columns: minmax(130px, auto) minmax(180px, 1fr);
+}
+
+.preset-browser-heading h2 {
+  font-size: 0.92rem;
+}
+
+.preset-search {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.preset-search span {
+  color: var(--ink-muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.preset-search input,
+.section-heading .preset-form input {
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: #e8edf4;
+  padding: 0 10px;
+}
+
+.preset-browser-toolbar {
+  grid-template-columns: minmax(210px, 1fr) auto;
 }
 
 .section-heading .preset-form {
@@ -177,14 +299,9 @@ h2 {
   min-width: 0;
 }
 
-.section-heading .preset-form input {
-  height: 32px;
-}
-
 .section-heading .preset-actions {
   display: flex;
   gap: 6px;
-  min-width: 0;
 }
 
 .section-heading .preset-actions .secondary-button,
@@ -202,19 +319,50 @@ h2 {
   overflow-x: auto;
   overflow-y: hidden;
   gap: 6px;
-  padding: 0 2px 2px;
+  padding: 2px 2px 6px;
   scrollbar-width: thin;
 }
 
 .section-heading .preset-item {
-  flex: 0 0 150px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  flex: 0 0 210px;
   min-width: 0;
   gap: 5px;
+  align-items: stretch;
 }
 
-.section-heading .preset-item > button:first-child {
-  min-height: 38px;
+.section-heading .preset-load-button {
+  display: grid;
+  min-width: 0;
+  min-height: 82px;
+  gap: 2px;
   padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: #d8e1ee;
+  text-align: left;
+}
+
+.section-heading .preset-item.is-active .preset-load-button,
+.section-heading .preset-load-button:hover {
+  border-color: rgba(106, 169, 255, 0.42);
+  background: rgba(106, 169, 255, 0.12);
+}
+
+.section-heading .preset-load-button strong,
+.section-heading .preset-load-button span,
+.section-heading .preset-load-button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section-heading .preset-load-button small {
+  color: var(--ink-muted);
+  font-size: 0.68rem;
+  line-height: 1.25;
 }
 
 .section-heading .preset-item .icon-button {
@@ -222,9 +370,19 @@ h2 {
   height: 28px;
 }
 
+.preset-item-actions {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+}
+
+.favorite-button.is-active {
+  color: #f0b84b;
+}
+
 .section-heading .preset-message {
-  grid-column: 2 / 5;
-  margin-top: -2px;
+  min-height: 18px;
+  margin-top: -1px;
 }
 
 .section-heading .preset-item span,
@@ -233,9 +391,14 @@ h2 {
   font-size: 0.72rem;
 }
 
-.section-heading .preset-panel > .text-button {
+.section-heading .preset-reset-button {
   justify-self: end;
   white-space: nowrap;
+}
+
+.preset-empty {
+  align-self: center;
+  min-width: 220px;
 }
 
 .signal-chain-text {
@@ -3483,14 +3646,11 @@ select,
   }
 
   .section-heading .preset-panel {
-    grid-template-columns: auto minmax(180px, 1fr) auto;
+    grid-template-columns: minmax(150px, 0.34fr) minmax(0, 1fr);
   }
 
-  .section-heading .preset-actions,
-  .section-heading .preset-list,
-  .section-heading .preset-panel > .text-button,
-  .section-heading .preset-message {
-    grid-column: 1 / -1;
+  .preset-browser-toolbar {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -3510,15 +3670,37 @@ select,
 
   .section-heading .preset-panel {
     grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .preset-library-column {
+    border-right: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+    padding-right: 0;
+    padding-bottom: 10px;
+  }
+
+  .preset-library-list {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .preset-library-list button {
+    flex: 0 0 164px;
+  }
+
+  .preset-browser-heading {
+    grid-template-columns: 1fr;
   }
 
   .section-heading .preset-form,
   .section-heading .preset-actions {
-    grid-column: auto;
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .section-heading .preset-list {
-    grid-column: auto;
     max-height: none;
   }
 

@@ -151,4 +151,8 @@ export interface Preset {
   name: string;
   pedals: PedalState[];
   updatedAt: number;
+  libraryId?: string;
+  libraryName?: string;
+  description?: string;
+  tags?: string[];
 }
