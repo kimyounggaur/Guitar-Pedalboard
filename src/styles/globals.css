@@ -49,20 +49,23 @@ button:disabled {
 }
 
 .app-shell {
+  width: 100%;
   min-height: 100vh;
-  padding: 24px;
+  padding: 16px;
 }
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
   gap: 20px;
-  max-width: 1440px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .board-section {
   position: relative;
+  width: 100%;
   min-width: 0;
 }
 
@@ -142,6 +145,7 @@ h2 {
   gap: 14px;
   overflow: visible;
   min-height: auto;
+  width: 100%;
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2074,6 +2078,45 @@ h2 {
 
 .delay-footswitch-pad {
   min-height: 88px;
+}
+
+.pedal-card-delay .delay-knob {
+  color: #071014;
+  font-family: "Trebuchet MS", system-ui, sans-serif;
+  font-style: italic;
+  font-weight: 900;
+}
+
+.pedal-card-delay .delay-knob-shell {
+  border: 0;
+  background:
+    linear-gradient(92deg, transparent 0 45%, rgba(203, 202, 190, 0.55) 46% 51%, transparent 52% 100%),
+    radial-gradient(circle at 34% 27%, #fffef2 0 26%, #f2f0e4 27% 68%, #d7d3c5 69% 100%);
+  box-shadow:
+    0 9px 14px rgba(36, 111, 143, 0.42),
+    inset 0 -3px 8px rgba(156, 151, 134, 0.5);
+}
+
+.pedal-card-delay .delay-knob-shell::before {
+  content: none;
+}
+
+.pedal-card-delay .delay-knob-shell::after {
+  top: 7px;
+  left: 50%;
+  width: 4px;
+  height: 25px;
+  border-radius: 999px;
+  background: #101111;
+  transform: translateX(-50%) rotate(var(--knob-rotation));
+  transform-origin: 50% 26px;
+  clip-path: none;
+}
+
+.pedal-card-delay .delay-knob-shell i {
+  width: 20px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .reverb-wave-panel {
