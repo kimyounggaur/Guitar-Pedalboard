@@ -19,6 +19,7 @@ import { AudioEngine } from '../audio/AudioEngine';
 import guitarPedalBoardLogo from '../assets/guitar-pedal-board-logo.png';
 import { usePedalStore } from '../store/pedalStore';
 import { PedalIcon } from './PedalIcon';
+import { PresetPanel } from './PresetPanel';
 import { SortablePedal } from './SortablePedal';
 
 export function PedalBoard() {
@@ -84,7 +85,10 @@ export function PedalBoard() {
             <img src={guitarPedalBoardLogo} alt="Guitar Pedal Board" />
           </h1>
         </div>
-        <span className="hint">드래그 종료 후 체인을 재연결합니다</span>
+        <div className="header-tools">
+          <span className="hint">드래그 종료 후 체인을 재연결합니다</span>
+          <PresetPanel />
+        </div>
       </div>
 
       <div className="signal-chain-text" aria-live="polite" aria-label={chainText}>

@@ -3,7 +3,6 @@ import { ChainText } from './ChainText';
 import { ConnectGuitarPanel } from './ConnectGuitarPanel';
 import { Meter } from './Meter';
 import { PedalBoard } from './PedalBoard';
-import { PresetPanel } from './PresetPanel';
 import { usePedalStore } from '../store/pedalStore';
 
 export function AppShell() {
@@ -21,7 +20,6 @@ export function AppShell() {
           <ConnectGuitarPanel />
           <Meter />
           <ChainText />
-          <PresetPanel />
         </aside>
       </div>
     </main>
