@@ -14,6 +14,7 @@ import { AudioEngine } from '../audio/AudioEngine';
 import { usePedalStore } from '../store/pedalStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { SliderControl } from './SliderControl';
+import { StompToggleSwitch } from './StompToggleSwitch';
 import { NoiseGatePedal } from './effects/NoiseGatePedal';
 import { CompressorPedal } from './effects/CompressorPedal';
 import { CrunchPedal } from './effects/CrunchPedal';
@@ -184,7 +185,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         onTouchStart={stopControlEvent}
         onKeyDown={stopControlEvent}
       >
-        <ToggleSwitch label="On" checked={pedal.enabled} onChange={toggleEnabled} />
+        <StompToggleSwitch label="On/Off" checked={pedal.enabled} onChange={toggleEnabled} />
         <ToggleSwitch
           label="Bypass"
           checked={pedal.bypassed}
