@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { ChainText } from './ChainText';
-import { ConnectGuitarPanel } from './ConnectGuitarPanel';
 import { Meter } from './Meter';
 import { PedalBoard } from './PedalBoard';
 import { PresetPanel } from './PresetPanel';
@@ -19,7 +18,6 @@ export function AppShell() {
         <PedalBoard />
         <aside className="sidebar" aria-label="오디오와 프리셋 패널">
           <PresetPanel />
-          <ConnectGuitarPanel />
           <Meter />
           <ChainText />
         </aside>

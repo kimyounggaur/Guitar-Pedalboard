@@ -91,8 +91,82 @@ button:disabled {
   display: grid;
   justify-items: end;
   gap: 10px;
-  width: min(900px, 62vw);
-  min-width: 560px;
+  width: clamp(560px, 54vw, 820px);
+  min-width: 0;
+}
+
+.header-tools .connect-panel {
+  display: grid;
+  grid-template-columns: minmax(112px, 0.52fr) minmax(240px, 1.3fr) minmax(128px, auto) minmax(
+      78px,
+      auto
+    ) minmax(210px, 1fr);
+  align-items: end;
+  width: 100%;
+  gap: 10px;
+  padding: 10px 12px;
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(17, 23, 34, 0.74);
+  box-shadow: none;
+}
+
+.header-tools .connect-panel .panel-title {
+  display: grid;
+  align-self: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.header-tools .connect-panel .panel-title h2 {
+  overflow: hidden;
+  font-size: 0.86rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-tools .connect-panel .device-selector,
+.header-tools .connect-panel .audio-file-upload {
+  min-width: 0;
+  gap: 6px;
+}
+
+.header-tools .connect-panel .device-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.header-tools .connect-panel .connect-actions {
+  min-width: 128px;
+}
+
+.header-tools .connect-panel .primary-button,
+.header-tools .connect-panel .danger-button,
+.header-tools .connect-panel .panic-button {
+  height: 40px;
+}
+
+.header-tools .connect-panel .panic-button {
+  width: 78px;
+}
+
+.header-tools .connect-panel .audio-file-upload input[type="file"]::file-selector-button {
+  height: 36px;
+  padding: 0 10px;
+}
+
+.header-tools .connect-panel .file-player,
+.header-tools .connect-panel .warning-message,
+.header-tools .connect-panel .panel-copy,
+.header-tools .connect-panel .error-message {
+  grid-column: 1 / -1;
+}
+
+.header-tools .connect-panel .panel-copy {
+  overflow: hidden;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .eyebrow,
@@ -3998,7 +4072,23 @@ select,
 
   .header-tools {
     width: 100%;
-    min-width: 0;
+  }
+
+  .header-tools .connect-panel {
+    grid-template-columns: minmax(112px, 0.5fr) minmax(240px, 1.3fr) minmax(128px, auto);
+  }
+
+  .header-tools .connect-panel .panic-button,
+  .header-tools .connect-panel .audio-file-upload {
+    grid-column: auto;
+  }
+
+  .header-tools .connect-panel .audio-file-upload {
+    grid-column: 1 / -1;
+  }
+
+  .header-tools .connect-panel .panel-copy {
+    white-space: normal;
   }
 
   .section-heading .preset-panel {
@@ -4022,6 +4112,15 @@ select,
 
   .header-tools {
     justify-items: stretch;
+  }
+
+  .header-tools .connect-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .header-tools .connect-panel .connect-actions,
+  .header-tools .connect-panel .panic-button {
+    width: 100%;
   }
 
   .section-heading .preset-panel {
