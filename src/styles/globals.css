@@ -107,6 +107,18 @@ h1 {
   line-height: 0.98;
 }
 
+.app-logo-title {
+  line-height: 1;
+}
+
+.app-logo-title img {
+  display: block;
+  width: min(520px, 62vw);
+  max-height: 150px;
+  object-fit: contain;
+  object-position: left center;
+}
+
 h2 {
   font-size: 1rem;
 }
@@ -3373,6 +3385,11 @@ select,
   .section-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .app-logo-title img {
+    width: min(100%, 380px);
+    max-height: 118px;
   }
 
   .hint {

@@ -16,6 +16,7 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 import { AudioEngine } from '../audio/AudioEngine';
+import guitarPedalBoardLogo from '../assets/guitar-pedal-board-logo.png';
 import { usePedalStore } from '../store/pedalStore';
 import { PedalIcon } from './PedalIcon';
 import { SortablePedal } from './SortablePedal';
@@ -79,7 +80,9 @@ export function PedalBoard() {
       <div className="section-heading">
         <div>
           <p className="eyebrow">Pedalboard</p>
-          <h1>Guitar Pedal-Boafd</h1>
+          <h1 className="app-logo-title">
+            <img src={guitarPedalBoardLogo} alt="Guitar Pedal Board" />
+          </h1>
         </div>
         <span className="hint">드래그 종료 후 체인을 재연결합니다</span>
       </div>
