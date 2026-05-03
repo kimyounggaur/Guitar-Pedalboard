@@ -3,6 +3,7 @@ import { ChainText } from './ChainText';
 import { ConnectGuitarPanel } from './ConnectGuitarPanel';
 import { Meter } from './Meter';
 import { PedalBoard } from './PedalBoard';
+import { PresetPanel } from './PresetPanel';
 import { usePedalStore } from '../store/pedalStore';
 
 export function AppShell() {
@@ -17,6 +18,7 @@ export function AppShell() {
       <div className="workspace">
         <PedalBoard />
         <aside className="sidebar" aria-label="오디오와 프리셋 패널">
+          <PresetPanel />
           <ConnectGuitarPanel />
           <Meter />
           <ChainText />

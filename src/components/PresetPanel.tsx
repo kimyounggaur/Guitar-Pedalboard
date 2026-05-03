@@ -40,6 +40,7 @@ function normalizeText(value: string): string {
 export function PresetPanel() {
   const [name, setName] = useState('Clean Practice');
   const [message, setMessage] = useState<string | null>(null);
+  const [presetJson, setPresetJson] = useState('');
   const [activeLibraryId, setActiveLibraryId] = useState('all');
   const [query, setQuery] = useState('');
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
@@ -164,7 +165,9 @@ export function PresetPanel() {
   };
 
   const exportJson = () => {
-    const blob = new Blob([exportPresets()], { type: 'application/json' });
+    const json = exportPresets();
+    setPresetJson(json);
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -172,6 +175,21 @@ export function PresetPanel() {
     link.click();
     URL.revokeObjectURL(url);
     setMessage('Preset JSON exported');
+  };
+
+  const importJsonText = () => {
+    if (!presetJson.trim()) {
+      importInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const importedCount = importPresets(presetJson);
+      setActiveLibraryId('user');
+      setMessage(`${importedCount} presets imported`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Preset import failed');
+    }
   };
 
   const importJson = async (file: File) => {
@@ -187,10 +205,14 @@ export function PresetPanel() {
   return (
     <section className="side-panel preset-panel preset-browser" aria-label="프리셋 브라우저">
       <div className="preset-library-column">
-        <div className="panel-title">
-          <p className="eyebrow">Library</p>
-          <h2>라이브러리</h2>
+        <div className="preset-tabs" aria-label="프리셋 라이브러리 탭">
+          <button type="button" className="is-active">
+            Library
+          </button>
+          <button type="button">Store</button>
+          <em>{presets.length}</em>
         </div>
+
         <div className="preset-library-list" role="list">
           {libraryFilters.map((library) => (
             <button
@@ -201,31 +223,14 @@ export function PresetPanel() {
             >
               <span>
                 <strong>{library.name}</strong>
-                <small>{library.description}</small>
               </span>
               <em>{library.count}</em>
             </button>
           ))}
         </div>
-      </div>
 
-      <div className="preset-browser-main">
-        <div className="preset-browser-heading">
-          <div>
-            <p className="eyebrow">Presets ({visiblePresets.length})</p>
-            <h2>{activeLibrary.name}</h2>
-          </div>
-          <label className="preset-search">
-            <span>Search</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.currentTarget.value)}
-              placeholder="tone, genre, effect..."
-            />
-          </label>
-        </div>
-
-        <div className="preset-browser-toolbar">
+        <div className="preset-tools">
+          <div className="preset-tool-title">Preset Tools</div>
           <div className="preset-form">
             <input
               value={name}
@@ -233,16 +238,15 @@ export function PresetPanel() {
               placeholder="Preset name"
             />
             <button type="button" className="secondary-button" onClick={saveCurrentPreset}>
-              저장
+              Save
             </button>
           </div>
-
           <div className="preset-actions">
             <button type="button" className="secondary-button" onClick={exportJson}>
-              JSON Export
+              Export
             </button>
-            <button type="button" className="secondary-button" onClick={() => importInputRef.current?.click()}>
-              JSON Import
+            <button type="button" className="secondary-button" onClick={importJsonText}>
+              Import
             </button>
             <input
               ref={importInputRef}
@@ -256,6 +260,52 @@ export function PresetPanel() {
               }}
             />
           </div>
+          <textarea
+            value={presetJson}
+            onChange={(event) => setPresetJson(event.currentTarget.value)}
+            placeholder="Preset JSON"
+            rows={4}
+          />
+        </div>
+
+        <div className="preset-output">
+          <div>
+            <strong>Output</strong>
+            <em>OK</em>
+          </div>
+          <label>
+            <span>Peak</span>
+            <i><b style={{ width: '46%' }} /></i>
+          </label>
+          <label>
+            <span>RMS</span>
+            <i><b style={{ width: '32%' }} /></i>
+          </label>
+        </div>
+      </div>
+
+      <div className="preset-browser-main">
+        <div className="preset-browser-heading">
+          <div>
+            <p className="eyebrow">Presets</p>
+            <h2>{activeLibrary.name}</h2>
+          </div>
+          <strong className="preset-sound-count">{visiblePresets.length} Sounds</strong>
+        </div>
+
+        <div className="preset-active-library">
+          <strong>{activeLibrary.name}</strong>
+          <span>{visiblePresets.length} Sounds</span>
+        </div>
+
+        <div className="preset-browser-toolbar">
+          <label className="preset-search">
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+              placeholder="Search presets"
+            />
+          </label>
         </div>
 
         {message && <p className="preset-message">{message}</p>}
@@ -266,8 +316,10 @@ export function PresetPanel() {
               <div className={`preset-item${preset.id === activePresetId ? ' is-active' : ''}`} key={preset.id}>
                 <button type="button" className="preset-load-button" onClick={() => loadPreset(preset)}>
                   <strong>{preset.name}</strong>
-                  <span>{preset.libraryName ?? (preset.isFactory ? 'Factory Preset' : 'My Presets')}</span>
-                  {preset.description && <small>{preset.description}</small>}
+                  <span>
+                    {(preset.tags?.[0] ?? preset.libraryName ?? 'preset').toUpperCase()} /{' '}
+                    {preset.isFactory ? 'FACTORY' : 'USER'}
+                  </span>
                 </button>
                 <div className="preset-item-actions">
                   <button
@@ -295,9 +347,8 @@ export function PresetPanel() {
             <p className="empty-copy preset-empty">조건에 맞는 프리셋이 없습니다.</p>
           )}
         </div>
-
         <button type="button" className="text-button preset-reset-button" onClick={reset}>
-          기본 체인으로 재설정
+          Default Chain
         </button>
       </div>
     </section>
