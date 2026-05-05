@@ -57,8 +57,6 @@ export function DelayPedal({ params, onChange }: DelayPedalProps) {
         <span className="delay-arrow delay-arrow-right" />
       </div>
 
-      <div className="delay-footswitch-pad" aria-hidden="true" />
-
       <div className="delay-utility-controls">
         <label className="select-control">
           <span>Mode</span>

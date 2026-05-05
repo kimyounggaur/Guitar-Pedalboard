@@ -18,6 +18,7 @@
   --success: #4fd1a5;
   --warning: #f0b84b;
   --shadow: 0 18px 55px rgba(0, 0, 0, 0.34);
+  --pedal-density: 0.86;
 }
 
 * {
@@ -1065,7 +1066,7 @@ h2 {
 .noise-gate-brand-panel {
   position: absolute;
   right: 0;
-  bottom: 100px;
+  bottom: 16px;
   left: 0;
   display: grid;
   grid-template-columns: auto auto 1fr auto auto;
@@ -3038,6 +3039,238 @@ h2 {
   width: 34px;
   height: 34px;
   border-width: 4px;
+}
+
+.pedal-board {
+  gap: calc(12px * var(--pedal-density));
+  padding: calc(16px * var(--pedal-density));
+}
+
+.pedal-card {
+  gap: calc(10px * var(--pedal-density));
+  padding: calc(12px * var(--pedal-density));
+}
+
+.pedal-header {
+  gap: calc(10px * var(--pedal-density));
+}
+
+.drag-handle {
+  flex-basis: calc(34px * var(--pedal-density));
+  width: calc(34px * var(--pedal-density));
+  height: calc(34px * var(--pedal-density));
+}
+
+.pedal-controls {
+  gap: calc(12px * var(--pedal-density));
+}
+
+.pedal-switches {
+  padding-top: calc(12px * var(--pedal-density));
+}
+
+.compressor-stomp-ui,
+.noise-gate-stomp-ui,
+.tube-drive-ui,
+.crunch-box-ui,
+.fuzz-stomp-ui,
+.graphic-eq-ui,
+.delay-echo-ui,
+.reverb-stomp-ui {
+  gap: 8px;
+}
+
+.compressor-control-deck {
+  padding: 6px;
+}
+
+.compressor-knob-shell {
+  width: 32px;
+  height: 32px;
+}
+
+.compressor-brand-panel {
+  gap: 6px;
+  padding: 5px 9px 7px;
+}
+
+.compressor-brand-panel strong {
+  font-size: 0.9rem;
+}
+
+.noise-gate-face {
+  min-height: 230px;
+}
+
+.noise-gate-led {
+  top: 14px;
+  width: 30px;
+  height: 30px;
+}
+
+.noise-gate-knob-layout {
+  top: 50px;
+}
+
+.noise-gate-knob-shell {
+  width: 56px;
+  height: 56px;
+}
+
+.noise-gate-brand-panel {
+  bottom: 12px;
+  min-height: 42px;
+  padding: 6px 10px;
+}
+
+.graphic-eq-slider-panel {
+  min-height: 154px;
+  padding-top: 30px;
+}
+
+.graphic-eq-slot {
+  height: 76px;
+}
+
+.graphic-eq-scale {
+  background:
+    repeating-linear-gradient(180deg, transparent 0 9px, #050807 9px 12px, transparent 12px 18px),
+    linear-gradient(90deg, transparent 0 6px, #2a2d2c 6px 16px, transparent 16px 100%);
+}
+
+.graphic-eq-brand-panel {
+  gap: 5px;
+  padding: 8px 12px 10px;
+}
+
+.graphic-eq-brand-panel strong {
+  font-size: 1.26rem;
+}
+
+.tube-knob-shell {
+  width: 48px;
+  height: 48px;
+}
+
+.tube-knob-small .tube-knob-shell {
+  width: 42px;
+  height: 42px;
+}
+
+.tube-brand-plate {
+  min-height: 36px;
+}
+
+.tube-footswitch-pad {
+  min-height: 42px;
+  padding: 6px;
+}
+
+.crunch-face {
+  min-height: 205px;
+}
+
+.crunch-knob-shell {
+  width: 46px;
+  height: 46px;
+}
+
+.crunch-led {
+  top: 88px;
+}
+
+.crunch-side-label {
+  top: 98px;
+}
+
+.crunch-brand {
+  top: 121px;
+}
+
+.crunch-footswitch {
+  top: 146px;
+  width: 42px;
+  height: 42px;
+}
+
+.crunch-footswitch span {
+  width: 30px;
+  height: 30px;
+}
+
+.fuzz-face {
+  min-height: 158px;
+}
+
+.fuzz-knob-layout {
+  padding-top: 9px;
+}
+
+.fuzz-knob-shell {
+  width: 38px;
+  height: 38px;
+}
+
+.fuzz-knob-small .fuzz-knob-shell {
+  width: 32px;
+  height: 32px;
+}
+
+.fuzz-io-row {
+  top: 74px;
+}
+
+.fuzz-logo {
+  top: 98px;
+}
+
+.delay-knob-grid {
+  gap: 10px;
+  padding-top: 18px;
+}
+
+.delay-knob-shell {
+  width: 60px;
+  height: 60px;
+}
+
+.delay-brand-strip {
+  min-height: 48px;
+  padding: 7px 10px;
+}
+
+.delay-brand-strip em {
+  font-size: 1.22rem;
+}
+
+.reverb-wave-panel {
+  min-height: 142px;
+  padding: 12px 10px 10px;
+}
+
+.reverb-knob-grid {
+  gap: 10px 20px;
+}
+
+.reverb-knob-shell {
+  width: 40px;
+  height: 40px;
+}
+
+.reverb-title {
+  font-size: 1rem;
+}
+
+.compressor-utility-controls,
+.noise-gate-utility-controls,
+.tube-utility-controls,
+.delay-utility-controls,
+.reverb-utility-controls,
+.crunch-utility-controls,
+.fuzz-utility-controls,
+.graphic-eq-utility-controls {
+  gap: 6px;
+  padding: 7px;
 }
 
 .slider-control {

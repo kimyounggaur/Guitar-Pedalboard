@@ -99,8 +99,6 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
           <strong>IN</strong>
           <span className="noise-gate-arrow noise-gate-arrow-right" />
         </div>
-
-        <div className="noise-gate-footswitch-pad" aria-hidden="true" />
       </section>
 
       <div className="noise-gate-utility-controls">

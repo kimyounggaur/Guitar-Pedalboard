@@ -90,7 +90,6 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
         </div>
 
         <strong className="fuzz-logo">Fuzz</strong>
-        <div className="fuzz-footswitch-pad" aria-hidden="true" />
       </section>
 
       <div className="fuzz-utility-controls">

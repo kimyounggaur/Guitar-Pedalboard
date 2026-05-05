@@ -135,8 +135,6 @@ export function CompressorPedal({ params, onChange }: CompressorPedalProps) {
         </strong>
       </section>
 
-      <div className="compressor-footswitch-pad" aria-hidden="true" />
-
       <div className="compressor-utility-controls">
         <div className="gain-reduction-meter">
           <span className="control-row">

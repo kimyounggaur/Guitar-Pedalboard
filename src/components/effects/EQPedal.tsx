@@ -148,8 +148,6 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
         </strong>
       </section>
 
-      <div className="graphic-eq-footswitch-pad" aria-hidden="true" />
-
       <div className="graphic-eq-utility-controls">
         <div className="preset-buttons">
           {Object.keys(presets).map((name) => (
