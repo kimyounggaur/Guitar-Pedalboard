@@ -34,6 +34,8 @@ export function ConnectGuitarPanel() {
   const panic = useAudioStore((state) => state.panic);
   const loadDevices = useAudioStore((state) => state.loadDevices);
   const isClipping = isRunning && inputLevel.db > -1;
+  const hasUploadedFile = inputMode === 'file' && Boolean(uploadedFileName);
+  const fileControlsDisabled = isLoading || !hasUploadedFile;
 
   useEffect(() => {
     void loadDevices();
@@ -94,61 +96,56 @@ export function ConnectGuitarPanel() {
           }}
         />
 
-        {inputMode === 'file' && uploadedFileName && (
-          <div className="file-player" aria-label="업로드 음원 플레이어">
-            <div className="file-playback-row">
-              <span>{uploadedFileName}</span>
-              <span className="file-playback-time">
-                {formatPlaybackTime(fileCurrentTime)} / {formatPlaybackTime(fileDuration)}
-              </span>
-            </div>
-            <div className="file-transport-controls">
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={isLoading}
-                onClick={() => seekFile(-10)}
-              >
-                뒤로 10초
-              </button>
-              {isFilePaused ? (
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={isLoading}
-                  onClick={() => void playFile()}
-                >
-                  재생
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={isLoading}
-                  onClick={pauseFile}
-                >
-                  일시정지
-                </button>
-              )}
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={isLoading}
-                onClick={() => void stop()}
-              >
-                정지
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={isLoading}
-                onClick={() => seekFile(10)}
-              >
-                앞으로 10초
-              </button>
-            </div>
+        <div className="file-player" aria-label="업로드 음원 플레이어">
+          <div className="file-playback-row">
+            <span>{uploadedFileName ?? '업로드된 음원 없음'}</span>
+            <span className="file-playback-time">
+              {formatPlaybackTime(fileCurrentTime)} / {formatPlaybackTime(fileDuration)}
+            </span>
           </div>
-        )}
+          <div className="file-transport-controls">
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={fileControlsDisabled}
+              onClick={() => seekFile(-10)}
+            >
+              뒤로 10초
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={fileControlsDisabled || !isFilePaused}
+              onClick={() => void playFile()}
+            >
+              재생
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={fileControlsDisabled || isFilePaused}
+              onClick={pauseFile}
+            >
+              일시정지
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={fileControlsDisabled}
+              onClick={() => void stop()}
+            >
+              정지
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={fileControlsDisabled}
+              onClick={() => seekFile(10)}
+            >
+              앞으로 10초
+            </button>
+          </div>
+        </div>
       </div>
 
       {isClipping && (
