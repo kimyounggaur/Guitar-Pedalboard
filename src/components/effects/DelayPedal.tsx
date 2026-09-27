@@ -1,21 +1,32 @@
 import type { CSSProperties } from 'react';
 import type { DelayParams, PedalParamValue } from '../../audio/types';
+import { useAudioStore } from '../../store/audioStore';
 import { SliderControl } from '../SliderControl';
+import { TapTempoControl } from '../TapTempoControl';
 import { ToggleSwitch } from '../ToggleSwitch';
 
 interface DelayPedalProps {
+  pedalId: string;
   params: DelayParams;
   onChange: (key: keyof DelayParams, value: PedalParamValue) => void;
 }
 
 const delayModes: DelayParams['mode'][] = ['digital', 'analog', 'tape', 'slapback', 'pingpong'];
+const delayModeLabels: Record<DelayParams['mode'], string> = {
+  digital: 'Digital',
+  analog: 'Analog',
+  tape: 'Tape',
+  slapback: 'Slapback',
+  pingpong: 'Pingpong',
+};
 
-export function DelayPedal({ params, onChange }: DelayPedalProps) {
+export function DelayPedal({ pedalId, params, onChange }: DelayPedalProps) {
   const modeIndex = delayModes.indexOf(params.mode);
+  const setTempoSync = useAudioStore((state) => state.setTempoSync);
 
   return (
-    <div className="delay-echo-ui" aria-label="Delay Echo controls">
-      <div className="delay-led" aria-label={params.bypassed ? 'Delay bypassed' : 'Delay active'} />
+    <div className="delay-echo-ui" role="group" aria-label="Delay Echo controls">
+      <div className="delay-led" aria-hidden="true" />
 
       <div className="delay-knob-grid">
         <DelayKnob
@@ -23,6 +34,7 @@ export function DelayPedal({ params, onChange }: DelayPedalProps) {
           value={params.mix}
           min={0}
           max={100}
+          ariaValueText={`${Math.round(params.mix)}%`}
           onChange={(value) => onChange('mix', value)}
         />
         <DelayKnob
@@ -30,6 +42,7 @@ export function DelayPedal({ params, onChange }: DelayPedalProps) {
           value={params.timeMs}
           min={20}
           max={2000}
+          ariaValueText={`${Math.round(params.timeMs)} ms`}
           onChange={(value) => onChange('timeMs', value)}
         />
         <DelayKnob
@@ -37,6 +50,7 @@ export function DelayPedal({ params, onChange }: DelayPedalProps) {
           value={Math.round(params.feedback * 100)}
           min={0}
           max={95}
+          ariaValueText={`${Math.round(params.feedback * 100)}%`}
           onChange={(value) => onChange('feedback', value / 100)}
         />
         <DelayKnob
@@ -45,6 +59,7 @@ export function DelayPedal({ params, onChange }: DelayPedalProps) {
           min={0}
           max={4}
           step={1}
+          ariaValueText={delayModeLabels[params.mode]}
           onChange={(value) => onChange('mode', delayModes[value])}
         />
       </div>
@@ -68,7 +83,16 @@ export function DelayPedal({ params, onChange }: DelayPedalProps) {
             <option value="pingpong">Pingpong</option>
           </select>
         </label>
-        <ToggleSwitch label="Sync" checked={params.sync} onChange={(checked) => onChange('sync', checked)} />
+        <ToggleSwitch
+          label="Sync"
+          checked={params.sync}
+          onChange={(checked) => setTempoSync(pedalId, checked)}
+        />
+        <ToggleSwitch
+          label="Trails"
+          checked={params.trails}
+          onChange={(checked) => onChange('trails', checked)}
+        />
         <SliderControl
           label="Tone"
           value={params.tone}
@@ -78,7 +102,7 @@ export function DelayPedal({ params, onChange }: DelayPedalProps) {
           displayValue={`${Math.round(params.tone)}%`}
           onChange={(value) => onChange('tone', value)}
         />
-        <SliderControl label="BPM" value={params.bpm} min={40} max={240} step={1} onChange={(value) => onChange('bpm', value)} />
+        <TapTempoControl />
         <label className="select-control">
           <span>Division</span>
           <select value={params.division} onChange={(event) => onChange('division', event.currentTarget.value)}>
@@ -99,10 +123,11 @@ interface DelayKnobProps {
   min: number;
   max: number;
   step?: number;
+  ariaValueText: string;
   onChange: (value: number) => void;
 }
 
-function DelayKnob({ label, value, min, max, step = 1, onChange }: DelayKnobProps) {
+function DelayKnob({ label, value, min, max, step = 1, ariaValueText, onChange }: DelayKnobProps) {
   const normalized = (value - min) / (max - min);
   const rotation = -135 + normalized * 270;
 
@@ -116,6 +141,7 @@ function DelayKnob({ label, value, min, max, step = 1, onChange }: DelayKnobProp
           step={step}
           value={value}
           aria-label={label}
+          aria-valuetext={`${label} ${ariaValueText}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
         <i />

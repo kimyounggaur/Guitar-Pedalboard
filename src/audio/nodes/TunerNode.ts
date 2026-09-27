@@ -1,68 +1,102 @@
-import type { PitchReading } from '../types';
+import type { PitchReading, TuningPresetId } from '../types';
+import { getPitchReading } from '../utils/tunings';
 
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+interface TunerPitchMessage {
+  type: 'pitch';
+  sessionId: number;
+  frequency: number | null;
+}
+
+interface TunerDisposedMessage {
+  type: 'disposed';
+  sessionId: number;
+}
+
+type TunerProcessorMessage = TunerPitchMessage | TunerDisposedMessage;
+
+const EMPTY_PITCH: PitchReading = { frequency: null, note: null, cents: 0 };
 
 export class TunerNode {
-  readonly input: AnalyserNode;
-  private readonly buffer: Float32Array;
-  private readonly sampleRate: number;
+  readonly input: AudioWorkletNode;
+  private frequency: number | null = null;
+  private preset: TuningPresetId;
+  private sessionId = 0;
+  private active = false;
+  private disposed = false;
 
-  constructor(context: AudioContext) {
-    this.input = context.createAnalyser();
-    this.input.fftSize = 2048;
-    this.sampleRate = context.sampleRate;
-    this.buffer = new Float32Array(this.input.fftSize);
+  constructor(context: AudioContext, preset: TuningPresetId) {
+    this.preset = preset;
+    this.input = new AudioWorkletNode(context, 'tuner-processor', {
+      numberOfInputs: 1,
+      numberOfOutputs: 0,
+      channelCountMode: 'max',
+      channelInterpretation: 'discrete',
+    });
+
+    this.input.port.onmessage = (event: MessageEvent<TunerProcessorMessage>) => {
+      const message = event.data;
+      if (
+        this.disposed ||
+        !this.active ||
+        message.type !== 'pitch' ||
+        message.sessionId !== this.sessionId
+      ) {
+        return;
+      }
+
+      this.frequency =
+        message.frequency === null ||
+        !Number.isFinite(message.frequency) ||
+        message.frequency < 70 ||
+        message.frequency > 1400
+          ? null
+          : message.frequency;
+    };
+  }
+
+  setActive(active: boolean): void {
+    if (this.disposed || active === this.active) return;
+
+    this.active = active;
+    this.frequency = null;
+    this.sessionId += 1;
+    this.input.port.postMessage({
+      type: active ? 'wake' : 'sleep',
+      sessionId: this.sessionId,
+    });
+  }
+
+  setTuningPreset(preset: TuningPresetId): void {
+    this.preset = preset;
   }
 
   readPitch(): PitchReading {
-    this.input.getFloatTimeDomainData(this.buffer);
-    const frequency = this.autoCorrelate();
-
-    if (!frequency) {
-      return { frequency: null, note: null, cents: 0 };
-    }
-
-    const midi = 69 + 12 * Math.log2(frequency / 440);
-    const rounded = Math.round(midi);
-    const note = `${NOTE_NAMES[((rounded % 12) + 12) % 12]}${Math.floor(rounded / 12) - 1}`;
-    const targetFrequency = 440 * Math.pow(2, (rounded - 69) / 12);
-    const cents = 1200 * Math.log2(frequency / targetFrequency);
-
-    return { frequency, note, cents };
+    if (!this.active || this.frequency === null) return EMPTY_PITCH;
+    return getPitchReading(this.frequency, this.preset);
   }
 
-  disconnect(): void {
+  dispose(): void {
+    if (this.disposed) return;
+
+    this.disposed = true;
+    this.active = false;
+    this.frequency = null;
+    this.sessionId += 1;
+
+    const disposeSessionId = this.sessionId;
+    const port = this.input.port;
+    port.onmessage = (event: MessageEvent<TunerProcessorMessage>) => {
+      const message = event.data;
+      if (message.type !== 'disposed' || message.sessionId !== disposeSessionId) return;
+
+      port.onmessage = null;
+      port.close();
+    };
+    port.postMessage({ type: 'dispose', sessionId: disposeSessionId });
     this.input.disconnect();
   }
 
-  private autoCorrelate(): number | null {
-    let rms = 0;
-    for (let i = 0; i < this.buffer.length; i += 1) {
-      rms += this.buffer[i] * this.buffer[i];
-    }
-    rms = Math.sqrt(rms / this.buffer.length);
-
-    if (rms < 0.01) return null;
-
-    let bestOffset = -1;
-    let bestCorrelation = 0;
-    const minOffset = Math.floor(this.sampleRate / 1000);
-    const maxOffset = Math.floor(this.sampleRate / 65);
-
-    for (let offset = minOffset; offset <= maxOffset; offset += 1) {
-      let correlation = 0;
-      for (let i = 0; i < this.buffer.length - offset; i += 1) {
-        correlation += Math.abs(this.buffer[i] - this.buffer[i + offset]);
-      }
-
-      correlation = 1 - correlation / (this.buffer.length - offset);
-      if (correlation > bestCorrelation) {
-        bestCorrelation = correlation;
-        bestOffset = offset;
-      }
-    }
-
-    if (bestCorrelation < 0.45 || bestOffset <= 0) return null;
-    return this.sampleRate / bestOffset;
+  disconnect(): void {
+    this.dispose();
   }
 }

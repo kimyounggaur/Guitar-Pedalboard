@@ -1,10 +1,12 @@
 import { BaseEffect } from './BaseEffect';
 import type { DriveParams, PedalState } from '../types';
 import { createDriveCurve } from '../utils/curves';
+import { createDcBlocker } from '../utils/dcBlocker';
 import { smoothParam } from '../utils/smoothing';
 
 export class DriveEffect extends BaseEffect {
   private readonly shaper: WaveShaperNode;
+  private readonly dcBlocker: BiquadFilterNode;
   private readonly tone: BiquadFilterNode;
   private lastMode: DriveParams['mode'] | null = null;
   private lastDrive = -1;
@@ -14,12 +16,14 @@ export class DriveEffect extends BaseEffect {
     super(context, pedal);
     this.shaper = context.createWaveShaper();
     this.shaper.oversample = '4x';
+    this.dcBlocker = createDcBlocker(context);
     this.tone = context.createBiquadFilter();
     this.tone.type = 'lowpass';
     this.tone.Q.value = 0.7;
 
     this.effectInput.connect(this.shaper);
-    this.shaper.connect(this.tone);
+    this.shaper.connect(this.dcBlocker);
+    this.dcBlocker.connect(this.tone);
     this.tone.connect(this.effectOutput);
     this.update(pedal);
   }
@@ -40,11 +44,13 @@ export class DriveEffect extends BaseEffect {
     }
 
     const toneFrequency = 700 + (params.tone / 100) * 9800;
+    this.setMakeup(1 / (1 + (params.drive / 100) * 1.6));
     smoothParam(this.tone.frequency, toneFrequency, this.context);
   }
 
   override dispose(): void {
     this.shaper.disconnect();
+    this.dcBlocker.disconnect();
     this.tone.disconnect();
     super.dispose();
   }

@@ -1,0 +1,350 @@
+.slider-control {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.knob-control-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  color: #d8e1ee;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.knob-control-head output {
+  overflow: hidden;
+  max-width: 72px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pedal-card-drive .knob-control-head,
+.pedal-card-noise-gate .knob-control-head,
+.pedal-card-eq .knob-control-head,
+.pedal-card-crunch .knob-control-head,
+.pedal-card-fuzz .knob-control-head,
+.pedal-card-delay .knob-control-head {
+  color: #111820;
+}
+
+.pedal-card-drive .knob-control-head output,
+.pedal-card-noise-gate .knob-control-head output,
+.pedal-card-eq .knob-control-head output,
+.pedal-card-crunch .knob-control-head output,
+.pedal-card-fuzz .knob-control-head output,
+.pedal-card-delay .knob-control-head output {
+  color: rgba(17, 24, 32, 0.72);
+}
+
+.pedal-card-compressor .knob-control-head,
+.pedal-card-reverb .knob-control-head {
+  color: #ffffff;
+}
+
+.pedal-card-compressor .knob-control-head output,
+.pedal-card-reverb .knob-control-head output {
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.knob-control-shell {
+  position: relative;
+  display: grid;
+  width: 62px;
+  height: 62px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--pedal-color, var(--accent)) 48%, rgba(255, 255, 255, 0.18));
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 36% 28%, #f5f7f3 0 18%, #d9ded6 19% 58%, #8d978e 59% 100%),
+    conic-gradient(from 225deg, var(--pedal-color, var(--accent)) 0 var(--knob-fill), rgba(148, 163, 184, 0.22) var(--knob-fill) 75%, transparent 75% 100%);
+  box-shadow:
+    0 9px 16px rgba(0, 0, 0, 0.28),
+    inset 0 -3px 8px rgba(67, 74, 70, 0.38);
+}
+
+.knob-control-shell::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+  background: conic-gradient(from 225deg, var(--pedal-color, var(--accent)) 0 var(--knob-fill), rgba(148, 163, 184, 0.18) var(--knob-fill) 75%, transparent 75% 100%);
+  -webkit-mask: radial-gradient(circle, transparent 0 60%, #000 61% 70%, transparent 71%);
+  mask: radial-gradient(circle, transparent 0 60%, #000 61% 70%, transparent 71%);
+}
+
+.knob-control-shell::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 4px;
+  height: 24px;
+  border-radius: 999px;
+  background: #121821;
+  transform: translateX(-50%) rotate(var(--knob-rotation));
+  transform-origin: 50% 23px;
+}
+
+.knob-control-shell i {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.knob-control-shell input {
+  position: absolute;
+  inset: -11px;
+  width: calc(100% + 22px);
+  height: calc(100% + 22px);
+  opacity: 0;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.select-control {
+  display: grid;
+  gap: 8px;
+  color: #d8e1ee;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.select-control select {
+  height: 36px;
+}
+
+.control-row {
+  justify-content: space-between;
+  gap: 8px;
+  color: #d8e1ee;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.control-row output {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--pedal-color, var(--accent));
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #263244;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  margin-top: -5px;
+}
+
+.preset-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-buttons .text-button {
+  padding: 4px 0;
+  font-size: 0.78rem;
+}
+
+.effect-status {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.effect-status.state-open {
+  color: var(--success);
+}
+
+.effect-status.state-closing {
+  color: var(--warning);
+}
+
+.effect-status.state-closed {
+  color: var(--danger);
+}
+
+.gain-reduction-meter {
+  display: grid;
+  gap: 8px;
+}
+
+.eq-curve {
+  width: 100%;
+  height: 68px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.eq-curve path {
+  stroke: #d5dbe5;
+  stroke-width: 1;
+}
+
+.eq-curve polyline {
+  fill: none;
+  stroke: var(--pedal-color, var(--accent));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.toggle-switch {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  gap: 8px;
+  align-items: center;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.toggle-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-track {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: #334155;
+  transition: background 160ms ease;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.2);
+  transition: transform 160ms ease;
+}
+
+.toggle-switch input:checked + .switch-track {
+  background: var(--pedal-color, var(--accent));
+}
+
+.toggle-switch input:checked + .switch-track .switch-thumb {
+  transform: translateX(18px);
+}
+
+.midi-bypass-control {
+  position: relative;
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  min-width: 104px;
+}
+
+.midi-learn-button {
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--pedal-color, var(--accent)) 58%, #dce7f5);
+  border-radius: 8px;
+  background: rgba(8, 13, 20, 0.76);
+  color: #f4f8ff;
+  font: inherit;
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  touch-action: manipulation;
+}
+
+.midi-learn-button:hover {
+  background: rgba(15, 24, 36, 0.94);
+}
+
+.midi-learn-button:focus-visible,
+.midi-learn-menu button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--pedal-color, var(--accent)) 64%, #ffffff);
+  outline-offset: 2px;
+}
+
+.midi-mapping-status {
+  max-width: 138px;
+  color: currentColor;
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1.25;
+  opacity: 0.72;
+  text-align: right;
+}
+
+.midi-mapping-status.is-learning {
+  opacity: 1;
+}
+
+.midi-learn-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  display: grid;
+  min-width: 142px;
+  overflow: hidden;
+  padding: 5px;
+  border: 1px solid rgba(187, 205, 229, 0.3);
+  border-radius: 10px;
+  background: #111925;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.48);
+}
+
+.midi-learn-menu button {
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #eef5ff;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: left;
+}
+
+.midi-learn-menu button:hover {
+  background: rgba(126, 175, 236, 0.16);
+}
+
+:where(button, a[href], input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+
+.toggle-switch:focus-within .switch-track,
+.knob-control-shell:focus-within,
+[class$="-knob-shell"]:focus-within,
+.graphic-eq-slot:focus-within,
+.vertical-fader-rail:focus-within,
+.cab-range-control:focus-within,
+.io-slider-control:focus-within,
+.graphic-eq7-utility-controls label:focus-within {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}

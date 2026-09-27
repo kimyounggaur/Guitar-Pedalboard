@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { PedalParamValue, ReverbParams } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { ToggleSwitch } from '../ToggleSwitch';
 
 interface ReverbPedalProps {
   params: ReverbParams;
@@ -14,10 +15,11 @@ interface ReverbKnobProps {
   max: number;
   step: number;
   displayValue: string;
+  ariaValueText?: string;
   onChange: (value: number) => void;
 }
 
-function ReverbKnob({ label, value, min, max, step, displayValue, onChange }: ReverbKnobProps) {
+function ReverbKnob({ label, value, min, max, step, displayValue, ariaValueText, onChange }: ReverbKnobProps) {
   const progress = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(progress, 0), 1) * 270;
 
@@ -36,6 +38,7 @@ function ReverbKnob({ label, value, min, max, step, displayValue, onChange }: Re
           step={step}
           value={value}
           aria-label={label}
+          aria-valuetext={`${label} ${ariaValueText ?? displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
@@ -46,7 +49,7 @@ function ReverbKnob({ label, value, min, max, step, displayValue, onChange }: Re
 
 export function ReverbPedal({ params, onChange }: ReverbPedalProps) {
   return (
-    <div className="reverb-stomp-ui" aria-label="Reverb controls">
+    <div className="reverb-stomp-ui" role="group" aria-label="Reverb controls">
       <div className="reverb-wave-panel">
         <div className="reverb-led" aria-hidden="true" />
         <div className="reverb-knob-grid">
@@ -75,6 +78,7 @@ export function ReverbPedal({ params, onChange }: ReverbPedalProps) {
             max={12000}
             step={100}
             displayValue={`${(params.highCut / 1000).toFixed(1)}k`}
+            ariaValueText={`${(params.highCut / 1000).toFixed(1)} kHz`}
             onChange={(value) => onChange('highCut', value)}
           />
           <ReverbKnob
@@ -105,6 +109,11 @@ export function ReverbPedal({ params, onChange }: ReverbPedalProps) {
             <option value="ambient">Ambient</option>
           </select>
         </label>
+        <ToggleSwitch
+          label="Trails"
+          checked={params.trails}
+          onChange={(checked) => onChange('trails', checked)}
+        />
         <SliderControl
           label="Pre Delay"
           value={params.preDelay}

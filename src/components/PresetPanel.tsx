@@ -1,7 +1,13 @@
-import { useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
-import { usePedalStore, clonePedals, initialPedals } from '../store/pedalStore';
-import { presetLibraries, usePresetStore, type PresetListItem } from '../store/presetStore';
+import { useAudioStore } from '../store/audioStore';
+import { usePedalStore, clonePedals } from '../store/pedalStore';
+import {
+  presetLibraries,
+  usePresetStore,
+  type PresetComparisonSlot,
+  type PresetListItem,
+} from '../store/presetStore';
 
 const FAVORITES_KEY = 'guitar-pedalboard:preset-favorites';
 const RECENTS_KEY = 'guitar-pedalboard:preset-recents';
@@ -43,6 +49,7 @@ export function PresetPanel() {
   const [presetJson, setPresetJson] = useState('');
   const [activeLibraryId, setActiveLibraryId] = useState('all');
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => readStringList(FAVORITES_KEY));
   const [recentIds, setRecentIds] = useState<string[]>(() => readStringList(RECENTS_KEY));
@@ -50,14 +57,25 @@ export function PresetPanel() {
   const pedals = usePedalStore((state) => state.pedals);
   const setPedals = usePedalStore((state) => state.setPedals);
   const resetPedalOrder = usePedalStore((state) => state.resetPedalOrder);
+  const adoptTempoFromPedals = useAudioStore((state) => state.adoptTempoFromPedals);
   const presets = usePresetStore((state) => state.presets);
   const savePreset = usePresetStore((state) => state.savePreset);
   const deletePreset = usePresetStore((state) => state.deletePreset);
   const exportPresets = usePresetStore((state) => state.exportPresets);
   const importPresets = usePresetStore((state) => state.importPresets);
+  const slotA = usePresetStore((state) => state.slotA);
+  const slotB = usePresetStore((state) => state.slotB);
+  const activeSlot = usePresetStore((state) => state.activeSlot);
+  const captureCurrentToSlot = usePresetStore((state) => state.captureCurrentToSlot);
+  const activateSlot = usePresetStore((state) => state.activateSlot);
 
   const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
   const recentSet = useMemo(() => new Set(recentIds), [recentIds]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 180);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   const libraryFilters = useMemo<LibraryFilter[]>(() => {
     const userCount = presets.filter((preset) => !preset.isFactory).length;
@@ -77,7 +95,7 @@ export function PresetPanel() {
   }, [favoriteSet, presets, recentSet]);
 
   const activeLibrary = libraryFilters.find((library) => library.id === activeLibraryId) ?? libraryFilters[0];
-  const normalizedQuery = normalizeText(query);
+  const normalizedQuery = useMemo(() => normalizeText(debouncedQuery), [debouncedQuery]);
 
   const visiblePresets = useMemo(() => {
     const filtered = presets.filter((preset) => {
@@ -107,15 +125,15 @@ export function PresetPanel() {
     return filtered.sort((left, right) => recentIds.indexOf(left.id) - recentIds.indexOf(right.id));
   }, [activeLibraryId, favoriteSet, normalizedQuery, presets, recentIds, recentSet]);
 
-  const rememberRecent = (presetId: string) => {
+  const rememberRecent = useCallback((presetId: string) => {
     setRecentIds((currentIds) => {
       const nextIds = [presetId, ...currentIds.filter((id) => id !== presetId)].slice(0, 16);
       writeStringList(RECENTS_KEY, nextIds);
       return nextIds;
     });
-  };
+  }, []);
 
-  const toggleFavorite = (presetId: string) => {
+  const toggleFavorite = useCallback((presetId: string) => {
     setFavoriteIds((currentIds) => {
       const nextIds = currentIds.includes(presetId)
         ? currentIds.filter((id) => id !== presetId)
@@ -124,17 +142,30 @@ export function PresetPanel() {
       writeStringList(FAVORITES_KEY, nextIds);
       return nextIds;
     });
-  };
+  }, []);
 
-  const loadPreset = (preset: PresetListItem) => {
+  const loadPreset = useCallback((preset: PresetListItem) => {
     const nextPedals = clonePedals(preset.pedals);
     setPedals(nextPedals);
-    void AudioEngine.getInstance().rebuildChain(nextPedals);
+    adoptTempoFromPedals();
+    AudioEngine.getInstance().rebuildChain();
     setName(preset.name);
     setActivePresetId(preset.id);
     rememberRecent(preset.id);
     setMessage(`${preset.name} loaded`);
-  };
+  }, [adoptTempoFromPedals, rememberRecent, setPedals]);
+
+  const captureComparisonSlot = useCallback((slot: PresetComparisonSlot) => {
+    captureCurrentToSlot(slot);
+    setActivePresetId(null);
+    setMessage(`${slot} 슬롯에 현재 체인을 저장했습니다.`);
+  }, [captureCurrentToSlot]);
+
+  const activateComparisonSlot = useCallback((slot: PresetComparisonSlot) => {
+    if (!activateSlot(slot)) return;
+    setActivePresetId(null);
+    setMessage(`${slot} 슬롯을 활성화했습니다.`);
+  }, [activateSlot]);
 
   const saveCurrentPreset = () => {
     savePreset(name, pedals);
@@ -142,7 +173,7 @@ export function PresetPanel() {
     setMessage('Preset saved');
   };
 
-  const removePreset = (presetId: string) => {
+  const removePreset = useCallback((presetId: string) => {
     deletePreset(presetId);
     setFavoriteIds((currentIds) => {
       const nextIds = currentIds.filter((id) => id !== presetId);
@@ -154,12 +185,11 @@ export function PresetPanel() {
       writeStringList(RECENTS_KEY, nextIds);
       return nextIds;
     });
-  };
+  }, [deletePreset]);
 
   const reset = () => {
-    const nextPedals = clonePedals(initialPedals);
     resetPedalOrder();
-    void AudioEngine.getInstance().rebuildChain(nextPedals);
+    AudioEngine.getInstance().rebuildChain();
     setActivePresetId(null);
     setMessage('Default chain restored');
   };
@@ -204,8 +234,39 @@ export function PresetPanel() {
 
   return (
     <section className="side-panel preset-panel preset-browser" aria-label="프리셋 브라우저">
+      <div className="preset-ab-toolbar" role="group" aria-label="프리셋 A/B 비교">
+        <div className="preset-ab-buttons" role="group" aria-label="A/B 슬롯 컨트롤">
+          <button
+            type="button"
+            disabled={!slotA}
+            aria-pressed={slotA !== null && activeSlot === 'A'}
+            onClick={() => activateComparisonSlot('A')}
+          >
+            A
+          </button>
+          <button
+            type="button"
+            disabled={!slotB}
+            aria-pressed={slotB !== null && activeSlot === 'B'}
+            onClick={() => activateComparisonSlot('B')}
+          >
+            B
+          </button>
+          <button type="button" onClick={() => captureComparisonSlot('A')}>
+            A←현재
+          </button>
+          <button type="button" onClick={() => captureComparisonSlot('B')}>
+            B←현재
+          </button>
+        </div>
+        <p role="status" aria-live="polite">
+          {slotA || slotB
+            ? `${activeSlot} 슬롯 활성 · A ${slotA ? '저장됨' : '비어 있음'} · B ${slotB ? '저장됨' : '비어 있음'}`
+            : 'A/B 비교 슬롯이 비어 있습니다.'}
+        </p>
+      </div>
       <div className="preset-library-column">
-        <div className="preset-tabs" aria-label="프리셋 라이브러리 탭">
+        <div className="preset-tabs" role="group" aria-label="프리셋 라이브러리 탭">
           <button type="button" className="is-active">
             Library
           </button>
@@ -213,21 +274,22 @@ export function PresetPanel() {
           <em>{presets.length}</em>
         </div>
 
-        <div className="preset-library-list" role="list">
+        <ul className="preset-library-list" aria-label="프리셋 라이브러리">
           {libraryFilters.map((library) => (
-            <button
-              type="button"
-              className={library.id === activeLibraryId ? 'is-active' : ''}
-              key={library.id}
-              onClick={() => setActiveLibraryId(library.id)}
-            >
-              <span>
-                <strong>{library.name}</strong>
-              </span>
-              <em>{library.count}</em>
-            </button>
+            <li key={library.id}>
+              <button
+                type="button"
+                className={library.id === activeLibraryId ? 'is-active' : ''}
+                onClick={() => setActiveLibraryId(library.id)}
+              >
+                <span>
+                  <strong>{library.name}</strong>
+                </span>
+                <em>{library.count}</em>
+              </button>
+            </li>
           ))}
-        </div>
+        </ul>
 
         <div className="preset-tools">
           <div className="preset-tool-title">Preset Tools</div>
@@ -310,43 +372,23 @@ export function PresetPanel() {
 
         {message && <p className="preset-message">{message}</p>}
 
-        <div className="preset-list" role="list" aria-label="프리셋 목록">
-          {visiblePresets.length > 0 ? (
-            visiblePresets.map((preset) => (
-              <div className={`preset-item${preset.id === activePresetId ? ' is-active' : ''}`} key={preset.id}>
-                <button type="button" className="preset-load-button" onClick={() => loadPreset(preset)}>
-                  <strong>{preset.name}</strong>
-                  <span>
-                    {(preset.tags?.[0] ?? preset.libraryName ?? 'preset').toUpperCase()} /{' '}
-                    {preset.isFactory ? 'FACTORY' : 'USER'}
-                  </span>
-                </button>
-                <div className="preset-item-actions">
-                  <button
-                    type="button"
-                    className={`icon-button favorite-button${favoriteSet.has(preset.id) ? ' is-active' : ''}`}
-                    aria-label={`${preset.name} 즐겨찾기`}
-                    onClick={() => toggleFavorite(preset.id)}
-                  >
-                    {favoriteSet.has(preset.id) ? '★' : '☆'}
-                  </button>
-                  {!preset.isFactory && (
-                    <button
-                      type="button"
-                      className="icon-button"
-                      aria-label={`${preset.name} 삭제`}
-                      onClick={() => removePreset(preset.id)}
-                    >
-                      x
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="empty-copy preset-empty">조건에 맞는 프리셋이 없습니다.</p>
-          )}
-        </div>
+        {visiblePresets.length > 0 ? (
+          <ul className="preset-list" aria-label="프리셋 목록">
+            {visiblePresets.map((preset) => (
+              <PresetItem
+                key={preset.id}
+                preset={preset}
+                isActive={preset.id === activePresetId}
+                isFavorite={favoriteSet.has(preset.id)}
+                onLoad={loadPreset}
+                onToggleFavorite={toggleFavorite}
+                onDelete={removePreset}
+              />
+            ))}
+          </ul>
+        ) : (
+          <p className="empty-copy preset-empty">조건에 맞는 프리셋이 없습니다.</p>
+        )}
         <button type="button" className="text-button preset-reset-button" onClick={reset}>
           Default Chain
         </button>
@@ -354,3 +396,53 @@ export function PresetPanel() {
     </section>
   );
 }
+
+interface PresetItemProps {
+  preset: PresetListItem;
+  isActive: boolean;
+  isFavorite: boolean;
+  onLoad: (preset: PresetListItem) => void;
+  onToggleFavorite: (presetId: string) => void;
+  onDelete: (presetId: string) => void;
+}
+
+const PresetItem = memo(function PresetItem({
+  preset,
+  isActive,
+  isFavorite,
+  onLoad,
+  onToggleFavorite,
+  onDelete,
+}: PresetItemProps) {
+  return (
+    <li className={`preset-item${isActive ? ' is-active' : ''}`}>
+      <button type="button" className="preset-load-button" onClick={() => onLoad(preset)}>
+        <strong>{preset.name}</strong>
+        <span>
+          {(preset.tags?.[0] ?? preset.libraryName ?? 'preset').toUpperCase()} /{' '}
+          {preset.isFactory ? 'FACTORY' : 'USER'}
+        </span>
+      </button>
+      <div className="preset-item-actions">
+        <button
+          type="button"
+          className={`icon-button favorite-button${isFavorite ? ' is-active' : ''}`}
+          aria-label={`${preset.name} 즐겨찾기`}
+          onClick={() => onToggleFavorite(preset.id)}
+        >
+          {isFavorite ? '★' : '☆'}
+        </button>
+        {!preset.isFactory && (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={`${preset.name} 삭제`}
+            onClick={() => onDelete(preset.id)}
+          >
+            x
+          </button>
+        )}
+      </div>
+    </li>
+  );
+});

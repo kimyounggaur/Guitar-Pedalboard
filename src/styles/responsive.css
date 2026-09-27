@@ -1,0 +1,412 @@
+.mobile-control-dock {
+  display: none;
+}
+
+@media (min-width: 768px) and (max-width: 1279px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+    gap: 14px;
+  }
+
+  .section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .app-logo-title img {
+    width: min(440px, 70vw);
+  }
+
+  .header-tools {
+    width: 100%;
+  }
+
+  .header-tools .connect-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(128px, auto);
+  }
+
+  .header-tools .connect-panel .panel-title,
+  .header-tools .connect-panel .device-selector,
+  .header-tools .connect-panel .audio-file-upload,
+  .header-tools .connect-panel .input-safety-controls,
+  .header-tools .connect-panel .level-warning,
+  .header-tools .connect-panel .warning-message,
+  .header-tools .connect-panel .panel-copy,
+  .header-tools .connect-panel .error-message {
+    grid-column: 1 / -1;
+  }
+
+  .header-tools .connect-panel .panic-button {
+    width: 100%;
+  }
+
+  .header-tools .connect-panel .panel-copy {
+    white-space: normal;
+  }
+
+  .header-tools .file-transport-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .pedal-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sidebar {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .sidebar .preset-browser {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .sidebar .preset-library-column {
+    border-right: 0;
+    border-bottom: 1px solid rgba(210, 176, 214, 0.2);
+  }
+
+  .sidebar .preset-library-list {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .sidebar .preset-library-list button {
+    flex: 0 0 164px;
+  }
+
+  .sidebar .preset-browser-main {
+    min-height: 360px;
+  }
+
+  .sidebar .preset-browser-toolbar,
+  .preset-browser-heading {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .app-shell {
+    min-height: 100dvh;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
+    padding: 12px max(12px, env(safe-area-inset-right)) calc(88px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+
+  .offline-notice {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .board-section {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .brand-lockup,
+  .header-tools {
+    width: 100%;
+  }
+
+  .app-logo-title img {
+    width: min(100%, 380px);
+    max-height: 118px;
+  }
+
+  .hint {
+    text-align: left;
+  }
+
+  .pedal-board {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: clamp(270px, 86vw, 360px);
+    align-items: stretch;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 10px;
+    scroll-padding-inline: 10px;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-inline: contain;
+    touch-action: pan-x;
+  }
+
+  .sortable-pedal {
+    min-width: 0;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+
+  .pedal-header {
+    align-items: flex-start;
+  }
+
+  .mobile-control-dock {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 200;
+    display: grid;
+    max-height: min(66dvh, 620px);
+    border-top: 1px solid rgba(148, 163, 184, 0.34);
+    background: rgba(8, 12, 20, 0.97);
+    box-shadow: 0 -16px 42px rgba(0, 0, 0, 0.52);
+    backdrop-filter: blur(16px);
+  }
+
+  .mobile-bottom-tabs {
+    order: 2;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px max(10px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    border-top: 1px solid rgba(148, 163, 184, 0.22);
+    background: #090d16;
+  }
+
+  .mobile-bottom-tabs button {
+    min-height: 48px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 9px;
+    background: rgba(148, 163, 184, 0.08);
+    color: #aebcd0;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 900;
+  }
+
+  .mobile-bottom-tabs button[aria-selected="true"] {
+    border-color: #55e7ff;
+    background: rgba(85, 231, 255, 0.14);
+    color: #ffffff;
+    box-shadow: inset 0 0 0 1px rgba(85, 231, 255, 0.2);
+  }
+
+  .mobile-control-panels {
+    order: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .mobile-control-panel {
+    max-height: calc(min(66dvh, 620px) - 65px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 10px max(10px, env(safe-area-inset-right)) 10px max(10px, env(safe-area-inset-left));
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .mobile-control-panel > .side-panel {
+    min-height: 0;
+    border-color: rgba(148, 163, 184, 0.2);
+    box-shadow: none;
+  }
+
+  .mobile-preset-panel.sidebar {
+    display: block;
+  }
+
+  .mobile-control-panel[hidden] {
+    display: none !important;
+  }
+
+  .mobile-preset-panel .preset-browser {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .mobile-preset-panel .preset-library-column {
+    border-right: 0;
+    border-bottom: 1px solid rgba(210, 176, 214, 0.2);
+  }
+
+  .mobile-preset-panel .preset-library-list {
+    display: flex;
+    max-height: 94px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .mobile-preset-panel .preset-library-list button {
+    flex: 0 0 164px;
+  }
+
+  .mobile-preset-panel .preset-browser-main {
+    min-height: 0;
+  }
+
+  .mobile-preset-panel .preset-list {
+    max-height: 220px;
+  }
+
+  .mobile-control-panel .connect-panel,
+  .mobile-control-panel .input-safety-controls,
+  .mobile-control-panel .preset-ab-toolbar,
+  .mobile-control-panel .preset-browser-heading,
+  .mobile-control-panel .preset-form,
+  .mobile-control-panel .preset-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-control-panel .howl-protection-control {
+    justify-items: start;
+  }
+
+  .mobile-control-panel .howl-protection-control > span {
+    text-align: left;
+  }
+
+  .mobile-control-panel .file-playback-row,
+  .mobile-control-panel .file-transport-controls {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mobile-control-panel .preset-ab-buttons {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .mobile-control-panel .preset-ab-toolbar p {
+    text-align: left;
+  }
+
+  .mobile-control-panel .preset-library-column {
+    padding-right: 0;
+    padding-bottom: 10px;
+  }
+
+  .mobile-control-panel .preset-browser-heading {
+    align-items: start;
+  }
+
+  .mobile-control-panel .preset-form,
+  .mobile-control-panel .preset-actions {
+    display: grid;
+  }
+
+  .mobile-audio-notice {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .chain-toast {
+    right: 12px;
+    bottom: calc(82px + env(safe-area-inset-bottom));
+    left: 12px;
+    z-index: 220;
+    text-align: center;
+  }
+
+  :where(button, [role="button"], select, input[type="file"], a[href]) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  input[type="range"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .pedal-board .pedal-card :is(button, [role="button"], select),
+  .mobile-control-dock .mobile-control-panel :is(button, [role="button"], select) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .pedal-board .pedal-card input[type="range"],
+  .mobile-control-dock .mobile-control-panel input[type="range"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .toggle-switch {
+    min-height: 44px;
+  }
+
+  .midi-learn-button,
+  .midi-learn-menu button,
+  .icon-button,
+  .drag-handle {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .shortcut-help-backdrop {
+    place-items: end stretch;
+    padding: 12px max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+
+  .shortcut-help-dialog {
+    max-height: calc(100dvh - 24px - env(safe-area-inset-bottom));
+    padding: 18px;
+    border-radius: 16px;
+  }
+
+  .shortcut-help-list > div {
+    grid-template-columns: 80px minmax(0, 1fr);
+    gap: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .mobile-audio-notice,
+  .mobile-control-panel .file-playback-row,
+  .mobile-control-panel .file-transport-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .mobile-audio-notice button {
+    justify-self: stretch;
+  }
+
+  .mobile-control-panel .preset-ab-buttons {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .sortable-pedal,
+  .pedal-card,
+  .stomp-toggle-button,
+  .stomp-toggle-led,
+  [class$="-led"],
+  [class*="-led "],
+  .cent-strip,
+  .cent-strip span,
+  .shortcut-help-backdrop,
+  .shortcut-help-dialog {
+    animation: none !important;
+    transition: none !important;
+  }
+}

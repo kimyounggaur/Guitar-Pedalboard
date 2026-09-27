@@ -10,7 +10,6 @@ export function StompToggleSwitch({ label, checked, onChange }: StompToggleSwitc
       type="button"
       className={`stomp-toggle-switch${checked ? ' is-on' : ' is-off'}`}
       aria-pressed={checked}
-      aria-label={`${label} ${checked ? 'on' : 'off'}`}
       onClick={() => onChange(!checked)}
     >
       <span className="stomp-toggle-led" aria-hidden="true" />

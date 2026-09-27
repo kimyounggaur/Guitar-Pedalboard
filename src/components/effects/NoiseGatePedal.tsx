@@ -15,10 +15,11 @@ interface NoiseGateKnobProps {
   max: number;
   step: number;
   className?: string;
+  ariaValueText: string;
   onChange: (value: number) => void;
 }
 
-function NoiseGateKnob({ label, value, min, max, step, className = '', onChange }: NoiseGateKnobProps) {
+function NoiseGateKnob({ label, value, min, max, step, className = '', ariaValueText, onChange }: NoiseGateKnobProps) {
   const normalized = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(normalized, 0), 1) * 270;
 
@@ -35,6 +36,7 @@ function NoiseGateKnob({ label, value, min, max, step, className = '', onChange 
           step={step}
           value={value}
           aria-label={label}
+          aria-valuetext={`${label} ${ariaValueText}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
         <i aria-hidden="true" />
@@ -58,9 +60,9 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
   }, []);
 
   return (
-    <div className="noise-gate-stomp-ui" aria-label="Noise Gate controls">
+    <div className="noise-gate-stomp-ui" role="group" aria-label="Noise Gate controls">
       <section className="noise-gate-face">
-        <div className={`noise-gate-led state-${gateState.toLowerCase()}`} aria-label={`Gate ${gateState}`} />
+        <div className={`noise-gate-led state-${gateState.toLowerCase()}`} aria-hidden="true" />
 
         <div className="noise-gate-knob-layout">
           <NoiseGateKnob
@@ -70,6 +72,7 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
             max={-20}
             step={1}
             className="noise-gate-knob-threshold"
+            ariaValueText={`${Math.round(params.thresholdDb)} dB`}
             onChange={(value) => onChange('thresholdDb', value)}
           />
           <NoiseGateKnob
@@ -79,6 +82,7 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
             max={1000}
             step={10}
             className="noise-gate-knob-decay"
+            ariaValueText={`${Math.round(params.releaseMs)} ms`}
             onChange={(value) => onChange('releaseMs', value)}
           />
           <NoiseGateKnob
@@ -88,6 +92,7 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
             max={10}
             step={0.5}
             className="noise-gate-knob-mode"
+            ariaValueText={`${Number(params.hysteresisDb.toFixed(1))} dB`}
             onChange={(value) => onChange('hysteresisDb', value)}
           />
         </div>

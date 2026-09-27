@@ -1,10 +1,17 @@
 export type PedalType =
   | 'noiseGate'
   | 'compressor'
+  | 'autoWah'
   | 'drive'
   | 'crunch'
   | 'fuzz'
+  | 'graphicEQ'
   | 'eq'
+  | 'cab'
+  | 'chorus'
+  | 'flanger'
+  | 'phaser'
+  | 'tremolo'
   | 'delay'
   | 'reverb';
 
@@ -22,7 +29,6 @@ export type Pedal = {
 };
 
 export interface BasePedalParams extends Record<string, PedalParamValue> {
-  bypassed: boolean;
   mix: number;
   level: number;
 }
@@ -43,6 +49,14 @@ export interface CompressorParams extends BasePedalParams {
   release: number;
   knee: number;
   sustain: number;
+}
+
+export interface AutoWahParams extends BasePedalParams {
+  sensitivity: number;
+  range: number;
+  resonance: number;
+  mode: 'auto' | 'manual';
+  manual: number;
 }
 
 export interface DriveParams extends BasePedalParams {
@@ -70,6 +84,16 @@ export interface FuzzParams extends BasePedalParams {
   lowCut: number;
 }
 
+export interface GraphicEQParams extends BasePedalParams {
+  band100: number;
+  band200: number;
+  band400: number;
+  band800: number;
+  band1600: number;
+  band3200: number;
+  band6400: number;
+}
+
 export interface EQParams extends BasePedalParams {
   lowCut: number;
   bassGain: number;
@@ -78,6 +102,52 @@ export interface EQParams extends BasePedalParams {
   midQ: number;
   trebleGain: number;
   presenceGain: number;
+}
+
+export interface CabParams extends BasePedalParams {
+  model:
+    | 'v30-4x12'
+    | 'greenback-4x12'
+    | 'blue-1x12'
+    | 'jensen-1x12'
+    | 'tweed-1x10'
+    | 'off';
+  micPosition: number;
+  distance: number;
+  lowCut: number;
+  highCut: number;
+  presence: number;
+}
+
+export interface ChorusParams extends BasePedalParams {
+  rate: number;
+  depth: number;
+  voices: 2 | 3 | 4;
+  spread: number;
+  tone: number;
+}
+
+export interface FlangerParams extends BasePedalParams {
+  rate: number;
+  depth: number;
+  feedback: number;
+  manual: number;
+}
+
+export interface PhaserParams extends BasePedalParams {
+  rate: number;
+  depth: number;
+  stages: 4 | 6 | 8 | 12;
+  feedback: number;
+}
+
+export interface TremoloParams extends BasePedalParams {
+  rate: number;
+  depth: number;
+  shape: 'sine' | 'triangle' | 'square';
+  sync: boolean;
+  bpm: number;
+  division: '1/4' | '1/8' | 'dotted1/8' | '1/16';
 }
 
 export interface DelayParams extends BasePedalParams {
@@ -89,6 +159,7 @@ export interface DelayParams extends BasePedalParams {
   sync: boolean;
   bpm: number;
   division: '1/4' | '1/8' | 'dotted1/8' | '1/16';
+  trails: boolean;
 }
 
 export interface ReverbParams extends BasePedalParams {
@@ -97,15 +168,25 @@ export interface ReverbParams extends BasePedalParams {
   preDelay: number;
   lowCut: number;
   highCut: number;
+  trails: boolean;
 }
+
+export type ReverbMode = ReverbParams['mode'];
 
 export type PedalParams =
   | NoiseGateParams
   | CompressorParams
+  | AutoWahParams
   | DriveParams
   | CrunchParams
   | FuzzParams
+  | GraphicEQParams
   | EQParams
+  | CabParams
+  | ChorusParams
+  | FlangerParams
+  | PhaserParams
+  | TremoloParams
   | DelayParams
   | ReverbParams;
 
@@ -126,8 +207,7 @@ export interface EffectNodeWrapper {
   readonly output: AudioNode;
   connect(destination: AudioNode): void;
   disconnect(): void;
-  setParam(name: string, value: PedalParamValue): void;
-  setBypass(bypassed: boolean): void;
+  setEnabled(enabled: boolean): void;
   update(pedal: PedalState): void;
   dispose(): void;
 }
@@ -138,6 +218,13 @@ export interface LevelReading {
   peakDb: number;
   peakLinear: number;
   isClipping: boolean;
+  clipHoldUntil: number;
+}
+
+export interface LatencyReading {
+  base: number;
+  output: number;
+  sampleRate: number;
 }
 
 export interface PitchReading {
@@ -145,6 +232,8 @@ export interface PitchReading {
   note: string | null;
   cents: number;
 }
+
+export type TuningPresetId = 'standard' | 'drop-d' | 'half-step-down' | 'open-g';
 
 export interface Preset {
   id: string;

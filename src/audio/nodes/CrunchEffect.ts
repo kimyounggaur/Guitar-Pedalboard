@@ -2,12 +2,14 @@ import { BaseEffect } from './BaseEffect';
 import type { CrunchParams, PedalState } from '../types';
 import { clamp } from '../utils/db';
 import { createCrunchCurve } from '../utils/curves';
+import { createDcBlocker } from '../utils/dcBlocker';
 import { smoothParam } from '../utils/smoothing';
 
 export class CrunchEffect extends BaseEffect {
   private readonly preGain: GainNode;
   private readonly lowCut: BiquadFilterNode;
   private readonly shaper: WaveShaperNode;
+  private readonly dcBlocker: BiquadFilterNode;
   private readonly tone: BiquadFilterNode;
   private readonly presence: BiquadFilterNode;
   private readonly volumeGain: GainNode;
@@ -19,6 +21,7 @@ export class CrunchEffect extends BaseEffect {
     this.preGain = context.createGain();
     this.lowCut = context.createBiquadFilter();
     this.shaper = context.createWaveShaper();
+    this.dcBlocker = createDcBlocker(context);
     this.tone = context.createBiquadFilter();
     this.presence = context.createBiquadFilter();
     this.volumeGain = context.createGain();
@@ -35,7 +38,8 @@ export class CrunchEffect extends BaseEffect {
     this.effectInput.connect(this.preGain);
     this.preGain.connect(this.lowCut);
     this.lowCut.connect(this.shaper);
-    this.shaper.connect(this.tone);
+    this.shaper.connect(this.dcBlocker);
+    this.dcBlocker.connect(this.tone);
     this.tone.connect(this.presence);
     this.presence.connect(this.volumeGain);
     this.volumeGain.connect(this.effectOutput);
@@ -58,6 +62,7 @@ export class CrunchEffect extends BaseEffect {
     const presenceGain = -3 + (params.presence / 100) * 9;
     const volume = clamp(params.volume / 100, 0, 1.6);
 
+    this.setMakeup(1 / (1 + (params.gain / 100) * 2.1));
     smoothParam(this.preGain.gain, preGain, this.context);
     smoothParam(this.lowCut.frequency, params.lowCut, this.context);
     smoothParam(this.tone.frequency, toneFrequency, this.context);
@@ -70,6 +75,7 @@ export class CrunchEffect extends BaseEffect {
     this.preGain.disconnect();
     this.lowCut.disconnect();
     this.shaper.disconnect();
+    this.dcBlocker.disconnect();
     this.tone.disconnect();
     this.presence.disconnect();
     this.volumeGain.disconnect();

@@ -1,8 +1,6 @@
 import { useAudioStore } from '../store/audioStore';
-import { usePedalStore } from '../store/pedalStore';
 
 export function DeviceSelector() {
-  const pedals = usePedalStore((state) => state.pedals);
   const devices = useAudioStore((state) => state.devices);
   const selectedDeviceId = useAudioStore((state) => state.selectedDeviceId);
   const inputMode = useAudioStore((state) => state.inputMode);
@@ -19,7 +17,7 @@ export function DeviceSelector() {
           id="audio-device"
           value={selectedDeviceId}
           disabled={isLoading || isFilePlaying}
-          onChange={(event) => void setSelectedDevice(event.currentTarget.value, pedals)}
+          onChange={(event) => void setSelectedDevice(event.currentTarget.value)}
         >
           <option value="">기본 입력 장치</option>
           {devices.map((device, index) => (

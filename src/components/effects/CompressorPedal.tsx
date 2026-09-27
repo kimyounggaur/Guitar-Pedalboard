@@ -44,6 +44,7 @@ function CompressorKnob({
           step={step}
           value={value}
           aria-label={label}
+          aria-valuetext={`${label} ${displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
@@ -56,7 +57,7 @@ export function CompressorPedal({ params, onChange }: CompressorPedalProps) {
   const estimatedReduction = Math.min(24, Math.max(0, (params.sustain / 100) * 14 + (params.ratio - 1) * 0.35));
 
   return (
-    <div className="compressor-stomp-ui" aria-label="Compressor controls">
+    <div className="compressor-stomp-ui" role="group" aria-label="Compressor controls">
       <section className="compressor-control-deck">
         <div className="compressor-check-row">
           <span>CHECK</span>

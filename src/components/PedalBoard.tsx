@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   closestCenter,
   DndContext,
@@ -10,26 +10,27 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   rectSortingStrategy,
   SortableContext,
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 import { AudioEngine } from '../audio/AudioEngine';
-import guitarPedalBoardLogo from '../assets/guitar-pedal-board-logo.png';
 import { usePedalStore } from '../store/pedalStore';
-import { ConnectGuitarPanel } from './ConnectGuitarPanel';
 import { PedalIcon } from './PedalIcon';
 import { SortablePedal } from './SortablePedal';
 
-export function PedalBoard() {
+const logoUrl = `${import.meta.env.BASE_URL}logo.png`;
+
+interface PedalBoardProps {
+  inputPanel?: ReactNode;
+}
+
+export function PedalBoard({ inputPanel }: PedalBoardProps) {
   const [showChainToast, setShowChainToast] = useState(false);
   const toastTimerRef = useRef<number | null>(null);
   const pedals = usePedalStore((state) => state.pedals);
   const reorderPedals = usePedalStore((state) => state.reorderPedals);
   const setDraggingPedal = usePedalStore((state) => state.setDraggingPedal);
-  const chainText = ['Guitar Input', ...pedals.map((pedal) => pedal.name), 'Output'].join(' -> ');
-
   useEffect(() => {
     return () => {
       if (toastTimerRef.current) {
@@ -60,10 +61,8 @@ export function PedalBoard() {
     const newIndex = pedals.findIndex((pedal) => pedal.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
 
-    const nextPedals = arrayMove(pedals, oldIndex, newIndex);
-
     reorderPedals(oldIndex, newIndex);
-    void AudioEngine.getInstance().rebuildChain(nextPedals);
+    AudioEngine.getInstance().rebuildChain();
     setShowChainToast(true);
 
     if (toastTimerRef.current) {
@@ -82,16 +81,31 @@ export function PedalBoard() {
         <div className="brand-lockup">
           <p className="eyebrow">Pedalboard</p>
           <h1 className="app-logo-title">
-            <img src={guitarPedalBoardLogo} alt="Guitar Pedal Board" />
+            <img
+              src={logoUrl}
+              alt="Guitar Pedal Board"
+              width="2048"
+              height="1021"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+            />
           </h1>
         </div>
         <div className="header-tools">
           <span className="hint">드래그 종료 후 체인을 재연결합니다</span>
-          <ConnectGuitarPanel />
+          {inputPanel}
         </div>
       </div>
 
-      <div className="signal-chain-text" aria-live="polite" aria-label={chainText}>
+      <div
+        className="signal-chain-text"
+        role="region"
+        aria-label="현재 신호 체인"
+        aria-live="polite"
+        aria-atomic="true"
+        tabIndex={0}
+      >
         <span className="chain-endpoint">Guitar Input</span>
         {pedals.map((pedal) => (
           <span className="signal-chain-hop" key={pedal.id}>

@@ -8,6 +8,7 @@ interface SliderControlProps {
   step: number;
   unit?: string;
   displayValue?: string;
+  ariaValueText?: string;
   onChange: (value: number) => void;
 }
 
@@ -19,9 +20,11 @@ export function SliderControl({
   step,
   unit = '',
   displayValue,
+  ariaValueText,
   onChange,
 }: SliderControlProps) {
   const shownValue = displayValue ?? `${Number(value.toFixed(2))}${unit}`;
+  const accessibleValue = ariaValueText ?? shownValue;
   const progress = max === min ? 0 : (value - min) / (max - min);
   const clampedProgress = Math.min(Math.max(progress, 0), 1);
   const rotation = -135 + clampedProgress * 270;
@@ -49,6 +52,7 @@ export function SliderControl({
           step={step}
           value={value}
           aria-label={label}
+          aria-valuetext={`${label} ${accessibleValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>

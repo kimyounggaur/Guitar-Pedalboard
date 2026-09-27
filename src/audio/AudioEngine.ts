@@ -1,118 +1,48 @@
 import { CompressorEffect } from './nodes/CompressorEffect';
+import { AutoWahEffect } from './nodes/AutoWahEffect';
+import { CabEffect } from './nodes/CabEffect';
+import { ChorusEffect } from './nodes/ChorusEffect';
 import { CrunchEffect } from './nodes/CrunchEffect';
 import { DelayEffect } from './nodes/DelayEffect';
 import { DriveEffect } from './nodes/DriveEffect';
 import { EQEffect } from './nodes/EQEffect';
+import { FlangerEffect } from './nodes/FlangerEffect';
 import { FuzzEffect } from './nodes/FuzzEffect';
+import { GraphicEQEffect } from './nodes/GraphicEQEffect';
 import { MeterNode } from './nodes/MeterNode';
 import { NoiseGateEffect } from './nodes/NoiseGateEffect';
+import { PhaserEffect } from './nodes/PhaserEffect';
 import { ReverbEffect } from './nodes/ReverbEffect';
+import { TremoloEffect } from './nodes/TremoloEffect';
 import { TunerNode } from './nodes/TunerNode';
 import type {
+  CrunchParams,
+  DriveParams,
   EffectNodeWrapper,
+  FuzzParams,
+  LatencyReading,
   LevelReading,
-  PedalParams,
   PedalState,
-  PedalType,
   PitchReading,
+  TuningPresetId,
 } from './types';
+import { clamp, dbToGain } from './utils/db';
+import { ImpulseCache } from './utils/impulseCache';
 import { rampParam } from './utils/smoothing';
-import { driveProcessorSource } from './worklets/drive-processor';
 import { noiseGateProcessorSource } from './worklets/noise-gate-processor';
+import { envelopeFollowerProcessorSource } from './worklets/envelope-follower-processor';
+import { tunerProcessorSource } from './worklets/tuner-processor';
 
 type EffectNode = EffectNodeWrapper;
 
-const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+interface ChainConnection {
+  from: AudioNode;
+  to: AudioNode;
+}
 
-const defaultParamsByType: Record<PedalType, PedalParams> = {
-  noiseGate: {
-    bypassed: false,
-    mix: 100,
-    level: 100,
-    thresholdDb: -54,
-    reductionDb: -80,
-    attackMs: 6,
-    holdMs: 70,
-    releaseMs: 180,
-    hysteresisDb: 4,
-  },
-  compressor: {
-    bypassed: false,
-    mix: 75,
-    level: 100,
-    threshold: -24,
-    ratio: 4,
-    attack: 0.006,
-    release: 0.18,
-    knee: 18,
-    sustain: 35,
-  },
-  drive: {
-    bypassed: false,
-    mix: 88,
-    level: 95,
-    mode: 'overdrive',
-    drive: 42,
-    tone: 55,
-    bias: 0.08,
-  },
-  crunch: {
-    bypassed: false,
-    mix: 85,
-    level: 90,
-    volume: 80,
-    gain: 55,
-    tone: 55,
-    presence: 45,
-    lowCut: 80,
-    mode: 'crunch',
-  },
-  fuzz: {
-    bypassed: false,
-    mix: 90,
-    level: 90,
-    fuzz: 60,
-    tone: 55,
-    mode: 'classic',
-    bias: 50,
-    gate: 15,
-    lowCut: 70,
-  },
-  eq: {
-    bypassed: false,
-    mix: 100,
-    level: 100,
-    lowCut: 70,
-    bassGain: 1.5,
-    midFreq: 800,
-    midGain: -0.5,
-    midQ: 0.9,
-    trebleGain: 1.8,
-    presenceGain: 1,
-  },
-  delay: {
-    bypassed: true,
-    mix: 30,
-    level: 100,
-    mode: 'digital',
-    timeMs: 280,
-    feedback: 0.34,
-    tone: 60,
-    sync: false,
-    bpm: 120,
-    division: '1/4',
-  },
-  reverb: {
-    bypassed: true,
-    mix: 25,
-    level: 100,
-    mode: 'hall',
-    decay: 1.8,
-    preDelay: 24,
-    lowCut: 120,
-    highCut: 7200,
-  },
-};
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const CHAIN_FADE_SECONDS = 0.008;
+const CHAIN_RECONNECT_WAIT_MS = 12;
 
 export class AudioEngine {
   private static instance: AudioEngine | null = null;
@@ -125,13 +55,21 @@ export class AudioEngine {
   private inputGain: GainNode | null = null;
   private chainInput: GainNode | null = null;
   private masterGain: GainNode | null = null;
+  private recorderDestination: MediaStreamAudioDestinationNode | null = null;
   private inputMeter: MeterNode | null = null;
   private outputMeter: MeterNode | null = null;
   private tuner: TunerNode | null = null;
+  private tunerActive = false;
+  private tunerConnected = false;
+  private tuningPreset: TuningPresetId = 'standard';
   private effects = new Map<string, EffectNode>();
-  private pedalStates = new Map<string, PedalState>();
-  private currentPedals: PedalState[] = [];
+  private chainConnections = new Map<string, ChainConnection>();
+  private reverbImpulseCache: ImpulseCache | null = null;
+  private getPedals: () => PedalState[] = () => [];
   private rebuildQueue: Promise<void> = Promise.resolve();
+  private graphGeneration = 0;
+  private sessionGeneration = 0;
+  private inputGainDb = 0;
   private masterVolume = 0.9;
   private workletsLoaded = false;
   private workletUrls: string[] = [];
@@ -142,6 +80,10 @@ export class AudioEngine {
       AudioEngine.instance = new AudioEngine();
     }
     return AudioEngine.instance;
+  }
+
+  setPedalsProvider(provider: () => PedalState[]): void {
+    this.getPedals = provider;
   }
 
   get isRunning(): boolean {
@@ -167,51 +109,86 @@ export class AudioEngine {
     }
 
     this.dispose();
+    const generation = ++this.sessionGeneration;
+    const context = new AudioContext({ latencyHint: 'interactive' });
+    let stream: MediaStream | null = null;
+    this.context = context;
 
-    this.context = new AudioContext({ latencyHint: 'interactive' });
-    await this.loadWorklets();
+    try {
+      await this.loadWorklets();
+      this.assertCurrentSession(context, generation);
 
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: deviceId ? { exact: deviceId } : undefined,
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-        channelCount: { ideal: 2 },
-      },
-      video: false,
-    });
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: deviceId ? { exact: deviceId } : undefined,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: { ideal: 2 },
+        },
+        video: false,
+      });
+      this.assertCurrentSession(context, generation);
 
-    this.source = this.context.createMediaStreamSource(this.stream);
-    this.createProcessingGraph(this.source);
+      this.stream = stream;
+      this.source = context.createMediaStreamSource(stream);
+      this.createProcessingGraph(this.source);
 
-    await this.context.resume();
+      await context.resume();
+      this.assertCurrentSession(context, generation);
+    } catch (error) {
+      if (stream && stream !== this.stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      this.cleanupFailedSession(context, generation);
+      throw error;
+    }
   }
 
-  async startFile(file: File, pedals: PedalState[]): Promise<void> {
+  async startFile(file: File): Promise<void> {
     if (file.type && !file.type.startsWith('audio/')) {
       throw new Error('오디오 파일만 업로드할 수 있습니다.');
     }
 
-    this.currentPedals = this.clonePedals(pedals);
     this.dispose();
+    const generation = ++this.sessionGeneration;
+    const context = new AudioContext({ latencyHint: 'interactive' });
+    let audioFileUrl: string | null = null;
+    let audioElement: HTMLAudioElement | null = null;
+    this.context = context;
 
-    this.context = new AudioContext({ latencyHint: 'interactive' });
-    await this.loadWorklets();
+    try {
+      await this.loadWorklets();
+      this.assertCurrentSession(context, generation);
 
-    this.audioFileUrl = URL.createObjectURL(file);
-    this.audioElement = new Audio(this.audioFileUrl);
-    this.audioElement.preload = 'auto';
-    this.audioElement.addEventListener('ended', () => {
-      this.playbackEndedHandler?.();
-    });
+      audioFileUrl = URL.createObjectURL(file);
+      audioElement = new Audio(audioFileUrl);
+      audioElement.preload = 'auto';
+      audioElement.addEventListener('ended', () => {
+        this.playbackEndedHandler?.();
+      });
+      this.assertCurrentSession(context, generation);
 
-    this.source = this.context.createMediaElementSource(this.audioElement);
-    this.createProcessingGraph(this.source);
+      this.audioFileUrl = audioFileUrl;
+      this.audioElement = audioElement;
+      this.source = context.createMediaElementSource(audioElement);
+      this.createProcessingGraph(this.source);
 
-    await this.context.resume();
-    this.rebuildChain(pedals);
-    await this.audioElement.play();
+      await context.resume();
+      this.assertCurrentSession(context, generation);
+      this.rebuildChain();
+      await audioElement.play();
+      this.assertCurrentSession(context, generation);
+    } catch (error) {
+      if (audioElement && audioElement !== this.audioElement) {
+        audioElement.pause();
+      }
+      if (audioFileUrl && audioFileUrl !== this.audioFileUrl) {
+        URL.revokeObjectURL(audioFileUrl);
+      }
+      this.cleanupFailedSession(context, generation);
+      throw error;
+    }
   }
 
   async playUploadedFile(): Promise<void> {
@@ -249,83 +226,152 @@ export class AudioEngine {
 
   async setInputDevice(deviceId: string): Promise<void> {
     await this.init(deviceId);
-    this.rebuildChain(this.currentPedals);
+    this.rebuildChain();
   }
 
-  createEffect(type: PedalType, id: string): EffectNodeWrapper {
+  createEffect(pedal: PedalState): EffectNodeWrapper {
     if (!this.context) {
       throw new Error('AudioContext가 아직 준비되지 않았습니다.');
     }
 
-    const pedal = this.pedalStates.get(id) ?? this.createDefaultPedal(type, id);
-
-    switch (type) {
+    switch (pedal.type) {
       case 'noiseGate':
         return new NoiseGateEffect(this.context, pedal);
       case 'compressor':
         return new CompressorEffect(this.context, pedal);
+      case 'autoWah':
+        return new AutoWahEffect(this.context, pedal);
       case 'drive':
         return new DriveEffect(this.context, pedal);
       case 'crunch':
         return new CrunchEffect(this.context, pedal);
       case 'fuzz':
         return new FuzzEffect(this.context, pedal);
+      case 'graphicEQ':
+        return new GraphicEQEffect(this.context, pedal);
       case 'eq':
         return new EQEffect(this.context, pedal);
+      case 'cab':
+        return new CabEffect(this.context, pedal);
+      case 'chorus':
+        return new ChorusEffect(this.context, pedal);
+      case 'flanger':
+        return new FlangerEffect(this.context, pedal);
+      case 'phaser':
+        return new PhaserEffect(this.context, pedal);
+      case 'tremolo':
+        return new TremoloEffect(this.context, pedal);
       case 'delay':
         return new DelayEffect(this.context, pedal);
       case 'reverb':
-        return new ReverbEffect(this.context, pedal);
+        return new ReverbEffect(this.context, pedal, this.getReverbImpulseCache());
       default:
-        throw new Error(`알 수 없는 이펙터 타입입니다: ${type satisfies never}`);
+        throw new Error(`알 수 없는 이펙터 타입입니다: ${pedal.type satisfies never}`);
     }
   }
 
-  rebuildChain(pedals: PedalState[]): void {
-    this.currentPedals = this.clonePedals(pedals);
-    this.currentPedals.forEach((pedal) => this.pedalStates.set(pedal.id, this.clonePedal(pedal)));
-
+  rebuildChain(): void {
+    const generation = this.graphGeneration;
     this.rebuildQueue = this.rebuildQueue
       .catch(() => undefined)
-      .then(() => this.rebuildNow(this.currentPedals));
+      .then(() => this.rebuildNow(this.getPedals(), generation));
   }
 
-  setPedalParam(pedalId: string, paramName: string, value: number | string | boolean): void {
-    const pedal = this.pedalStates.get(pedalId);
+  setPedalParam(
+    pedalId: string,
+    _paramName: string,
+    _value: number | string | boolean,
+  ): void {
+    const pedal = this.getPedals().find((candidate) => candidate.id === pedalId);
     if (!pedal) return;
-
-    const nextPedal = {
-      ...pedal,
-      bypassed:
-        (paramName === 'bypass' || paramName === 'bypassed') && typeof value === 'boolean'
-          ? value
-          : pedal.bypassed,
-      params: {
-        ...pedal.params,
-        [paramName]: value,
-        ...(((paramName === 'bypass' || paramName === 'bypassed') && typeof value === 'boolean'
-          ? { bypassed: value }
-          : {}) as Partial<PedalParams>),
-      } as PedalParams,
-    };
-
-    this.pedalStates.set(pedalId, nextPedal);
-    this.replaceCurrentPedal(nextPedal);
-    this.effects.get(pedalId)?.update(nextPedal);
+    this.effects.get(pedalId)?.update(pedal);
   }
 
-  setPedalBypass(pedalId: string, bypassed: boolean): void {
-    this.setPedalParam(pedalId, 'bypassed', bypassed);
+  setPedalBypass(pedalId: string, _bypassed: boolean): void {
+    const pedal = this.getPedals().find((candidate) => candidate.id === pedalId);
+    if (!pedal) return;
+    this.effects.get(pedalId)?.update(pedal);
+  }
+
+  setPedalEnabled(pedalId: string, enabled: boolean): void {
+    this.effects.get(pedalId)?.setEnabled(enabled);
+  }
+
+  setInputGain(db: number): void {
+    this.inputGainDb = clamp(db, -24, 24);
+    if (this.inputGain && this.context) {
+      rampParam(this.inputGain.gain, dbToGain(this.inputGainDb), this.context, 0.02);
+    }
   }
 
   setMasterVolume(value: number): void {
-    this.masterVolume = value;
+    this.masterVolume = clamp(value, 0, 1);
     if (this.masterGain && this.context) {
-      rampParam(this.masterGain.gain, value, this.context, 0.02);
+      rampParam(this.masterGain.gain, this.masterVolume, this.context, 0.02);
     }
   }
 
+  createRecorderStream(): MediaStream {
+    if (!this.context || this.context.state === 'closed' || !this.masterGain) {
+      throw new Error('녹음할 마스터 출력이 준비되지 않았습니다.');
+    }
+
+    if (!this.recorderDestination) {
+      this.recorderDestination = this.context.createMediaStreamDestination();
+      this.masterGain.connect(this.recorderDestination);
+    }
+
+    return this.recorderDestination.stream;
+  }
+
+  disposeRecorderStream(): void {
+    const destination = this.recorderDestination;
+    if (!destination) return;
+    this.recorderDestination = null;
+
+    try {
+      this.masterGain?.disconnect(destination);
+    } catch {
+      // The master may already have been disconnected by panic cleanup.
+    }
+    destination.stream.getTracks().forEach((track) => track.stop());
+    destination.disconnect();
+  }
+
+  setTunerActive(active: boolean): void {
+    this.tunerActive = active;
+    this.syncTunerConnection();
+  }
+
+  setTuningPreset(preset: TuningPresetId): void {
+    this.tuningPreset = preset;
+    this.tuner?.setTuningPreset(preset);
+  }
+
+  estimateChainGain(): number {
+    let linearGain = 1;
+
+    this.getPedals().forEach((pedal) => {
+      if (!pedal.enabled || pedal.bypassed) return;
+
+      if (pedal.type === 'drive') {
+        const amount = clamp((pedal.params as DriveParams).drive, 0, 100) / 100;
+        linearGain *= 1 + amount * 1.6;
+      } else if (pedal.type === 'crunch') {
+        const amount = clamp((pedal.params as CrunchParams).gain, 0, 100) / 100;
+        linearGain *= 1 + amount * 2.1;
+      } else if (pedal.type === 'fuzz') {
+        const amount = clamp((pedal.params as FuzzParams).fuzz, 0, 100) / 100;
+        linearGain *= 1 + amount * 3.4;
+      }
+    });
+
+    return 20 * Math.log10(Math.max(1, linearGain));
+  }
+
   panic(): void {
+    this.graphGeneration += 1;
+
     if (this.masterGain && this.context && this.context.state !== 'closed') {
       this.masterGain.gain.cancelScheduledValues(this.context.currentTime);
       this.masterGain.gain.setValueAtTime(0, this.context.currentTime);
@@ -335,7 +381,11 @@ export class AudioEngine {
   }
 
   dispose(): void {
+    this.sessionGeneration += 1;
+    this.graphGeneration += 1;
     this.panicDisconnect();
+    this.reverbImpulseCache?.dispose();
+    this.reverbImpulseCache = null;
 
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
@@ -357,6 +407,7 @@ export class AudioEngine {
     this.inputGain = null;
     this.chainInput = null;
     this.masterGain = null;
+    this.recorderDestination = null;
     this.inputMeter = null;
     this.outputMeter = null;
     this.tuner = null;
@@ -366,10 +417,9 @@ export class AudioEngine {
     this.workletUrls = [];
   }
 
-  async start(pedals: PedalState[], deviceId?: string): Promise<void> {
-    this.currentPedals = this.clonePedals(pedals);
+  async start(deviceId?: string): Promise<void> {
     await this.init(deviceId);
-    this.rebuildChain(pedals);
+    this.rebuildChain();
   }
 
   async stop(): Promise<void> {
@@ -382,14 +432,7 @@ export class AudioEngine {
   }
 
   updatePedal(pedal: PedalState): void {
-    const nextPedal = this.clonePedal(pedal);
-    this.pedalStates.set(pedal.id, nextPedal);
-    this.replaceCurrentPedal(nextPedal);
     this.effects.get(pedal.id)?.update(pedal);
-  }
-
-  setOutputLevel(value: number): void {
-    this.setMasterVolume(value);
   }
 
   readInputLevel(): LevelReading {
@@ -399,6 +442,7 @@ export class AudioEngine {
       peakDb: -120,
       peakLinear: 0,
       isClipping: false,
+      clipHoldUntil: 0,
     };
   }
 
@@ -409,6 +453,31 @@ export class AudioEngine {
       peakDb: -120,
       peakLinear: 0,
       isClipping: false,
+      clipHoldUntil: 0,
+    };
+  }
+
+  readAudioGlitchCount(): number {
+    let glitchCount = 0;
+
+    this.effects.forEach((effect) => {
+      if (effect instanceof NoiseGateEffect) {
+        glitchCount += effect.readGlitchCount();
+      }
+    });
+
+    return glitchCount;
+  }
+
+  readLatency(): LatencyReading {
+    if (!this.context || this.context.state === 'closed') {
+      return { base: 0, output: 0, sampleRate: 0 };
+    }
+
+    return {
+      base: this.context.baseLatency * 1000,
+      output: (this.context.outputLatency ?? 0) * 1000,
+      sampleRate: this.context.sampleRate,
     };
   }
 
@@ -421,19 +490,47 @@ export class AudioEngine {
   }
 
   readPitch(): PitchReading {
+    if (!this.tunerActive) {
+      return { frequency: null, note: null, cents: 0 };
+    }
     return this.tuner?.readPitch() ?? { frequency: null, note: null, cents: 0 };
   }
 
   private async loadWorklets(): Promise<void> {
-    if (!this.context || this.workletsLoaded) return;
+    const context = this.context;
+    if (!context || this.workletsLoaded) return;
 
     const moduleUrls = [
       this.createWorkletUrl(noiseGateProcessorSource),
-      this.createWorkletUrl(driveProcessorSource),
+      this.createWorkletUrl(envelopeFollowerProcessorSource),
+      this.createWorkletUrl(tunerProcessorSource),
     ];
 
-    await Promise.all(moduleUrls.map((url) => this.context?.audioWorklet.addModule(url)));
-    this.workletsLoaded = true;
+    await Promise.all(moduleUrls.map((url) => context.audioWorklet.addModule(url)));
+    if (context === this.context && context.state !== 'closed') {
+      this.workletsLoaded = true;
+    }
+  }
+
+  private assertCurrentSession(context: AudioContext, generation: number): void {
+    if (
+      generation !== this.sessionGeneration ||
+      context !== this.context ||
+      context.state === 'closed'
+    ) {
+      throw new DOMException('오디오 시작 요청이 취소되었습니다.', 'AbortError');
+    }
+  }
+
+  private cleanupFailedSession(context: AudioContext, generation: number): void {
+    if (generation === this.sessionGeneration && context === this.context) {
+      this.dispose();
+      return;
+    }
+
+    if (context.state !== 'closed') {
+      void context.close();
+    }
   }
 
   private createWorkletUrl(source: string): string {
@@ -442,93 +539,233 @@ export class AudioEngine {
     return url;
   }
 
+  private getReverbImpulseCache(): ImpulseCache {
+    if (!this.context) {
+      throw new Error('AudioContext가 아직 준비되지 않았습니다.');
+    }
+
+    if (!this.reverbImpulseCache) {
+      this.reverbImpulseCache = new ImpulseCache(this.context);
+    }
+
+    return this.reverbImpulseCache;
+  }
+
   private createProcessingGraph(source: AudioNode): void {
     if (!this.context) return;
+
+    this.graphGeneration += 1;
+    this.chainConnections.clear();
 
     this.inputGain = this.context.createGain();
     this.chainInput = this.context.createGain();
     this.masterGain = this.context.createGain();
     this.inputMeter = new MeterNode(this.context);
     this.outputMeter = new MeterNode(this.context);
-    this.tuner = new TunerNode(this.context);
+    this.tuner = new TunerNode(this.context, this.tuningPreset);
+    this.tunerConnected = false;
 
+    rampParam(this.inputGain.gain, dbToGain(this.inputGainDb), this.context, 0.02);
     this.masterGain.gain.value = 0;
 
     source.connect(this.inputGain);
     this.inputGain.connect(this.inputMeter.input);
-    this.inputGain.connect(this.tuner.input);
     this.inputGain.connect(this.chainInput);
     this.masterGain.connect(this.outputMeter.input);
     this.masterGain.connect(this.context.destination);
+    this.syncTunerConnection();
   }
 
-  private async rebuildNow(pedals: PedalState[]): Promise<void> {
-    if (!this.context || !this.chainInput || !this.masterGain) return;
+  private syncTunerConnection(): void {
+    const inputGain = this.inputGain;
+    const tuner = this.tuner;
+
+    if (!inputGain || !tuner) {
+      this.tunerConnected = false;
+      return;
+    }
+
+    if (this.tunerActive) {
+      if (!this.tunerConnected) {
+        inputGain.connect(tuner.input);
+        this.tunerConnected = true;
+      }
+      tuner.setActive(true);
+      return;
+    }
+
+    tuner.setActive(false);
+    if (this.tunerConnected) {
+      inputGain.disconnect(tuner.input);
+      this.tunerConnected = false;
+    }
+  }
+
+  private async rebuildNow(pedals: PedalState[], generation: number): Promise<void> {
+    const context = this.context;
+    const chainInput = this.chainInput;
+    const masterGain = this.masterGain;
+
+    if (
+      !context ||
+      !chainInput ||
+      !masterGain ||
+      generation !== this.graphGeneration
+    ) {
+      return;
+    }
+
+    const previousEffects = this.effects;
+    const nextEffects = new Map<string, EffectNode>();
+    const createdEffects: EffectNode[] = [];
+    const retiredEffects = new Set<EffectNode>();
+    let committed = false;
 
     try {
-      rampParam(this.masterGain.gain, 0, this.context, 0.02);
-      await wait(24);
+      pedals.forEach((pedal) => {
+        const existing = previousEffects.get(pedal.id);
 
-      this.chainInput.disconnect();
-      this.effects.forEach((effect) => effect.dispose());
-      this.effects.clear();
+        if (existing?.type === pedal.type) {
+          existing.update(pedal);
+          nextEffects.set(pedal.id, existing);
+          return;
+        }
 
-      let previous: AudioNode = this.chainInput;
-
-      pedals.filter((pedal) => pedal.enabled).forEach((pedal) => {
-        const effect = this.createEffect(pedal.type, pedal.id);
-        previous.connect(effect.input);
-        previous = effect.output;
-        this.effects.set(pedal.id, effect);
+        const effect = this.createEffect(pedal);
+        createdEffects.push(effect);
+        nextEffects.set(pedal.id, effect);
+        if (existing) retiredEffects.add(existing);
       });
 
-      previous.connect(this.masterGain);
-      rampParam(this.masterGain.gain, this.masterVolume, this.context, 0.02);
+      previousEffects.forEach((effect, id) => {
+        if (!nextEffects.has(id)) retiredEffects.add(effect);
+      });
+
+      const desiredConnections = this.buildChainConnections(
+        pedals,
+        nextEffects,
+        chainInput,
+        masterGain,
+      );
+      const removedConnections: ChainConnection[] = [];
+      const addedConnections: ChainConnection[] = [];
+
+      this.chainConnections.forEach((connection, key) => {
+        const desired = desiredConnections.get(key);
+        if (
+          !desired ||
+          desired.from !== connection.from ||
+          desired.to !== connection.to
+        ) {
+          removedConnections.push(connection);
+        }
+      });
+
+      desiredConnections.forEach((connection, key) => {
+        const current = this.chainConnections.get(key);
+        if (
+          !current ||
+          current.from !== connection.from ||
+          current.to !== connection.to
+        ) {
+          addedConnections.push(connection);
+        }
+      });
+
+      if (removedConnections.length === 0 && addedConnections.length === 0) {
+        this.effects = nextEffects;
+        return;
+      }
+
+      rampParam(masterGain.gain, 0, context, CHAIN_FADE_SECONDS);
+      await wait(CHAIN_RECONNECT_WAIT_MS);
+
+      if (!this.isCurrentGraph(context, chainInput, masterGain, generation)) {
+        createdEffects.forEach((effect) => effect.dispose());
+        return;
+      }
+
+      removedConnections.forEach(({ from, to }) => from.disconnect(to));
+      addedConnections.forEach(({ from, to }) => from.connect(to));
+
+      this.chainConnections = desiredConnections;
+      this.effects = nextEffects;
+      committed = true;
+      retiredEffects.forEach((effect) => effect.dispose());
+
+      rampParam(masterGain.gain, this.masterVolume, context, CHAIN_FADE_SECONDS);
     } catch (error) {
-      this.panicDisconnect();
+      if (!committed) {
+        createdEffects.forEach((effect) => effect.dispose());
+      }
+
+      if (generation === this.graphGeneration) {
+        this.graphGeneration += 1;
+        this.panicDisconnect();
+      }
       throw error;
     }
   }
 
+  private buildChainConnections(
+    pedals: PedalState[],
+    effects: Map<string, EffectNode>,
+    chainInput: AudioNode,
+    masterGain: AudioNode,
+  ): Map<string, ChainConnection> {
+    const connections = new Map<string, ChainConnection>();
+    let previousId = 'chain-input';
+    let previousOutput = chainInput;
+
+    pedals.forEach((pedal) => {
+      const effect = effects.get(pedal.id);
+      if (!effect) return;
+
+      const effectId = `effect:${pedal.id}`;
+      connections.set(`${previousId}->${effectId}`, {
+        from: previousOutput,
+        to: effect.input,
+      });
+      previousId = effectId;
+      previousOutput = effect.output;
+    });
+
+    connections.set(`${previousId}->master-output`, {
+      from: previousOutput,
+      to: masterGain,
+    });
+    return connections;
+  }
+
+  private isCurrentGraph(
+    context: AudioContext,
+    chainInput: AudioNode,
+    masterGain: AudioNode,
+    generation: number,
+  ): boolean {
+    return (
+      generation === this.graphGeneration &&
+      context === this.context &&
+      chainInput === this.chainInput &&
+      masterGain === this.masterGain &&
+      context.state !== 'closed'
+    );
+  }
+
   private panicDisconnect(): void {
+    this.tuner?.setActive(false);
+    this.tunerConnected = false;
     this.source?.disconnect();
     this.inputGain?.disconnect();
     this.chainInput?.disconnect();
     this.masterGain?.disconnect();
+    this.disposeRecorderStream();
     this.inputMeter?.disconnect();
     this.outputMeter?.disconnect();
-    this.tuner?.disconnect();
+    this.tuner?.dispose();
+    this.tuner = null;
     this.effects.forEach((effect) => effect.dispose());
     this.effects.clear();
-  }
-
-  private createDefaultPedal(type: PedalType, id: string): PedalState {
-    return {
-      id,
-      type,
-      name: type,
-      enabled: true,
-      bypassed: defaultParamsByType[type].bypassed,
-      color: '#6b7280',
-      params: { ...defaultParamsByType[type] } as PedalParams,
-    };
-  }
-
-  private clonePedals(pedals: PedalState[]): PedalState[] {
-    return pedals.map((pedal) => this.clonePedal(pedal));
-  }
-
-  private clonePedal(pedal: PedalState): PedalState {
-    return {
-      ...pedal,
-      bypassed: Boolean(pedal.params.bypassed ?? pedal.bypassed),
-      params: { ...pedal.params } as PedalParams,
-    };
-  }
-
-  private replaceCurrentPedal(pedal: PedalState): void {
-    this.currentPedals = this.currentPedals.map((current) =>
-      current.id === pedal.id ? this.clonePedal(pedal) : current,
-    );
+    this.chainConnections.clear();
   }
 }

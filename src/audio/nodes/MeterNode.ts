@@ -4,6 +4,8 @@ import { gainToDb } from '../utils/db';
 export class MeterNode {
   readonly input: AnalyserNode;
   private readonly buffer: Float32Array;
+  private consecutiveClipFrames = 0;
+  private clipHoldUntil = 0;
 
   constructor(context: AudioContext) {
     this.input = context.createAnalyser();
@@ -24,12 +26,24 @@ export class MeterNode {
     }
 
     const rms = Math.sqrt(sum / this.buffer.length);
+    const now = performance.now();
+
+    if (peak >= 0.99) {
+      this.consecutiveClipFrames += 1;
+      if (this.consecutiveClipFrames >= 3) {
+        this.clipHoldUntil = now + 1500;
+      }
+    } else {
+      this.consecutiveClipFrames = 0;
+    }
+
     return {
       db: gainToDb(rms),
       linear: Math.min(1, rms * 4),
       peakDb: gainToDb(peak),
       peakLinear: Math.min(1, peak),
-      isClipping: peak >= 0.98,
+      isClipping: now < this.clipHoldUntil,
+      clipHoldUntil: this.clipHoldUntil,
     };
   }
 

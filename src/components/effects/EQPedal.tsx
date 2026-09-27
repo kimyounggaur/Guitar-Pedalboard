@@ -41,6 +41,7 @@ function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFad
           step={step}
           value={value}
           aria-label={label}
+          aria-valuetext={`${label} ${displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
@@ -57,7 +58,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
   };
 
   return (
-    <div className="graphic-eq-ui" aria-label="Graphic Equalizer controls">
+    <div className="graphic-eq-ui" role="group" aria-label="Graphic Equalizer controls">
       <section className="graphic-eq-slider-panel">
         <div className="graphic-eq-led" aria-hidden="true" />
         <div className="graphic-eq-fader-bank">

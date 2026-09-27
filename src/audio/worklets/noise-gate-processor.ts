@@ -19,6 +19,11 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
     this.holdSamples = 0;
     this.framesUntilStatePost = 0;
     this.state = 'Closed';
+    this.lastProcessFrame = null;
+    this.lastQuantumSize = 128;
+    this.processCallsSinceGlitchReport = 0;
+    this.glitchCount = 0;
+    this.missedFrames = 0;
   }
 
   getParam(parameters, name, index) {
@@ -36,12 +41,39 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
   process(inputs, outputs, parameters) {
     const input = inputs[0];
     const output = outputs[0];
+    const quantumSize = output && output[0] ? output[0].length : 128;
+
+    if (this.lastProcessFrame !== null) {
+      const expectedFrame = this.lastProcessFrame + this.lastQuantumSize;
+      const missedFrames = Math.max(0, currentFrame - expectedFrame);
+
+      if (missedFrames > 0) {
+        this.missedFrames += missedFrames;
+        this.glitchCount += Math.max(
+          1,
+          Math.ceil(missedFrames / Math.max(1, this.lastQuantumSize)),
+        );
+      }
+    }
+
+    this.lastProcessFrame = currentFrame;
+    this.lastQuantumSize = quantumSize;
+    this.processCallsSinceGlitchReport += 1;
+
+    if (this.processCallsSinceGlitchReport >= 100) {
+      this.processCallsSinceGlitchReport = 0;
+      this.port.postMessage({
+        type: 'glitch-report',
+        glitchCount: this.glitchCount,
+        missedFrames: this.missedFrames,
+      });
+    }
 
     if (!input || input.length === 0 || !output || output.length === 0) {
       return true;
     }
 
-    const frames = output[0].length;
+    const frames = quantumSize;
     const envelopeCoeff = Math.exp(-1 / (sampleRate * 0.008));
 
     for (let i = 0; i < frames; i += 1) {

@@ -1,19 +1,29 @@
 import { create } from 'zustand';
+import { AudioEngine } from '../audio/AudioEngine';
 import type { PedalParamValue, PedalState, Preset } from '../audio/types';
-import { clonePedals, initialPedals } from './pedalStore';
+import {
+  clonePedals,
+  initialPedals,
+  migratePedalCollection,
+  SCHEMA_VERSION,
+  usePedalStore,
+} from './pedalStore';
+import { useAudioStore } from './audioStore';
 
 const STORAGE_KEY = 'web-guitar-pedalboard-presets';
 const FACTORY_TIMESTAMP = 1767225600000;
 
 type PresetExport = {
-  version: 1;
-  exportedAt: number;
+  version: number;
+  exportedAt?: number;
   presets: Preset[];
 };
 
 export type PresetListItem = Preset & {
   isFactory?: boolean;
 };
+
+export type PresetComparisonSlot = 'A' | 'B';
 
 type PedalOverrides = Parameters<typeof withPedalOverrides>[1];
 type PresetOverrides = Record<string, PedalOverrides>;
@@ -58,7 +68,6 @@ function withPedalOverrides(
     params: {
       ...pedal.params,
       ...overrides.params,
-      bypassed,
     } as PedalState['params'],
   };
 }
@@ -88,10 +97,10 @@ function createPreset(
   };
 }
 
-const off = (mix = 0): PedalOverrides => ({ bypassed: true, params: { bypassed: true, mix } });
+const off = (mix = 0): PedalOverrides => ({ bypassed: true, params: { mix } });
 const on = (params: Record<string, PedalParamValue> = {}): PedalOverrides => ({
   bypassed: false,
-  params: { bypassed: false, ...params },
+  params,
 });
 
 const baseTone: PresetOverrides = {
@@ -323,6 +332,7 @@ export const defaultPresets: PresetListItem[] = [
     'noise-gate': off(100),
     compressor: off(0),
     eq: on({ lowCut: 40, bassGain: 0, midFreq: 800, midGain: 0, midQ: 0.9, trebleGain: 0, presenceGain: 0 }),
+    cab: off(100),
   }),
   preset('factory-headphone-safe-start', 'utility', 'Headphone Safe Start', '낮은 레벨과 최소 공간계로 시작하는 안전 테스트 프리셋입니다.', ['utility', 'safe'], {
     'noise-gate': on({ thresholdDb: -62, reductionDb: -80, attackMs: 8, holdMs: 80, releaseMs: 220, level: 80 }),
@@ -370,7 +380,7 @@ function isPreset(value: unknown): value is Preset {
   );
 }
 
-function normalizeImportedPreset(preset: Preset): Preset {
+function normalizeImportedPreset(preset: Preset, version: number): Preset {
   return {
     id: preset.id || createId(),
     name: preset.name.trim() || 'Imported Preset',
@@ -378,20 +388,41 @@ function normalizeImportedPreset(preset: Preset): Preset {
     libraryName: preset.libraryName,
     description: preset.description,
     tags: Array.isArray(preset.tags) ? preset.tags.filter((tag) => typeof tag === 'string') : undefined,
-    pedals: clonePedals(preset.pedals),
+    pedals: migratePedalCollection(preset.pedals, version),
     updatedAt: typeof preset.updatedAt === 'number' ? preset.updatedAt : Date.now(),
   };
 }
 
-function parsePresetJson(json: string): Preset[] {
-  const parsed = JSON.parse(json);
-  const candidates = Array.isArray(parsed) ? parsed : (parsed as PresetExport).presets;
+export function parsePresetJson(json: string): Preset[] {
+  const parsed: unknown = JSON.parse(json);
+  const payload = parsed as Partial<PresetExport>;
+  const candidates = Array.isArray(parsed) ? parsed : payload.presets;
+  const version = Array.isArray(parsed) ? 1 : typeof payload.version === 'number' ? payload.version : 1;
 
   if (!Array.isArray(candidates)) {
     throw new Error('프리셋 JSON 형식이 올바르지 않습니다.');
   }
 
-  return candidates.filter(isPreset).map(normalizeImportedPreset);
+  return candidates.filter(isPreset).map((preset) => normalizeImportedPreset(preset, version));
+}
+
+export function serializePresetPayload(
+  presets: Preset[],
+  options: { exportedAt?: number; pretty?: boolean } = {},
+): string {
+  const payload: PresetExport = {
+    version: SCHEMA_VERSION,
+    presets: presets.map((preset) => ({
+      ...preset,
+      pedals: clonePedals(preset.pedals),
+    })),
+  };
+
+  if (typeof options.exportedAt === 'number') {
+    payload.exportedAt = options.exportedAt;
+  }
+
+  return JSON.stringify(payload, null, options.pretty ? 2 : undefined);
 }
 
 function readUserPresets(): Preset[] {
@@ -408,7 +439,7 @@ function readUserPresets(): Preset[] {
 
 function writeUserPresets(presets: Preset[]): void {
   if (!canUseStorage()) return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(presets));
+  window.localStorage.setItem(STORAGE_KEY, serializePresetPayload(presets));
 }
 
 function createId(): string {
@@ -430,15 +461,23 @@ function toPresetList(userPresets: Preset[]): PresetListItem[] {
 
 interface PresetStore {
   presets: PresetListItem[];
+  slotA: PedalState[] | null;
+  slotB: PedalState[] | null;
+  activeSlot: PresetComparisonSlot;
   savePreset: (name: string, pedals: PedalState[]) => void;
   deletePreset: (id: string) => void;
   reloadPresets: () => void;
   exportPresets: () => string;
   importPresets: (json: string) => number;
+  captureCurrentToSlot: (slot: PresetComparisonSlot) => void;
+  activateSlot: (slot: PresetComparisonSlot) => boolean;
 }
 
 export const usePresetStore = create<PresetStore>((set, get) => ({
   presets: toPresetList(readUserPresets()),
+  slotA: null,
+  slotB: null,
+  activeSlot: 'A',
 
   savePreset: (name, pedals) => {
     const trimmedName = name.trim();
@@ -477,16 +516,12 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
   reloadPresets: () => set({ presets: toPresetList(readUserPresets()) }),
 
   exportPresets: () => {
-    const exportPayload: PresetExport = {
-      version: 1,
-      exportedAt: Date.now(),
-      presets: get().presets.map(({ isFactory: _isFactory, ...preset }) => ({
-        ...preset,
-        pedals: clonePedals(preset.pedals),
-      })),
-    };
+    const presets = get().presets.map(({ isFactory: _isFactory, ...preset }) => preset);
 
-    return JSON.stringify(exportPayload, null, 2);
+    return serializePresetPayload(presets, {
+      exportedAt: Date.now(),
+      pretty: true,
+    });
   },
 
   importPresets: (json) => {
@@ -507,5 +542,25 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
     set({ presets: toPresetList(nextUserPresets) });
 
     return importedPresets.length;
+  },
+
+  captureCurrentToSlot: (slot) => {
+    const capturedPedals = clonePedals(usePedalStore.getState().pedals);
+    set(
+      slot === 'A'
+        ? { slotA: capturedPedals, activeSlot: slot }
+        : { slotB: capturedPedals, activeSlot: slot },
+    );
+  },
+
+  activateSlot: (slot) => {
+    const storedPedals = slot === 'A' ? get().slotA : get().slotB;
+    if (!storedPedals) return false;
+
+    usePedalStore.getState().setPedals(clonePedals(storedPedals));
+    useAudioStore.getState().adoptTempoFromPedals();
+    AudioEngine.getInstance().rebuildChain();
+    set({ activeSlot: slot });
+    return true;
   },
 }));

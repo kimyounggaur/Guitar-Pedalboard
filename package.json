@@ -1,26 +1,47 @@
 {
-  "name": "web-guitar-multieffector",
+  "name": "guitar-pedalboard",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test:chorus": "node scripts/chorus-regression.mjs",
+    "test:flanger": "node scripts/flanger-regression.mjs",
+    "test:phaser": "node scripts/phaser-regression.mjs",
+    "test:tremolo": "node scripts/tremolo-regression.mjs",
+    "test:tap-tempo": "node scripts/tap-tempo-regression.mjs",
+    "test:preset-ab": "node scripts/preset-ab-regression.mjs",
+    "test:shortcuts": "node scripts/shortcuts-regression.mjs",
+    "test:midi": "node scripts/midi-regression.mjs",
+    "test:recording": "node scripts/recording-regression.mjs",
+    "test:responsive-a11y": "node scripts/responsive-a11y-regression.mjs",
+    "test:pwa": "node scripts/pwa-regression.mjs",
+    "test:auto-wah": "node scripts/auto-wah-regression.mjs",
+    "test:graphic-eq": "node scripts/graphic-eq-regression.mjs",
+    "test:tuner": "node scripts/tuner-regression.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@vitejs/plugin-react": "^5.0.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "vite": "^7.1.7",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@eslint/js": "^9.36.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "typescript": "~5.8.3"
+    "@vitejs/plugin-react": "^5.0.4",
+    "eslint": "^9.36.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.44.1",
+    "vite": "^7.1.7",
+    "vite-plugin-pwa": "^1.3.0"
   }
 }

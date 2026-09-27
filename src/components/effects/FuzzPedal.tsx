@@ -14,14 +14,21 @@ interface FuzzKnobProps {
   max: number;
   step: number;
   size?: 'small' | 'large';
+  ariaValueText?: string;
   onChange: (value: number) => void;
 }
 
 const fuzzModes: FuzzParams['mode'][] = ['classic', 'gated', 'velcro'];
+const fuzzModeLabels: Record<FuzzParams['mode'], string> = {
+  classic: 'Classic',
+  gated: 'Gated',
+  velcro: 'Velcro',
+};
 
-function FuzzKnob({ label, value, min, max, step, size = 'large', onChange }: FuzzKnobProps) {
+function FuzzKnob({ label, value, min, max, step, size = 'large', ariaValueText, onChange }: FuzzKnobProps) {
   const progress = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(progress, 0), 1) * 270;
+  const accessibleValue = ariaValueText ?? `${Math.round(value)}%`;
 
   return (
     <label className={`fuzz-knob fuzz-knob-${size}`}>
@@ -37,6 +44,7 @@ function FuzzKnob({ label, value, min, max, step, size = 'large', onChange }: Fu
           step={step}
           value={value}
           aria-label={label}
+          aria-valuetext={`${label} ${accessibleValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
@@ -49,7 +57,7 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
   const modeIndex = Math.max(0, fuzzModes.indexOf(params.mode));
 
   return (
-    <div className="fuzz-stomp-ui" aria-label="Fuzz controls">
+    <div className="fuzz-stomp-ui" role="group" aria-label="Fuzz controls">
       <section className="fuzz-face">
         <div className="fuzz-check-row">
           <span>CHECK</span>
@@ -72,6 +80,7 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
             max={fuzzModes.length - 1}
             step={1}
             size="small"
+            ariaValueText={fuzzModeLabels[params.mode]}
             onChange={(value) => onChange('mode', fuzzModes[value])}
           />
           <FuzzKnob

@@ -20,7 +20,7 @@ export function DrivePedal({ params, onChange }: DrivePedalProps) {
   };
 
   return (
-    <div className="tube-drive-ui" aria-label="Tube style overdrive controls">
+    <div className="tube-drive-ui" role="group" aria-label="Tube style overdrive controls">
       <div className="tube-knob-deck">
         <DriveKnob
           label="Drive"
@@ -120,6 +120,7 @@ function DriveKnob({ label, value, min, max, size = 'large', onChange }: DriveKn
           step={1}
           value={value}
           aria-label={label}
+          aria-valuetext={`${label} ${Math.round(value)}%`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
         <i />

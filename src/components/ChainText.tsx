@@ -1,8 +1,11 @@
 import { usePedalStore } from '../store/pedalStore';
+import { useAudioStore } from '../store/audioStore';
 import { PedalIcon } from './PedalIcon';
 
 export function ChainText() {
   const pedals = usePedalStore((state) => state.pedals);
+  const chainGainWarning = useAudioStore((state) => state.chainGainWarning);
+  const estimatedChainGainDb = useAudioStore((state) => state.estimatedChainGainDb);
 
   return (
     <section className="side-panel chain-panel">
@@ -22,6 +25,11 @@ export function ChainText() {
           </li>
         ))}
       </ol>
+      {chainGainWarning ? (
+        <p className="warning-message" role="status">
+          {chainGainWarning} (추정 +{estimatedChainGainDb.toFixed(1)} dB)
+        </p>
+      ) : null}
     </section>
   );
 }

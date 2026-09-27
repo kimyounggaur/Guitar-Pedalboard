@@ -1,9 +1,8 @@
 node_modules/
 dist/
+assets/
 *.log
 *.tsbuildinfo
-assets/index-*.css
-assets/index-*.js
 
 .env
 .env.*

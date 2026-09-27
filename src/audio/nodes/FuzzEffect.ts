@@ -1,12 +1,14 @@
 import { BaseEffect } from './BaseEffect';
 import type { FuzzParams, PedalState } from '../types';
 import { createFuzzCurve } from '../utils/curves';
+import { createDcBlocker } from '../utils/dcBlocker';
 import { smoothParam } from '../utils/smoothing';
 
 export class FuzzEffect extends BaseEffect {
   private readonly preGain: GainNode;
   private readonly lowCut: BiquadFilterNode;
   private readonly shaper: WaveShaperNode;
+  private readonly dcBlocker: BiquadFilterNode;
   private readonly tone: BiquadFilterNode;
   private readonly gateTrim: GainNode;
   private lastMode: FuzzParams['mode'] | null = null;
@@ -19,6 +21,7 @@ export class FuzzEffect extends BaseEffect {
     this.preGain = context.createGain();
     this.lowCut = context.createBiquadFilter();
     this.shaper = context.createWaveShaper();
+    this.dcBlocker = createDcBlocker(context);
     this.tone = context.createBiquadFilter();
     this.gateTrim = context.createGain();
 
@@ -31,7 +34,8 @@ export class FuzzEffect extends BaseEffect {
     this.effectInput.connect(this.preGain);
     this.preGain.connect(this.lowCut);
     this.lowCut.connect(this.shaper);
-    this.shaper.connect(this.tone);
+    this.shaper.connect(this.dcBlocker);
+    this.dcBlocker.connect(this.tone);
     this.tone.connect(this.gateTrim);
     this.gateTrim.connect(this.effectOutput);
 
@@ -57,6 +61,7 @@ export class FuzzEffect extends BaseEffect {
     const toneFrequency = 700 + (params.tone / 100) * 8200;
     const gateTrim = Math.max(0.28, 1 - (params.gate / 100) * 0.55);
 
+    this.setMakeup(1 / (1 + (params.fuzz / 100) * 3.4));
     smoothParam(this.preGain.gain, preGain, this.context);
     smoothParam(this.lowCut.frequency, params.lowCut, this.context);
     smoothParam(this.tone.frequency, toneFrequency, this.context);
@@ -67,6 +72,7 @@ export class FuzzEffect extends BaseEffect {
     this.preGain.disconnect();
     this.lowCut.disconnect();
     this.shaper.disconnect();
+    this.dcBlocker.disconnect();
     this.tone.disconnect();
     this.gateTrim.disconnect();
     super.dispose();
