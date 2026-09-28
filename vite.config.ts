@@ -1,10 +1,14 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-const baseUrl = '/Guitar-Pedalboard/';
+export default defineConfig(({ mode }) => {
+  // GitHub Pages serves this project under its repository name, whereas Vercel
+  // serves it from the domain root. Vercel exposes the VERCEL environment
+  // variable for every deployment build.
+  const baseUrl = loadEnv(mode, '.', '').VERCEL ? '/' : '/Guitar-Pedalboard/';
 
-export default defineConfig({
+  return {
   base: baseUrl,
   plugins: [
     react(),
@@ -76,4 +80,5 @@ export default defineConfig({
       },
     },
   },
+  };
 });
