@@ -307,6 +307,12 @@ async function verifyMobileBrowserLayout() {
     });
     await cdp.send('Page.navigate', { url: appUrl });
 
+    const collapsed = await waitForBrowserLayout(cdp);
+    assert.deepEqual(collapsed.visiblePanelIds, [], '모바일 패널은 기본 접힘 상태여야 합니다.');
+    await cdp.send('Runtime.evaluate', {
+      expression: "document.querySelector('.mobile-dock-toggle').click()",
+      returnByValue: true,
+    });
     return await waitForBrowserLayout(cdp);
   } finally {
     if (cdp) {
