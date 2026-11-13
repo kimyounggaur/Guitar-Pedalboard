@@ -285,11 +285,14 @@ async function verifyMobileBrowserLayout() {
         '--disable-default-apps',
         '--disable-gpu',
         '--no-first-run',
+        '--disable-dev-shm-usage',
+        ...(process.env.CI ? ['--no-sandbox'] : []),
+        '--remote-debugging-address=127.0.0.1',
         `--remote-debugging-port=${debuggingPort}`,
         `--user-data-dir=${profileDirectory}`,
         'about:blank',
       ],
-      { stdio: 'ignore', windowsHide: true },
+      { stdio: ['ignore', 'ignore', 'inherit'], windowsHide: true },
     );
 
     const target = await waitForChromeTarget(debuggingPort, chromeProcess);
@@ -375,8 +378,8 @@ async function waitForHttp(url, child) {
 
 async function waitForChromeTarget(port, child) {
   const endpoint = `http://127.0.0.1:${port}/json/list`;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (child.exitCode !== null) throw new Error(`Chrome exited with ${child.exitCode}`);
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Chrome exited with code ${child.exitCode} and signal ${child.signalCode}`);
     try {
       const targets = await (await globalThis.fetch(endpoint)).json();
       const page = targets.find((target) => target.type === 'page' && target.webSocketDebuggerUrl);
