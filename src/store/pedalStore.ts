@@ -1,3 +1,4 @@
+import { notifyStorageFailure } from './storageNotice';
 import { create } from 'zustand';
 import type { PedalParamValue, PedalParams, PedalState, PedalType } from '../audio/types';
 
@@ -305,7 +306,7 @@ function stripBypassParams(params: Record<string, PedalParamValue>): Record<stri
 }
 
 function canUseStorage(): boolean {
-  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+  try { return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'; } catch { return false; }
 }
 
 function toStoredPedals(pedals: PedalState[]): StoredPedal[] {
@@ -318,12 +319,16 @@ function toStoredPedals(pedals: PedalState[]): StoredPedal[] {
 }
 
 function savePedals(pedals: PedalState[]): void {
-  if (!canUseStorage()) return;
   const storedState: StoredState = {
     version: SCHEMA_VERSION,
     pedals: toStoredPedals(pedals),
   };
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(storedState));
+  try {
+    if (!canUseStorage()) throw new Error('Storage unavailable');
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(storedState));
+  } catch {
+    notifyStorageFailure();
+  }
 }
 
 function isParamValue(value: unknown): value is PedalParamValue {

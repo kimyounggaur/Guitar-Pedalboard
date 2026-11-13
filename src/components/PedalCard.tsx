@@ -83,6 +83,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
   const midiMapping = useAudioStore((state) => state.midiMappings[pedal.id]);
   const startMidiLearn = useAudioStore((state) => state.startMidiLearn);
   const cancelMidiLearn = useAudioStore((state) => state.cancelMidiLearn);
+  const setMidiMode = useAudioStore((state) => state.setMidiMode);
   const removeMidiMapping = useAudioStore((state) => state.removeMidiMapping);
   const isMidiLearning = midiLearningPedalId === pedal.id;
 
@@ -342,6 +343,11 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
               >
                 {midiStatus}
               </span>
+              {midiMapping ? (
+                <button type="button" className="midi-learn-button" onClick={() => setMidiMode(pedal.id, midiMapping.mode === 'toggle' ? 'momentary' : 'toggle')}>
+                  방식: {midiMapping.mode === 'toggle' ? '토글' : '누름 유지'}
+                </button>
+              ) : null}
               {isMidiMenuOpen ? (
                 <div
                   ref={midiMenuRef}

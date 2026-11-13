@@ -13,6 +13,27 @@
   margin: 0;
 }
 
+.workspace.sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sidebar[hidden] {
+  display: none;
+}
+
+.sidebar-toggle {
+  display: block;
+  margin: 0 0 10px auto;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #73849e;
+  border-radius: 8px;
+  background: #1a2637;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
 .board-section {
   position: relative;
   width: 100%;

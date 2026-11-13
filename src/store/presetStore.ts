@@ -1,3 +1,4 @@
+import { notifyStorageFailure } from './storageNotice';
 import { create } from 'zustand';
 import { AudioEngine } from '../audio/AudioEngine';
 import type { PedalParamValue, PedalState, Preset } from '../audio/types';
@@ -97,7 +98,7 @@ function createPreset(
   };
 }
 
-const off = (mix = 0): PedalOverrides => ({ bypassed: true, params: { mix } });
+const off = (mix?: number): PedalOverrides => ({ bypassed: true, ...(mix !== undefined && mix > 0 ? { params: { mix } } : {}) });
 const on = (params: Record<string, PedalParamValue> = {}): PedalOverrides => ({
   bypassed: false,
   params,
@@ -365,7 +366,7 @@ export const defaultPresets: PresetListItem[] = [
 ];
 
 function canUseStorage(): boolean {
-  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+  try { return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'; } catch { return false; }
 }
 
 function isPreset(value: unknown): value is Preset {
@@ -394,7 +395,9 @@ function normalizeImportedPreset(preset: Preset, version: number): Preset {
 }
 
 export function parsePresetJson(json: string): Preset[] {
-  const parsed: unknown = JSON.parse(json);
+  let parsed: unknown;
+  try { parsed = JSON.parse(json); } catch { throw new Error('JSON 파일을 읽을 수 없습니다. 형식을 확인해 주세요.'); }
+  if (!parsed || typeof parsed !== 'object') throw new Error('프리셋 JSON 형식이 올바르지 않습니다.');
   const payload = parsed as Partial<PresetExport>;
   const candidates = Array.isArray(parsed) ? parsed : payload.presets;
   const version = Array.isArray(parsed) ? 1 : typeof payload.version === 'number' ? payload.version : 1;
@@ -403,7 +406,8 @@ export function parsePresetJson(json: string): Preset[] {
     throw new Error('프리셋 JSON 형식이 올바르지 않습니다.');
   }
 
-  return candidates.filter(isPreset).map((preset) => normalizeImportedPreset(preset, version));
+  if (!candidates.every(isPreset)) throw new Error('프리셋 항목이 올바르지 않습니다.');
+  return candidates.map((preset) => normalizeImportedPreset(preset, version));
 }
 
 export function serializePresetPayload(
@@ -438,8 +442,12 @@ function readUserPresets(): Preset[] {
 }
 
 function writeUserPresets(presets: Preset[]): void {
-  if (!canUseStorage()) return;
-  window.localStorage.setItem(STORAGE_KEY, serializePresetPayload(presets));
+  try {
+    if (!canUseStorage()) throw new Error('Storage unavailable');
+    window.localStorage.setItem(STORAGE_KEY, serializePresetPayload(presets));
+  } catch {
+    notifyStorageFailure();
+  }
 }
 
 function createId(): string {
@@ -516,7 +524,7 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
   reloadPresets: () => set({ presets: toPresetList(readUserPresets()) }),
 
   exportPresets: () => {
-    const presets = get().presets.map(({ isFactory: _isFactory, ...preset }) => preset);
+    const presets = get().presets.filter((preset) => !preset.isFactory).map(({ isFactory: _isFactory, ...preset }) => preset);
 
     return serializePresetPayload(presets, {
       exportedAt: Date.now(),

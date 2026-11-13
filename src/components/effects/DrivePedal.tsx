@@ -47,8 +47,8 @@ export function DrivePedal({ params, onChange }: DrivePedalProps) {
       </div>
 
       <div className="tube-brand-plate">
-        <strong>TS-9</strong>
-        <span>Tube Screamer</span>
+        <strong>DRIVE</strong>
+        <span>Overdrive</span>
       </div>
 
       <div className="tube-footswitch-pad" aria-hidden="true">

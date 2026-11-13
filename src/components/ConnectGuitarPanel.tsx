@@ -42,6 +42,8 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
   const isFilePaused = useAudioStore((state) => state.isFilePaused);
   const isLoading = useAudioStore((state) => state.isLoading);
   const error = useAudioStore((state) => state.error);
+  const inputChannelMode = useAudioStore((state) => state.inputChannelMode);
+  const setInputChannelMode = useAudioStore((state) => state.setInputChannelMode);
   const inputLevel = useAudioStore((state) => state.inputLevel);
   const inputGainDb = useAudioStore((state) => state.inputGainDb);
   const howlProtectionEnabled = useAudioStore((state) => state.howlProtectionEnabled);
@@ -66,7 +68,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
         }
       : inputLevel.peakDb > -1
         ? { kind: 'warning', message: '입력이 0dBFS에 근접했습니다' }
-        : inputLevel.peakDb < -40
+        : inputLevel.peakDb > -90 && inputLevel.peakDb < -40
           ? { kind: 'muted', message: '입력이 너무 작습니다. 게인을 올리세요' }
           : null;
 
@@ -108,6 +110,14 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
       </div>
 
       <DeviceSelector />
+      <label className="io-slider-control">
+        <span>입력 채널</span>
+        <select value={inputChannelMode} onChange={(event) => setInputChannelMode(event.currentTarget.value as '1' | '2' | 'stereo')}>
+          <option value="1">1번 입력 (모노)</option>
+          <option value="2">2번 입력 (모노)</option>
+          <option value="stereo">스테레오</option>
+        </select>
+      </label>
 
       {inputMode !== 'file' && (
         <div className="connect-actions">
@@ -162,6 +172,14 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
               {formatPlaybackTime(fileCurrentTime)} / {formatPlaybackTime(fileDuration)}
             </span>
           </div>
+          <label className="io-slider-control">
+            <span>재생 위치 · 반복 재생</span>
+            <input type="range" min={0} max={fileDuration || 0} step="0.1"
+              value={Math.min(fileCurrentTime, fileDuration || 0)}
+              disabled={fileControlsDisabled || !fileDuration}
+              aria-label="음원 재생 위치"
+              onChange={(event) => seekFile(Number(event.currentTarget.value) - fileCurrentTime)} />
+          </label>
           <div className="file-transport-controls">
             <button
               type="button"
@@ -233,7 +251,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
             checked={howlProtectionEnabled}
             onChange={setHowlProtectionEnabled}
           />
-          <span>출력이 오래 과도하면 자동으로 차단합니다.</span>
+          <span>일정하게 지속되는 큰 소리를 감지하면 차단합니다. 기타의 긴 지속음에도 반응하거나 일부 피드백을 놓칠 수 있으므로 헤드폰을 사용하세요.</span>
         </div>
       </div>
 

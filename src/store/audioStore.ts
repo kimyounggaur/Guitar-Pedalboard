@@ -1,3 +1,4 @@
+import { notifyStorageFailure } from './storageNotice';
 import { create } from 'zustand';
 import { AudioEngine } from '../audio/AudioEngine';
 import type {
@@ -30,8 +31,6 @@ import { selectRecorderMimeType } from '../audio/recording';
 import { usePedalStore } from './pedalStore';
 
 const IO_STORAGE_KEY = 'guitar-pedalboard:io';
-const HOWL_THRESHOLD_DB = -3;
-const HOWL_DURATION_MS = 1200;
 const RECORDING_TIMER_INTERVAL_MS = 250;
 const RECORDING_STOP_FALLBACK_MS = 1000;
 
@@ -58,16 +57,13 @@ const silentLevel: LevelReading = {
 const emptyPitch: PitchReading = { frequency: null, note: null, cents: 0 };
 const emptyLatency: LatencyReading = { base: 0, output: 0, sampleRate: 0 };
 
-let howlThresholdStartedAt: number | null = null;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
 function readIoSettings(): IoSettings {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    return { ...defaultIoSettings };
-  }
+  if (typeof window === 'undefined') return { ...defaultIoSettings };
 
   try {
     const raw = window.localStorage.getItem(IO_STORAGE_KEY);
@@ -100,17 +96,17 @@ function readIoSettings(): IoSettings {
 }
 
 function persistIoSettings(settings: IoSettings): void {
-  if (typeof window === 'undefined' || !window.localStorage) return;
+  if (typeof window === 'undefined') return;
 
   try {
     window.localStorage.setItem(IO_STORAGE_KEY, JSON.stringify(settings));
   } catch {
-    // Audio controls continue to work even if storage is unavailable or full.
+    notifyStorageFailure();
   }
 }
 
 function resetHowlWatch(): void {
-  howlThresholdStartedAt = null;
+  // Detection state is held in the audio worklet.
 }
 
 function isSamePitch(left: PitchReading, right: PitchReading): boolean {
@@ -160,9 +156,11 @@ function persistMidiMappings(mappings: MidiMappings): void {
   try {
     window.localStorage?.setItem(MIDI_STORAGE_KEY, JSON.stringify(mappings));
   } catch {
-    // MIDI control remains available for this session if storage is unavailable.
+    notifyStorageFailure();
   }
 }
+
+const midiPressed = new Map<string, boolean>();
 
 function handleMidiMessage(event: MIDIMessageEvent): void {
   const message = parseMidiMessage(event.data);
@@ -197,10 +195,18 @@ function handleMidiMessage(event: MIDIMessageEvent): void {
 
     const pedalStore = usePedalStore.getState();
     const pedal = pedalStore.pedals.find((candidate) => candidate.id === pedalId);
-    if (!pedal || pedal.bypassed === message.bypassed) return;
-
-    pedalStore.setPedalBypass(pedalId, message.bypassed);
-    audioEngine.setPedalBypass(pedalId, message.bypassed);
+    if (!pedal) return;
+    let bypassed = message.bypassed;
+    if (mapping.mode === 'toggle') {
+      const pressed = !message.bypassed;
+      const wasPressed = midiPressed.get(pedalId) ?? false;
+      midiPressed.set(pedalId, pressed);
+      if (!pressed || wasPressed) return;
+      bypassed = !pedal.bypassed;
+    }
+    if (pedal.bypassed === bypassed) return;
+    pedalStore.setPedalBypass(pedalId, bypassed);
+    audioEngine.setPedalBypass(pedalId, bypassed);
   });
 }
 
@@ -505,6 +511,8 @@ interface AudioStore {
   inputGainDb: number;
   masterVolume: number;
   howlProtectionEnabled: boolean;
+  inputChannelMode: '1' | '2' | 'stereo';
+  setInputChannelMode: (mode: '1' | '2' | 'stereo') => void;
   chainGainWarning: string | null;
   estimatedChainGainDb: number;
   tapTempo: { taps: number[]; bpm: number };
@@ -536,6 +544,8 @@ interface AudioStore {
   setGlobalBpm: (bpm: number) => void;
   setTempoSync: (pedalId: string, sync: boolean) => void;
   adoptTempoFromPedals: () => void;
+  connectSavedMidi: () => Promise<void>;
+  setMidiMode: (pedalId: string, mode: 'momentary' | 'toggle') => void;
   startMidiLearn: (pedalId: string) => Promise<void>;
   cancelMidiLearn: () => void;
   removeMidiMapping: (pedalId: string) => void;
@@ -597,6 +607,8 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   inputGainDb: initialIoSettings.inputGainDb,
   masterVolume: initialIoSettings.masterVolume,
   howlProtectionEnabled: initialIoSettings.howlProtectionEnabled,
+  inputChannelMode: '1',
+  setInputChannelMode: (mode) => { audioEngine.setInputChannelMode(mode); set({ inputChannelMode: mode }); },
   chainGainWarning: null,
   estimatedChainGainDb: 0,
   tapTempo: { taps: [], bpm: readInitialTempoBpm() },
@@ -634,6 +646,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
   setHowlProtectionEnabled: (enabled) => {
     resetHowlWatch();
+    audioEngine.setHowlProtection(enabled);
     set({ howlProtectionEnabled: enabled });
     persistIoSettings({
       inputGainDb: get().inputGainDb,
@@ -858,15 +871,14 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
   panic: () => {
     resetHowlWatch();
-    void finishActiveRecording('abort');
     audioEngine.panic();
     set({
-      isRunning: false,
-      inputMode: 'idle',
-      uploadedFileName: null,
-      isLoading: false,
-      error: '긴급 정지: 모든 오디오 노드를 차단하고 마스터 출력을 0으로 내렸습니다.',
-      ...resetReadings(),
+      isRunning: false, inputMode: 'idle', uploadedFileName: null, isLoading: true,
+      error: '긴급 정지: 입력과 출력을 차단했습니다.', ...resetReadings(),
+    });
+    void finishActiveRecording('finalize').finally(() => {
+      audioEngine.dispose();
+      set({ isLoading: false });
     });
   },
 
@@ -899,6 +911,26 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
     set({ tapTempo: { taps: [], bpm } });
     applyGlobalBpmToSyncedPedals(bpm);
+  },
+
+  connectSavedMidi: async () => {
+    if (!get().midiSupported || !Object.keys(get().midiMappings).length) return;
+    const generation = midiSessionGeneration;
+    try {
+      const access = await requestMidiAccessForLearn();
+      if (generation === midiSessionGeneration) attachMidiAccess(access);
+    } catch {
+      if (generation === midiSessionGeneration) set({ midiError: '저장된 MIDI 매핑을 연결하지 못했습니다. MIDI 권한을 확인해 주세요.' });
+    }
+  },
+
+  setMidiMode: (pedalId, mode) => {
+    const mapping = get().midiMappings[pedalId];
+    if (!mapping) return;
+    const midiMappings = { ...get().midiMappings, [pedalId]: { ...mapping, mode } };
+    midiPressed.delete(pedalId);
+    persistMidiMappings(midiMappings);
+    set({ midiMappings });
   },
 
   startMidiLearn: async (pedalId) => {
@@ -1043,30 +1075,6 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       .getState()
       .pedals.filter((pedal) => pedal.enabled && !pedal.bypassed).length;
     const audioGlitchCount = engine.readAudioGlitchCount();
-    const now = performance.now();
-    const shouldWatchForHowl =
-      state.isRunning && state.inputMode === 'device' && state.howlProtectionEnabled;
-
-    if (shouldWatchForHowl && outputLevel.peakDb >= HOWL_THRESHOLD_DB) {
-      howlThresholdStartedAt ??= now;
-
-      if (now - howlThresholdStartedAt >= HOWL_DURATION_MS) {
-        resetHowlWatch();
-        void finishActiveRecording('abort');
-        engine.panic();
-        set({
-          isRunning: false,
-          inputMode: 'idle',
-          uploadedFileName: null,
-          isLoading: false,
-          error: '하울링이 감지되어 출력을 차단했습니다. 헤드폰을 사용하세요.',
-          ...resetReadings(),
-        });
-        return;
-      }
-    } else {
-      resetHowlWatch();
-    }
 
     set((current) => ({
       inputLevel,
@@ -1081,3 +1089,12 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     }));
   },
 }));
+
+// The audio worklet detects and mutes without depending on any mounted meter UI.
+audioEngine.setHowlProtection(initialIoSettings.howlProtectionEnabled);
+audioEngine.setHowlHandler(() => {
+  const state = useAudioStore.getState();
+  if (!state.isRunning || state.inputMode !== 'device' || !state.howlProtectionEnabled) return;
+  state.panic();
+  useAudioStore.setState({ error: '지속적인 피드백이 감지되어 입력과 출력을 차단했습니다. 헤드폰을 사용하세요.' });
+});

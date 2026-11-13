@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo.png'],
+      includeAssets: ['logo.webp', 'favicon.ico', 'apple-touch-icon.png'],
       manifest: {
         name: 'Guitar Pedalboard',
         short_name: 'Pedalboard',
@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => {
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
-        globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}'],
+        globPatterns: ['**/*.{js,css,html,png,webp,ico,svg,webmanifest}'],
         navigateFallback: `${baseUrl}index.html`,
         runtimeCaching: [
           {

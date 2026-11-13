@@ -241,6 +241,25 @@ try {
   engine.rebuildChain = originalRebuildChain;
 }
 
+// Only user presets should be exported, and unavailable storage must not block edits.
+const exportedPresets = JSON.parse(usePresetStore.getState().exportPresets()).presets;
+assert.ok(exportedPresets.length > 0);
+assert.ok(exportedPresets.every((preset) => !preset.id.startsWith('factory-')));
+let storageWarnings = 0;
+globalThis.window.dispatchEvent = () => { storageWarnings += 1; return true; };
+const originalSetItem = globalThis.window.localStorage.setItem;
+globalThis.window.localStorage.setItem = () => { throw new Error('quota exceeded'); };
+try {
+  usePresetStore.getState().savePreset('저장소 오류에서도 사용', usePedalStore.getState().pedals);
+  assert.ok(usePresetStore.getState().presets.some((preset) => preset.name === '저장소 오류에서도 사용'));
+  const prior = usePedalStore.getState().pedals.find((pedal) => pedal.id === 'delay').bypassed;
+  usePedalStore.getState().setPedalBypass('delay', !prior);
+  assert.equal(usePedalStore.getState().pedals.find((pedal) => pedal.id === 'delay').bypassed, !prior);
+  assert.equal(storageWarnings, 2);
+} finally {
+  globalThis.window.localStorage.setItem = originalSetItem;
+}
+
 console.log(
   'Preset A/B regression passed: isolated snapshots, overwrite/empty guards, active slot, single guarded keyboard listener, session-only export/storage and tempo-aware rebuild.',
 );

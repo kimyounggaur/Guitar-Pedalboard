@@ -151,7 +151,10 @@ assert.ok(namedGenericCount >= 20, `예상보다 적은 named generic 요소를 
 
 assert.match(indexSource, /viewport-fit=cover/);
 assert.match(responsiveCss, /@media \(min-width: 768px\) and \(max-width: 1279px\)/);
-assert.match(responsiveCss, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+assert.match(pedalsCss, /grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 300px\), 1fr\)\)/);
+assert.match(appShellSource, /useState\(false\)/);
+assert.match(appShellSource, /aria-expanded=\{mobileDockOpen\}/);
+assert.match(responsiveCss, /\.mobile-control-panels\[hidden\]/);
 assert.match(responsiveCss, /@media \(max-width: 767px\)/);
 assert.match(responsiveCss, /grid-auto-flow: column/);
 assert.match(responsiveCss, /scroll-snap-type: x mandatory/);

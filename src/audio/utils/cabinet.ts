@@ -215,21 +215,21 @@ export function createCabinetImpulse(
   for (let channel = 0; channel < 2; channel += 1) {
     const samples = impulse.getChannelData(channel);
     const random = createSeededRandom(
-      hashSeed(`${model}:${Math.round(mic * 100)}:${Math.round(roomDistance * 100)}:${channel}`),
+      hashSeed(`${model}:${Math.round(mic * 100)}:${Math.round(roomDistance * 100)}`),
     );
     const directGain = 0.92 - roomDistance * 0.22;
-    samples[0] = directGain * (channel === 0 ? 1 : 0.985);
+    samples[0] = directGain;
 
     for (let index = 1; index < length; index += 1) {
       const progress = index / length;
       const envelope = Math.exp(-progress * profile.decayShape);
       const coneNoise = random() * 2 - 1;
       const coneResonance = Math.sin((2 * Math.PI * profile.midPeakHz * index) / sampleRate);
-      samples[index] = envelope * (coneNoise * 0.095 + coneResonance * 0.018);
+      samples[index] = envelope * (coneNoise * 0.04 + coneResonance * 0.018);
     }
 
     profile.reflections.forEach(([delayMs, gain], reflectionIndex) => {
-      const stereoOffset = channel === 0 ? -reflectionIndex : reflectionIndex + 1;
+      const stereoOffset = 0;
       const delayWithDistance = delayMs + roomDistance * (5 + reflectionIndex * 2);
       const sampleIndex = Math.round((delayWithDistance * sampleRate) / 1000) + stereoOffset;
       if (sampleIndex > 0 && sampleIndex < samples.length) {

@@ -45,7 +45,7 @@ function CrunchKnob({ label, value, min, max, step, onChange }: CrunchKnobProps)
 
 export function CrunchPedal({ params, onChange }: CrunchPedalProps) {
   return (
-    <div className="crunch-box-ui" role="group" aria-label="Crunch Box controls">
+    <div className="crunch-box-ui" role="group" aria-label="Crunch controls">
       <section className="crunch-face">
         <div className="crunch-knob-layout">
           <CrunchKnob
@@ -77,7 +77,7 @@ export function CrunchPedal({ params, onChange }: CrunchPedalProps) {
         <div className="crunch-led" aria-hidden="true" />
         <span className="crunch-side-label crunch-side-out">OUT</span>
         <span className="crunch-side-label crunch-side-in">IN</span>
-        <strong className="crunch-brand">Crunch Box</strong>
+        <strong className="crunch-brand">Crunch</strong>
         <div className="crunch-footswitch" aria-hidden="true">
           <span />
         </div>

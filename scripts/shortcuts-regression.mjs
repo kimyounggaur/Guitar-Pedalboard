@@ -33,7 +33,9 @@ function keyEvent(key, overrides = {}) {
 
 assert.deepEqual(resolveShortcutCommand(keyEvent('1')), { type: 'toggle-pedal', index: 0 });
 assert.deepEqual(resolveShortcutCommand(keyEvent('9')), { type: 'toggle-pedal', index: 8 });
-assert.equal(resolveShortcutCommand(keyEvent('0')), null);
+assert.deepEqual(resolveShortcutCommand(keyEvent('0')), { type: 'toggle-pedal', index: 9 });
+assert.deepEqual(resolveShortcutCommand(keyEvent('ㅅ', { code: 'KeyT', isComposing: true })), { type: 'tap-tempo' });
+assert.deepEqual(resolveShortcutCommand(keyEvent('ㅛ', { code: 'KeyY' })), { type: 'toggle-pedal', index: 14 });
 assert.equal(resolveShortcutCommand(keyEvent('10')), null);
 assert.deepEqual(resolveShortcutCommand(keyEvent(' ')), { type: 'toggle-audio' });
 assert.deepEqual(resolveShortcutCommand(keyEvent('Spacebar')), { type: 'toggle-audio' });
@@ -86,7 +88,7 @@ const engineWrite = globalSource.indexOf(
 );
 assert.ok(storeWrite >= 0 && engineWrite > storeWrite, 'Bypass가 store → engine 순서가 아닙니다.');
 assert.match(globalSource, /const pedal = pedalStore\.pedals\[command\.index\]/);
-assert.match(globalSource, /command\.index < 0 \|\| command\.index > 8/);
+assert.match(globalSource, /command\.index < 0 \|\| command\.index > 14/);
 assert.match(globalSource, /if \(audioState\.isLoading\) return true/);
 assert.match(globalSource, /audioState\.isRunning[\s\S]*audioState\.stop\(\)[\s\S]*audioState\.start\(\)/);
 assert.match(globalSource, /tapTempoTap\(\)/);
@@ -101,10 +103,10 @@ assert.match(
   /command\?\.type === 'panic'[\s\S]*closeHelp\(\)[\s\S]*return/,
 );
 
-assert.match(routingSource, /event\.repeat \|\| event\.isComposing/);
+assert.match(routingSource, /event\.repeat/);
 assert.match(routingSource, /event\.ctrlKey \|\| event\.metaKey \|\| event\.altKey/);
 assert.match(routingSource, /event\.shiftKey && !isHelpKey/);
-assert.match(routingSource, /\^\[1-9\]\$/);
+assert.match(routingSource, /Digit0/);
 
 assert.match(helpSource, /role="dialog"/);
 assert.match(helpSource, /aria-modal="true"/);
@@ -115,7 +117,7 @@ assert.match(helpSource, /event\.key !== 'Tab'/);
 assert.match(helpSource, /event\.shiftKey[\s\S]*firstElement[\s\S]*lastElement/);
 assert.match(helpSource, /querySelectorAll<HTMLElement>\(FOCUSABLE_SELECTOR\)/);
 assert.match(helpSource, /onKeyDown=\{handleKeyDown\}/);
-for (const keyLabel of ['1–9', 'Space', 'T', 'A / B', 'Esc', '?']) {
+for (const keyLabel of ['1–9 / 0 / Q W E R Y', 'Space', 'T', 'A / B', 'Esc', '?']) {
   assert.ok(helpSource.includes(`key: '${keyLabel}'`), `${keyLabel} 도움말 항목 누락`);
 }
 assert.match(cssSource, /\.shortcut-help-backdrop/);
@@ -197,7 +199,7 @@ try {
   assert.equal(usePedalStore.getState().pedals[2].id, targetPedal.id);
   assert.equal(usePedalStore.getState().pedals[2].bypassed, !originalBypassed);
   assert.equal(executeShortcutCommand({ type: 'toggle-pedal', index: -1 }, () => {}), false);
-  assert.equal(executeShortcutCommand({ type: 'toggle-pedal', index: 9 }, () => {}), false);
+  assert.equal(executeShortcutCommand({ type: 'toggle-pedal', index: 15 }, () => {}), false);
 } finally {
   usePedalStore.setState({ setPedalBypass: originalSetPedalBypass });
   engine.setPedalBypass = originalEngineBypass;

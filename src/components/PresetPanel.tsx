@@ -1,3 +1,4 @@
+import { notifyStorageFailure } from '../store/storageNotice';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
 import { useAudioStore } from '../store/audioStore';
@@ -20,7 +21,7 @@ type LibraryFilter = {
 };
 
 function canUseStorage(): boolean {
-  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+  try { return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'; } catch { return false; }
 }
 
 function readStringList(key: string): string[] {
@@ -35,8 +36,10 @@ function readStringList(key: string): string[] {
 }
 
 function writeStringList(key: string, values: string[]): void {
-  if (!canUseStorage()) return;
-  window.localStorage.setItem(key, JSON.stringify(values));
+  try {
+    if (!canUseStorage()) throw new Error('Storage unavailable');
+    window.localStorage.setItem(key, JSON.stringify(values));
+  } catch { notifyStorageFailure(); }
 }
 
 function normalizeText(value: string): string {
@@ -152,7 +155,7 @@ export function PresetPanel() {
     setName(preset.name);
     setActivePresetId(preset.id);
     rememberRecent(preset.id);
-    setMessage(`${preset.name} loaded`);
+    setMessage(`${preset.name} 프리셋을 불러왔습니다.`);
   }, [adoptTempoFromPedals, rememberRecent, setPedals]);
 
   const captureComparisonSlot = useCallback((slot: PresetComparisonSlot) => {
@@ -168,12 +171,16 @@ export function PresetPanel() {
   }, [activateSlot]);
 
   const saveCurrentPreset = () => {
+    if (!name.trim()) { setMessage('프리셋 이름을 입력해 주세요.'); return; }
+    if (presets.some((preset) => !preset.isFactory && preset.name === name.trim()) && !window.confirm('같은 이름의 프리셋이 있습니다. 덮어쓰시겠습니까?')) return;
     savePreset(name, pedals);
     setActiveLibraryId('user');
-    setMessage('Preset saved');
+    setMessage('프리셋을 저장했습니다.');
   };
 
   const removePreset = useCallback((presetId: string) => {
+    const preset = presets.find((item) => item.id === presetId);
+    if (!preset || !window.confirm(`'${preset.name}' 프리셋을 삭제하시겠습니까?`)) return;
     deletePreset(presetId);
     setFavoriteIds((currentIds) => {
       const nextIds = currentIds.filter((id) => id !== presetId);
@@ -185,13 +192,14 @@ export function PresetPanel() {
       writeStringList(RECENTS_KEY, nextIds);
       return nextIds;
     });
-  }, [deletePreset]);
+  }, [deletePreset, presets]);
 
   const reset = () => {
+    if (!window.confirm('모든 페달 설정을 기본값으로 되돌리시겠습니까?')) return;
     resetPedalOrder();
     AudioEngine.getInstance().rebuildChain();
     setActivePresetId(null);
-    setMessage('Default chain restored');
+    setMessage('기본 페달 설정으로 되돌렸습니다.');
   };
 
   const exportJson = () => {
@@ -204,21 +212,18 @@ export function PresetPanel() {
     link.download = `guitar-pedalboard-presets-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    setMessage('Preset JSON exported');
+    setMessage('내 프리셋을 내보냈습니다.');
   };
 
   const importJsonText = () => {
-    if (!presetJson.trim()) {
-      importInputRef.current?.click();
-      return;
-    }
+    if (!presetJson.trim()) { setMessage('가져올 JSON을 붙여 넣어 주세요.'); return; }
 
     try {
       const importedCount = importPresets(presetJson);
       setActiveLibraryId('user');
-      setMessage(`${importedCount} presets imported`);
+      setMessage(`${importedCount}개의 프리셋을 가져왔습니다.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Preset import failed');
+      setMessage(error instanceof Error ? error.message : '프리셋을 가져오지 못했습니다.');
     }
   };
 
@@ -226,9 +231,9 @@ export function PresetPanel() {
     try {
       const importedCount = importPresets(await file.text());
       setActiveLibraryId('user');
-      setMessage(`${importedCount} presets imported`);
+      setMessage(`${importedCount}개의 프리셋을 가져왔습니다.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Preset import failed');
+      setMessage(error instanceof Error ? error.message : '프리셋을 가져오지 못했습니다.');
     }
   };
 
@@ -307,8 +312,8 @@ export function PresetPanel() {
             <button type="button" className="secondary-button" onClick={exportJson}>
               Export
             </button>
-            <button type="button" className="secondary-button" onClick={importJsonText}>
-              Import
+            <button type="button" className="secondary-button" onClick={() => importInputRef.current?.click()}>
+              파일 가져오기
             </button>
             <input
               ref={importInputRef}
@@ -322,6 +327,7 @@ export function PresetPanel() {
               }}
             />
           </div>
+          <button type="button" className="secondary-button" onClick={importJsonText}>붙여넣은 JSON 가져오기</button>
           <textarea
             value={presetJson}
             onChange={(event) => setPresetJson(event.currentTarget.value)}
@@ -330,20 +336,7 @@ export function PresetPanel() {
           />
         </div>
 
-        <div className="preset-output">
-          <div>
-            <strong>Output</strong>
-            <em>OK</em>
-          </div>
-          <label>
-            <span>Peak</span>
-            <i><b style={{ width: '46%' }} /></i>
-          </label>
-          <label>
-            <span>RMS</span>
-            <i><b style={{ width: '32%' }} /></i>
-          </label>
-        </div>
+
       </div>
 
       <div className="preset-browser-main">
@@ -370,7 +363,7 @@ export function PresetPanel() {
           </label>
         </div>
 
-        {message && <p className="preset-message">{message}</p>}
+        {message && <p role="status" className="preset-message">{message}</p>}
 
         {visiblePresets.length > 0 ? (
           <ul className="preset-list" aria-label="프리셋 목록">

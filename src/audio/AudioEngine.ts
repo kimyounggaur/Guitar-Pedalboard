@@ -32,6 +32,7 @@ import { rampParam } from './utils/smoothing';
 import { noiseGateProcessorSource } from './worklets/noise-gate-processor';
 import { envelopeFollowerProcessorSource } from './worklets/envelope-follower-processor';
 import { tunerProcessorSource } from './worklets/tuner-processor';
+import { howlGuardProcessorSource } from './worklets/howl-guard-processor';
 
 type EffectNode = EffectNodeWrapper;
 
@@ -55,6 +56,12 @@ export class AudioEngine {
   private inputGain: GainNode | null = null;
   private chainInput: GainNode | null = null;
   private masterGain: GainNode | null = null;
+  private limiter: WaveShaperNode | null = null;
+  private howlGuard: AudioWorkletNode | null = null;
+  private inputSplitter: ChannelSplitterNode | null = null;
+  private inputChannelMode: '1' | '2' | 'stereo' = '1';
+  private howlProtectionEnabled = true;
+  private howlHandler: (() => void) | null = null;
   private recorderDestination: MediaStreamAudioDestinationNode | null = null;
   private inputMeter: MeterNode | null = null;
   private outputMeter: MeterNode | null = null;
@@ -80,6 +87,18 @@ export class AudioEngine {
       AudioEngine.instance = new AudioEngine();
     }
     return AudioEngine.instance;
+  }
+
+  setHowlHandler(handler: (() => void) | null): void { this.howlHandler = handler; }
+
+  setHowlProtection(enabled: boolean): void {
+    this.howlProtectionEnabled = enabled;
+    this.howlGuard?.port.postMessage({ enabled: enabled && !!this.stream });
+  }
+
+  setInputChannelMode(mode: '1' | '2' | 'stereo'): void {
+    this.inputChannelMode = mode;
+    if (this.inputSplitter && this.source && this.inputGain) this.connectInput(this.source);
   }
 
   setPedalsProvider(provider: () => PedalState[]): void {
@@ -164,6 +183,7 @@ export class AudioEngine {
       audioFileUrl = URL.createObjectURL(file);
       audioElement = new Audio(audioFileUrl);
       audioElement.preload = 'auto';
+      audioElement.loop = true;
       audioElement.addEventListener('ended', () => {
         this.playbackEndedHandler?.();
       });
@@ -318,7 +338,7 @@ export class AudioEngine {
 
     if (!this.recorderDestination) {
       this.recorderDestination = this.context.createMediaStreamDestination();
-      this.masterGain.connect(this.recorderDestination);
+      this.limiter?.connect(this.recorderDestination);
     }
 
     return this.recorderDestination.stream;
@@ -330,7 +350,7 @@ export class AudioEngine {
     this.recorderDestination = null;
 
     try {
-      this.masterGain?.disconnect(destination);
+      this.limiter?.disconnect(destination);
     } catch {
       // The master may already have been disconnected by panic cleanup.
     }
@@ -377,7 +397,9 @@ export class AudioEngine {
       this.masterGain.gain.setValueAtTime(0, this.context.currentTime);
     }
 
-    this.panicDisconnect();
+    // Stop capture immediately, but leave the recorder graph alive until its final data event.
+    this.stream?.getTracks().forEach((track) => track.stop());
+    this.audioElement?.pause();
   }
 
   dispose(): void {
@@ -407,6 +429,9 @@ export class AudioEngine {
     this.inputGain = null;
     this.chainInput = null;
     this.masterGain = null;
+    this.limiter = null;
+    this.howlGuard = null;
+    this.inputSplitter = null;
     this.recorderDestination = null;
     this.inputMeter = null;
     this.outputMeter = null;
@@ -504,6 +529,7 @@ export class AudioEngine {
       this.createWorkletUrl(noiseGateProcessorSource),
       this.createWorkletUrl(envelopeFollowerProcessorSource),
       this.createWorkletUrl(tunerProcessorSource),
+      this.createWorkletUrl(howlGuardProcessorSource),
     ];
 
     await Promise.all(moduleUrls.map((url) => context.audioWorklet.addModule(url)));
@@ -560,6 +586,18 @@ export class AudioEngine {
     this.inputGain = this.context.createGain();
     this.chainInput = this.context.createGain();
     this.masterGain = this.context.createGain();
+    this.limiter = this.context.createWaveShaper();
+    const curve = new Float32Array(65537);
+    for (let i = 0; i < curve.length; i++) {
+      const value = (i / (curve.length - 1)) * 2 - 1;
+      curve[i] = Math.max(-0.89, Math.min(0.89, value));
+    }
+    this.limiter.curve = curve;
+    this.howlGuard = new AudioWorkletNode(this.context, 'howl-guard', { outputChannelCount: [2] });
+    this.howlGuard.port.onmessage = (event) => {
+      if (event.data?.type === 'howl') this.howlHandler?.();
+    };
+    this.howlGuard.port.postMessage({ enabled: this.howlProtectionEnabled && !!this.stream });
     this.inputMeter = new MeterNode(this.context);
     this.outputMeter = new MeterNode(this.context);
     this.tuner = new TunerNode(this.context, this.tuningPreset);
@@ -568,12 +606,29 @@ export class AudioEngine {
     rampParam(this.inputGain.gain, dbToGain(this.inputGainDb), this.context, 0.02);
     this.masterGain.gain.value = 0;
 
-    source.connect(this.inputGain);
+    this.connectInput(source);
     this.inputGain.connect(this.inputMeter.input);
     this.inputGain.connect(this.chainInput);
-    this.masterGain.connect(this.outputMeter.input);
-    this.masterGain.connect(this.context.destination);
+    this.masterGain.connect(this.howlGuard);
+    this.howlGuard.connect(this.limiter);
+    this.limiter.connect(this.outputMeter.input);
+    this.limiter.connect(this.context.destination);
     this.syncTunerConnection();
+  }
+
+  private connectInput(source: AudioNode): void {
+    if (!this.context || !this.inputGain) return;
+    source.disconnect();
+    this.inputSplitter?.disconnect();
+    this.inputSplitter = null;
+    if (!this.stream || this.inputChannelMode === 'stereo') {
+      source.connect(this.inputGain);
+      return;
+    }
+    this.inputSplitter = this.context.createChannelSplitter(2);
+    source.connect(this.inputSplitter);
+    // An individual output of a splitter is mono; Web Audio duplicates it to stereo downstream.
+    this.inputSplitter.connect(this.inputGain, this.inputChannelMode === '1' ? 0 : 1);
   }
 
   private syncTunerConnection(): void {
@@ -756,6 +811,9 @@ export class AudioEngine {
     this.tuner?.setActive(false);
     this.tunerConnected = false;
     this.source?.disconnect();
+    this.inputSplitter?.disconnect();
+    this.howlGuard?.disconnect();
+    this.limiter?.disconnect();
     this.inputGain?.disconnect();
     this.chainInput?.disconnect();
     this.masterGain?.disconnect();
