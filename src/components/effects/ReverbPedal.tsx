@@ -1,3 +1,6 @@
+import { knobDefault } from '../knobDefaults';
+import { KnobNumberInput } from '../KnobNumberInput';
+import { useKnobDrag } from '../../hooks/useKnobDrag';
 import type { CSSProperties } from 'react';
 import type { PedalParamValue, ReverbParams } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
@@ -22,9 +25,11 @@ interface ReverbKnobProps {
 function ReverbKnob({ label, value, min, max, step, displayValue, ariaValueText, onChange }: ReverbKnobProps) {
   const progress = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(progress, 0), 1) * 270;
+  const key = ({ Level: 'level', Decay: 'decay', Tone: 'highCut', Mix: 'mix' } as Record<string, string>)[label];
+  const dragHandlers = useKnobDrag(value, min, max, step, onChange, knobDefault('reverb', key));
 
   return (
-    <label className="reverb-knob">
+    <div className="reverb-knob">
       <span>{label}</span>
       <span
         className="reverb-knob-shell"
@@ -37,13 +42,15 @@ function ReverbKnob({ label, value, min, max, step, displayValue, ariaValueText,
           max={max}
           step={step}
           value={value}
+          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${ariaValueText ?? displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
       <output>{displayValue}</output>
-    </label>
+      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+    </div>
   );
 }
 
@@ -64,11 +71,11 @@ export function ReverbPedal({ params, onChange }: ReverbPedalProps) {
           />
           <ReverbKnob
             label="Decay"
-            value={params.decay}
+            value={Math.min(params.decay, 6)}
             min={0.2}
-            max={10}
+            max={6}
             step={0.1}
-            displayValue={`${params.decay.toFixed(1)}s`}
+            displayValue={`${Math.min(params.decay, 6).toFixed(1)}s`}
             onChange={(value) => onChange('decay', value)}
           />
           <ReverbKnob
@@ -117,6 +124,7 @@ export function ReverbPedal({ params, onChange }: ReverbPedalProps) {
         <SliderControl
           label="Pre Delay"
           value={params.preDelay}
+          defaultValue={knobDefault('reverb', 'preDelay')}
           min={0}
           max={200}
           step={1}
@@ -126,6 +134,7 @@ export function ReverbPedal({ params, onChange }: ReverbPedalProps) {
         <SliderControl
           label="Low Cut"
           value={params.lowCut}
+          defaultValue={knobDefault('reverb', 'lowCut')}
           min={20}
           max={500}
           step={5}

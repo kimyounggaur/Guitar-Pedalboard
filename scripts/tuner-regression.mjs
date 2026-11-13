@@ -11,6 +11,7 @@ const SAMPLE_RATES = [44_100, 48_000, 96_000, 192_000];
 const QUANTUM_SIZE = 128;
 const TEST_DURATION_SECONDS = 0.9;
 const NOTE_FREQUENCIES = {
+  B1: 61.735412657,
   D2: 73.41619197935188,
   E2: 82.4068892282175,
   A2: 110,
@@ -39,6 +40,38 @@ const transpiledTunings = ts.transpileModule(tuningsModule, {
 }).outputText;
 const tuningsUrl = `data:text/javascript;base64,${Buffer.from(transpiledTunings).toString('base64')}`;
 const { getPitchReading } = await import(tuningsUrl);
+
+for (const reference of [400, 440, 442, 480]) {
+  const chromatic = getPitchReading(reference, 'chromatic', reference);
+  assert.equal(chromatic.note, 'A4');
+  assert.ok(Math.abs(chromatic.cents) < 1e-8, `${reference} Hz chromatic reference`);
+  const stringFrequency = 110 * reference / 440;
+  const standard = getPitchReading(stringFrequency, 'standard', reference);
+  assert.equal(standard.targetNote, 'A2');
+  assert.ok(Math.abs(standard.cents) < 1e-8, `${reference} Hz standard tuning`);
+}
+assert.ok(getPitchReading(440, 'chromatic', 442).cents < -7, '기준음 변경이 센트 계산에 반영되어야 합니다.');
+
+// Exercise the node's actual worklet-message filter as well as the DSP in isolation.
+const tunerNodeSource = await readFile(new URL('../src/audio/nodes/TunerNode.ts', import.meta.url), 'utf8');
+const compiledNode = ts.transpileModule(tunerNodeSource, {
+  compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText.replace("'../utils/tunings'", JSON.stringify(tuningsUrl));
+globalThis.AudioWorkletNode = class {
+  constructor() { this.port = { onmessage: null, postMessage() {}, close() {} }; }
+  disconnect() {}
+};
+const { TunerNode } = await import(`data:text/javascript;base64,${Buffer.from(compiledNode).toString('base64')}`);
+const tunerNode = new TunerNode({}, 'chromatic');
+tunerNode.setActive(true);
+tunerNode.input.port.onmessage({ data: { type: 'pitch', sessionId: 1, frequency: NOTE_FREQUENCIES.B1 } });
+assert.equal(tunerNode.readPitch().note, 'B1', 'B1은 노드 필터를 통과해야 합니다.');
+tunerNode.input.port.onmessage({ data: { type: 'pitch', sessionId: 1, frequency: 54 } });
+assert.equal(tunerNode.readPitch().frequency, null, '55Hz 미만은 감지 범위 밖입니다.');
+tunerNode.setReferenceHz(442);
+tunerNode.input.port.onmessage({ data: { type: 'pitch', sessionId: 1, frequency: 442 } });
+assert.ok(Math.abs(tunerNode.readPitch().cents) < 1e-8, '기준음이 노드의 실제 읽기에 반영되어야 합니다.');
+delete globalThis.AudioWorkletNode;
 
 function centsBetween(actual, expected) {
   return 1200 * Math.log2(actual / expected);
@@ -182,8 +215,12 @@ function assertTuningTargets() {
   const e5 = e2 * 8;
 
   assert.equal(getPitchReading(e2, 'standard').note, 'E2');
-  assert.equal(getPitchReading(e3, 'standard').note, 'E2');
-  assert.equal(getPitchReading(e5, 'standard').note, 'E4');
+  assert.equal(getPitchReading(e3, 'standard').note, 'E3');
+  assert.equal(getPitchReading(e3, 'standard').octaveMismatch, true);
+  assert.equal(getPitchReading(e5, 'standard').note, 'E5');
+  assert.equal(getPitchReading(NOTE_FREQUENCIES.D2, 'standard').octaveMismatch, true);
+  assert.equal(getPitchReading(130.81278265, 'chromatic').note, 'C3');
+  assert.equal(getPitchReading(e2, 'standard').stringNumber, 6);
   assert.equal(getPitchReading(NOTE_FREQUENCIES.D2, 'drop-d').note, 'D2');
 
   for (const cents of [-3, 3]) {

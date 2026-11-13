@@ -14,7 +14,7 @@ import { useAudioStore } from '../store/audioStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { WaveformCanvas, type WaveformCanvasHandle } from './WaveformCanvas';
 
-const STORE_REFRESH_INTERVAL_MS = 50;
+const STORE_REFRESH_INTERVAL_MS = 100;
 const SILENT_LEVEL: LevelReading = {
   db: -120,
   linear: 0,
@@ -36,17 +36,24 @@ interface MeterProps {
 export function Meter({ active = true }: MeterProps) {
   const isRunning = useAudioStore((state) => state.isRunning);
   const activeEffectCount = useAudioStore((state) => state.activeEffectCount);
-  const audioGlitchCount = useAudioStore((state) => state.audioGlitchCount);
   const pitch = useAudioStore((state) => state.pitch);
   const isTunerActive = useAudioStore((state) => state.isTunerActive);
   const tuningPreset = useAudioStore((state) => state.tuningPreset);
+  const tuningReferenceHz = useAudioStore((state) => state.tuningReferenceHz);
   const latency = useAudioStore((state) => state.latency);
+  const audioGlitchCount = useAudioStore((state) => state.audioGlitchCount);
   const masterVolume = useAudioStore((state) => state.masterVolume);
   const setMasterVolume = useAudioStore((state) => state.setMasterVolume);
   const setTunerActive = useAudioStore((state) => state.setTunerActive);
   const setTuningPreset = useAudioStore((state) => state.setTuningPreset);
+  const setTuningReferenceHz = useAudioStore((state) => state.setTuningReferenceHz);
   const refreshMeters = useAudioStore((state) => state.refreshMeters);
-  const recordingSupported = useAudioStore((state) => state.recordingSupported);
+  const recordingFormat = useAudioStore((state) => state.recordingFormat);
+  const recordedFormat = useAudioStore((state) => state.recordedFormat);
+  const setRecordingFormat = useAudioStore((state) => state.setRecordingFormat);
+  const wavSupported = typeof AudioContext !== 'undefined' && !!AudioContext.prototype.createScriptProcessor;
+  const webmSupported = useAudioStore((state) => state.recordingSupported);
+  const selectedRecordingSupported = recordingFormat === 'wav' ? wavSupported : webmSupported;
   const recordingStatus = useAudioStore((state) => state.recordingStatus);
   const recordedUrl = useAudioStore((state) => state.recordedUrl);
   const recordingElapsed = useAudioStore((state) => state.recordingElapsed);
@@ -57,12 +64,14 @@ export function Meter({ active = true }: MeterProps) {
   const waveformRef = useRef<WaveformCanvasHandle>(null);
   const clipIndicatorRef = useRef<HTMLDivElement>(null);
   const outputWarningRef = useRef<HTMLParagraphElement>(null);
-  const latencyTotal = latency.base + latency.output;
-  const hasLatencyReading = latency.sampleRate > 0;
+  const latencyTotal = latency.base !== null && latency.output !== null ? latency.base + latency.output : null;
+  const hasLatencyReading = latency.sampleRate > 0 && latencyTotal !== null;
   const hasPitch = isTunerActive && pitch.frequency !== null && pitch.note !== null;
   const absoluteCents = Math.abs(pitch.cents);
   const tunerStatus = !hasPitch
     ? 'idle'
+    : pitch.octaveMismatch
+      ? 'far'
     : absoluteCents <= 5
       ? 'in-tune'
       : absoluteCents <= 15
@@ -76,6 +85,8 @@ export function Meter({ active = true }: MeterProps) {
     ? '튜너 꺼짐'
     : !hasPitch
       ? '신호 대기'
+      : pitch.octaveMismatch
+        ? `옥타브 확인 · 목표 ${pitch.targetNote}`
       : tunerStatus === 'in-tune'
         ? '정확함'
         : `${Math.abs(roundedCents)}센트 ${roundedCents > 0 ? '높음' : '낮음'}`;
@@ -86,7 +97,6 @@ export function Meter({ active = true }: MeterProps) {
   useEffect(() => {
     const engine = AudioEngine.getInstance();
     let animationFrame: number | null = null;
-    let lastStoreRefreshAt = Number.NEGATIVE_INFINITY;
 
     const updateRealtimeStatus = (inputLevel: LevelReading, outputLevel: LevelReading) => {
       const isClipping = inputLevel.isClipping || outputLevel.isClipping;
@@ -134,7 +144,7 @@ export function Meter({ active = true }: MeterProps) {
       }
     };
 
-    const renderFrame = (timestamp: number) => {
+    const renderFrame = () => {
       animationFrame = null;
       if (!active || !isRunning || document.visibilityState !== 'visible') return;
 
@@ -145,16 +155,6 @@ export function Meter({ active = true }: MeterProps) {
       outputLevelRef.current?.update(outputLevel);
       waveformRef.current?.draw(engine.readInputWaveform(), engine.readOutputWaveform());
       updateRealtimeStatus(inputLevel, outputLevel);
-
-      if (timestamp - lastStoreRefreshAt >= STORE_REFRESH_INTERVAL_MS) {
-        lastStoreRefreshAt = timestamp;
-        refreshMeters(inputLevel, outputLevel);
-
-        if (!useAudioStore.getState().isRunning) {
-          resetRealtimeUi();
-          return;
-        }
-      }
 
       animationFrame = window.requestAnimationFrame(renderFrame);
     };
@@ -178,7 +178,17 @@ export function Meter({ active = true }: MeterProps) {
       document.removeEventListener('visibilitychange', syncAnimation);
       cancelFrame();
     };
-  }, [active, isRunning, refreshMeters]);
+  }, [active, isRunning]);
+
+  // Meter readings and file position must not depend on the selected panel.
+  useEffect(() => {
+    if (!isRunning) return;
+    const engine = AudioEngine.getInstance();
+    const update = () => refreshMeters(engine.readInputLevel(), engine.readOutputLevel());
+    update();
+    const timer = window.setInterval(update, STORE_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [isRunning, refreshMeters]);
 
   return (
     <section className="side-panel meter-panel">
@@ -216,11 +226,19 @@ export function Meter({ active = true }: MeterProps) {
       <WaveformCanvas ref={waveformRef} />
 
       <div className="recording-panel">
+        <label>녹음 형식
+          <select value={recordingFormat} disabled={recordingStatus === 'recording'} onChange={(event) => setRecordingFormat(event.currentTarget.value as 'webm' | 'wav')}>
+            <option value="webm">압축 녹음 (브라우저 지원 형식)</option>
+            <option value="wav">WAV (16-bit PCM)</option>
+          </select>
+        </label>
+        {recordingFormat === 'webm' ? <p>압축 녹음 형식은 브라우저에 따라 WebM, MP4 또는 기타 형식으로 저장됩니다.</p> : null}
+        {recordingFormat === 'wav' ? <p>WAV 녹음은 최대 2분이며 메모리 제한에 도달하면 자동 저장됩니다. 녹음 중에는 화면을 열어 두세요. 기기가 바쁘거나 백그라운드 상태일 때 소리가 끊길 수 있습니다.</p> : null}
         <div className="recording-actions" role="group" aria-label="마스터 출력 녹음">
           <button
             className="secondary-button recording-start-button"
             type="button"
-            disabled={!recordingSupported || !isRunning || recordingStatus === 'recording'}
+            disabled={!selectedRecordingSupported || !isRunning || recordingStatus === 'recording'}
             onClick={startRecording}
           >
             녹음
@@ -241,7 +259,7 @@ export function Meter({ active = true }: MeterProps) {
               if (!recordedUrl) return;
               const link = document.createElement('a');
               link.href = recordedUrl;
-              link.download = createRecordingFilename();
+              link.download = createRecordingFilename(new Date(), recordedFormat);
               link.click();
             }}
           >
@@ -249,12 +267,12 @@ export function Meter({ active = true }: MeterProps) {
           </button>
         </div>
         <p className="recording-status" aria-live="polite">
-          {!recordingSupported
+          {!selectedRecordingSupported
             ? '이 브라우저에서는 녹음을 지원하지 않습니다.'
             : recordingStatus === 'recording'
               ? `녹음 중 ${formatElapsed(recordingElapsed)}`
               : recordingStatus === 'ready'
-                ? `녹음 완료 ${formatElapsed(recordingElapsed)}`
+                ? `녹음 완료 ${formatElapsed(recordingElapsed)} · ${recordedFormat === 'unknown' ? '파일 형식 확인 불가 (확장자 없음)' : recordedFormat.toUpperCase()}`
                 : '녹음 대기'}
         </p>
       </div>
@@ -262,12 +280,14 @@ export function Meter({ active = true }: MeterProps) {
       <div className="latency-status" aria-live="polite">
         <span>
           {hasLatencyReading
-            ? `지연시간 ${latencyTotal.toFixed(1)}ms @ ${(latency.sampleRate / 1000).toFixed(1)}kHz`
+            ? `출력 지연 추정 ${(latencyTotal ?? 0).toFixed(1)}ms @ ${(latency.sampleRate / 1000).toFixed(1)}kHz`
             : '지연시간 측정 대기'}
         </span>
-        {hasLatencyReading && latencyTotal > 20 ? (
+        <p>입력 장치 설정 지연: {latency.input === null ? '확인 불가' : `${latency.input.toFixed(1)}ms`} · 활성 이펙터 처리 지연: 추정 미지원</p>
+        <p>입력 값은 장치 설정상의 목표치이며 실제 왕복 지연 측정값이 아닙니다. 출력 추정에는 이펙터 처리가 포함되지 않습니다.</p>
+        {latencyTotal !== null && latencyTotal > 20 ? (
           <p>
-            지연이 큽니다. ASIO/전용 드라이버 사용이나 버퍼 크기 조정을 검토하세요.
+            지연이 큽니다. 유선 헤드폰과 오디오 인터페이스를 사용하고 다른 작업을 줄여 보세요.
           </p>
         ) : null}
       </div>
@@ -278,11 +298,11 @@ export function Meter({ active = true }: MeterProps) {
         </span>
         <i aria-hidden="true">·</i>
         <span>
-          지연 <output>{hasLatencyReading ? `${latencyTotal.toFixed(1)}ms` : '--'}</output>
+          출력 지연 추정 <output>{hasLatencyReading ? `${(latencyTotal ?? 0).toFixed(1)}ms` : '--'}</output>
         </span>
         <i aria-hidden="true">·</i>
         <span>
-          글리치 <output>{audioGlitchCount}</output>
+          출력 버퍼 부족 <output>{audioGlitchCount === null ? '측정 미지원' : `${audioGlitchCount}회`}</output>
         </span>
       </div>
 
@@ -304,18 +324,24 @@ export function Meter({ active = true }: MeterProps) {
               ))}
             </select>
           </label>
+          <label className="tuner-preset-control">
+            <span>기준음 A4</span>
+            <select value={tuningReferenceHz} onChange={(event) => setTuningReferenceHz(Number(event.currentTarget.value))}>
+              {Array.from({ length: 81 }, (_, index) => 400 + index).map((hz) => <option key={hz} value={hz}>{hz} Hz</option>)}
+            </select>
+          </label>
         </div>
 
         <div className="tuner-targets" role="group" aria-label="현재 튜닝 목표음">
           {tuningTargets.map((target) => {
-            const isTarget = hasPitch && pitch.note === target.note;
+            const isTarget = hasPitch && pitch.targetNote === target.note;
             return (
               <span
                 className={isTarget ? 'is-target' : undefined}
                 aria-current={isTarget ? 'true' : undefined}
                 key={target.note}
               >
-                {target.note}
+                {6 - tuningTargets.indexOf(target)}번 {target.note}
               </span>
             );
           })}
@@ -323,6 +349,7 @@ export function Meter({ active = true }: MeterProps) {
 
         <div className={`tuner-reading is-${tunerStatus}`} aria-live="polite">
           <span className="tuner-note">{hasPitch ? pitch.note : '--'}</span>
+          {hasPitch && pitch.stringNumber ? <span>{pitch.stringNumber}번 줄 · 목표 {pitch.targetNote}</span> : null}
           <span className="tuner-pitch-detail">
             <span className="tuner-frequency">
               {hasPitch && pitch.frequency ? `${pitch.frequency.toFixed(1)} Hz` : '주파수 --'}

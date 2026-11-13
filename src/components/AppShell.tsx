@@ -1,3 +1,5 @@
+import { useHistoryStore } from '../store/historyStore';
+import { HistoryControls } from './HistoryControls';
 import { useEffect, useState, type KeyboardEvent } from 'react';
 import { ChainText } from './ChainText';
 import { ConnectGuitarPanel } from './ConnectGuitarPanel';
@@ -26,6 +28,8 @@ function readOnlineStatus(): boolean {
 export function AppShell() {
   const isMobileLayout = useMediaQuery(MOBILE_LAYOUT_QUERY);
   const [activeMobileTab, setActiveMobileTab] = useState<MobileTabId>('input');
+  const [mobileDockOpen, setMobileDockOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isOnline, setIsOnline] = useState(readOnlineStatus);
   const loadPedalsFromStorage = usePedalStore((state) => state.loadPedalsFromStorage);
   const refreshChainGainWarning = useAudioStore((state) => state.refreshChainGainWarning);
@@ -35,6 +39,7 @@ export function AppShell() {
 
   useEffect(() => {
     loadPedalsFromStorage();
+    useHistoryStore.getState().clear();
     adoptTempoFromPedals();
   }, [adoptTempoFromPedals, loadPedalsFromStorage]);
 
@@ -43,7 +48,10 @@ export function AppShell() {
     return usePedalStore.subscribe(() => refreshChainGainWarning());
   }, [refreshChainGainWarning]);
 
-  useEffect(() => () => disposeMidi(), [disposeMidi]);
+  useEffect(() => {
+    void useAudioStore.getState().connectSavedMidi();
+    return () => disposeMidi();
+  }, [disposeMidi]);
   useEffect(() => () => disposeRecording(), [disposeRecording]);
 
   useEffect(() => {
@@ -70,6 +78,7 @@ export function AppShell() {
     event.preventDefault();
     const nextTab = mobileTabs[nextIndex];
     setActiveMobileTab(nextTab.id);
+    setMobileDockOpen(true);
     document.getElementById(`mobile-tab-${nextTab.id}`)?.focus();
   };
 
@@ -78,8 +87,9 @@ export function AppShell() {
   const presetPanel = <PresetPanel />;
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell${mobileDockOpen && isMobileLayout ? ' mobile-dock-open' : ''}`}>
       <GlobalKeyboardShortcuts />
+      <HistoryControls />
       {!isOnline ? (
         <div className="offline-notice" role="status" aria-live="polite">
           <strong>오프라인 상태입니다.</strong>
@@ -88,10 +98,15 @@ export function AppShell() {
           </span>
         </div>
       ) : null}
-      <div className="workspace">
+      {!isMobileLayout && (
+        <button className="sidebar-toggle" type="button" aria-expanded={sidebarOpen} aria-controls="desktop-sidebar" onClick={() => setSidebarOpen((open) => !open)}>
+          {sidebarOpen ? '오디오 패널 접기' : '오디오 패널 펼치기'}
+        </button>
+      )}
+      <div className={`workspace${!sidebarOpen && !isMobileLayout ? ' sidebar-collapsed' : ''}`}>
         <PedalBoard inputPanel={isMobileLayout ? undefined : inputPanel} />
         {!isMobileLayout ? (
-          <aside className="sidebar" aria-label="오디오와 프리셋 패널">
+          <aside id="desktop-sidebar" className="sidebar" aria-label="오디오와 프리셋 패널" hidden={!sidebarOpen}>
             {presetPanel}
             {meterPanel}
             <ChainText />
@@ -101,6 +116,9 @@ export function AppShell() {
 
       {isMobileLayout ? (
         <section className="mobile-control-dock" aria-label="모바일 오디오 컨트롤">
+          <button className="mobile-dock-toggle" type="button" aria-expanded={mobileDockOpen} aria-controls="mobile-control-panels" onClick={() => setMobileDockOpen((open) => !open)}>
+            {mobileDockOpen ? '패널 접기' : '오디오 패널 펼치기'}
+          </button>
           <div className="mobile-bottom-tabs" role="tablist" aria-label="모바일 컨트롤 패널">
             {mobileTabs.map((tab) => {
               const isActive = activeMobileTab === tab.id;
@@ -113,7 +131,7 @@ export function AppShell() {
                   aria-controls={`mobile-panel-${tab.id}`}
                   aria-selected={isActive}
                   tabIndex={isActive ? 0 : -1}
-                  onClick={() => setActiveMobileTab(tab.id)}
+                  onClick={() => { setActiveMobileTab(tab.id); setMobileDockOpen(true); }}
                   onKeyDown={handleMobileTabKeyDown}
                 >
                   {tab.label}
@@ -122,7 +140,7 @@ export function AppShell() {
             })}
           </div>
 
-          <div className="mobile-control-panels">
+          <div id="mobile-control-panels" className="mobile-control-panels" hidden={!mobileDockOpen}>
             <div
               id="mobile-panel-input"
               className="mobile-control-panel"

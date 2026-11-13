@@ -47,8 +47,8 @@ assert.ok(
   messageHandlerSource.indexOf('return;\n  }') < messageHandlerSource.indexOf('Object.entries'),
   '학습 이벤트가 일반 매핑 적용 경로로 이어집니다.',
 );
-assert.match(messageHandlerSource, /pedalStore\.setPedalBypass\(pedalId, message\.bypassed\)/);
-assert.match(messageHandlerSource, /audioEngine\.setPedalBypass\(pedalId, message\.bypassed\)/);
+assert.match(messageHandlerSource, /pedalStore\.setPedalBypass\(pedalId, bypassed\)/);
+assert.match(messageHandlerSource, /audioEngine\.setPedalBypass\(pedalId, bypassed\)/);
 assert.match(audioStoreSource, /midiAccess\.onstatechange = handleMidiStateChange/);
 assert.match(audioStoreSource, /input\.onmidimessage = handleMidiMessage/);
 assert.match(audioStoreSource, /input\.onmidimessage = null/);
@@ -61,12 +61,11 @@ assert.match(pedalCardSource, /role="menuitem"/);
 assert.match(pedalCardSource, />\s*MIDI 학습\s*<\/button>/);
 assert.match(pedalCardSource, /className="midi-learn-button"/);
 assert.match(pedalCardSource, /aria-live="polite"/);
-assert.match(
-  pedalCardSource,
-  /\{midiSupported \? \([\s\S]*className="midi-bypass-control"[\s\S]*\) : \(\s*bypassToggle\s*\)\}/,
-  'Web MIDI 미지원 분기는 MIDI 컨트롤 없이 기존 Bypass 스위치만 렌더해야 합니다.',
-);
-assert.match(appShellSource, /useEffect\(\(\) => \(\) => disposeMidi\(\)/);
+assert.match(pedalCardSource, /<StompToggleSwitch label="효과" checked=\{pedal.enabled && !pedal.bypassed\}/);
+assert.match(pedalCardSource, /aria-haspopup="menu"/);
+assert.doesNotMatch(pedalCardSource, /label="Bypass"/);
+
+assert.match(appShellSource, /connectSavedMidi\(\)/);
 
 const midiBundle = await build({
   entryPoints: [fileURLToPath(new URL('../src/audio/midi.ts', import.meta.url))],
@@ -92,26 +91,26 @@ assert.deepEqual(parseMidiMessage(Uint8Array.of(0xb0, 12, 0)), {
   channel: 1,
   cc: 12,
   value: 0,
-  bypassed: false,
+  bypassed: true,
 });
-assert.equal(parseMidiMessage(Uint8Array.of(0xb0, 12, 63)).bypassed, false);
-assert.equal(parseMidiMessage(Uint8Array.of(0xb0, 12, 64)).bypassed, true);
+assert.equal(parseMidiMessage(Uint8Array.of(0xb0, 12, 63)).bypassed, true);
+assert.equal(parseMidiMessage(Uint8Array.of(0xb0, 12, 64)).bypassed, false);
 assert.deepEqual(parseMidiMessage(Uint8Array.of(0xbf, 127, 127)), {
   kind: 'cc',
   channel: 16,
   cc: 127,
   value: 127,
-  bypassed: true,
+  bypassed: false,
 });
 assert.deepEqual(parseMidiMessage(Uint8Array.of(0x9f, 60, 100)), {
   kind: 'note',
   channel: 16,
   note: 60,
   value: 100,
-  bypassed: true,
+  bypassed: false,
 });
-assert.equal(parseMidiMessage(Uint8Array.of(0x9f, 60, 0)).bypassed, false);
-assert.equal(parseMidiMessage(Uint8Array.of(0x8f, 60, 127)).bypassed, false);
+assert.equal(parseMidiMessage(Uint8Array.of(0x9f, 60, 0)).bypassed, true);
+assert.equal(parseMidiMessage(Uint8Array.of(0x8f, 60, 127)).bypassed, true);
 assert.equal(parseMidiMessage(Uint8Array.of(0xe0, 0, 64)), null);
 assert.equal(parseMidiMessage(Uint8Array.of(0xb0, 1)), null);
 assert.equal(parseMidiMessage([0xb0, 128, 0]), null);
@@ -248,7 +247,8 @@ Object.defineProperty(globalThis, 'navigator', {
 const runtimeBundle = await build({
   stdin: {
     contents: `
-      export { useAudioStore } from './src/store/audioStore.ts';
+      export { useAudioStore, registerMidiAdvancedHandler } from './src/store/audioStore.ts';
+      export { validateMidiAdvanced, parseAdvancedMessage, dispatchAdvancedMessage } from './src/audio/midiAdvanced.ts';
       export { usePedalStore } from './src/store/pedalStore.ts';
       export { AudioEngine } from './src/audio/AudioEngine.ts';
     `,
@@ -263,7 +263,7 @@ const runtimeBundle = await build({
   write: false,
 });
 const runtimeUrl = `data:text/javascript;base64,${Buffer.from(runtimeBundle.outputFiles[0].text).toString('base64')}`;
-const { AudioEngine, useAudioStore, usePedalStore } = await import(runtimeUrl);
+const { AudioEngine, useAudioStore, usePedalStore, registerMidiAdvancedHandler, validateMidiAdvanced, parseAdvancedMessage, dispatchAdvancedMessage } = await import(runtimeUrl);
 
 assert.equal(requestCount, 0, '명시적 Learn 전에 MIDI 권한을 요청했습니다.');
 assert.equal(useAudioStore.getState().midiSupported, true);
@@ -295,18 +295,19 @@ assert.equal(
 assert.deepEqual(bypassCalls, [], '학습 이벤트가 AudioEngine을 호출했습니다.');
 assert.deepEqual(JSON.parse(storage.get('guitar-pedalboard:midi')).drive, ccMapping);
 
+usePedalStore.getState().setPedalBypass('drive', true);
 inputOne.emit([0xb1, 20, 127]);
-assert.equal(
-  usePedalStore.getState().pedals.find((pedal) => pedal.id === 'drive').bypassed,
-  true,
-);
-assert.deepEqual(bypassCalls.at(-1), ['drive', true]);
-inputOne.emit([0xb1, 20, 63]);
 assert.equal(
   usePedalStore.getState().pedals.find((pedal) => pedal.id === 'drive').bypassed,
   false,
 );
 assert.deepEqual(bypassCalls.at(-1), ['drive', false]);
+inputOne.emit([0xb1, 20, 63]);
+assert.equal(
+  usePedalStore.getState().pedals.find((pedal) => pedal.id === 'drive').bypassed,
+  true,
+);
+assert.deepEqual(bypassCalls.at(-1), ['drive', true]);
 const callsBeforeWrongChannel = bypassCalls.length;
 inputOne.emit([0xb2, 20, 127]);
 assert.equal(bypassCalls.length, callsBeforeWrongChannel, '다른 MIDI 채널이 매핑을 실행했습니다.');
@@ -317,12 +318,48 @@ assert.equal(access.stateHandlerAssignments, 1, 'statechange handler를 중복 �
 assert.equal(inputOne.handlerAssignments, 1, 'midimessage handler를 중복 연결했습니다.');
 inputOne.emit([0x9f, 60, 100]);
 assert.deepEqual(useAudioStore.getState().midiMappings.compressor, noteMapping);
+usePedalStore.getState().setPedalBypass('compressor', true);
 const callsAfterNoteLearn = bypassCalls.length;
 inputOne.emit([0x9f, 60, 100]);
-assert.deepEqual(bypassCalls.at(-1), ['compressor', true]);
-inputOne.emit([0x8f, 60, 64]);
 assert.deepEqual(bypassCalls.at(-1), ['compressor', false]);
+inputOne.emit([0x8f, 60, 64]);
+assert.deepEqual(bypassCalls.at(-1), ['compressor', true]);
 assert.equal(bypassCalls.length, callsAfterNoteLearn + 2);
+
+useAudioStore.getState().setMidiMode('compressor', 'toggle');
+const beforeToggle = bypassCalls.length;
+inputOne.emit([0x9f, 60, 100]);
+inputOne.emit([0x9f, 60, 100]); // repeated high must not toggle again
+assert.equal(bypassCalls.length, beforeToggle + 1);
+assert.deepEqual(bypassCalls.at(-1), ['compressor', false]);
+inputOne.emit([0x8f, 60, 0]);
+assert.equal(bypassCalls.length, beforeToggle + 1);
+inputOne.emit([0x9f, 60, 100]);
+assert.deepEqual(bypassCalls.at(-1), ['compressor', true]);
+assert.equal(JSON.parse(storage.get('guitar-pedalboard:midi')).compressor.mode, 'toggle');
+
+
+const advanced = validateMidiAdvanced({ channel: 2, volumeCc: 20, wahCc: 11, programs: { '8': 'preset-1', '128': 'invalid' } });
+assert.deepEqual(advanced, { channel: 2, volumeCc: 20, wahCc: 11, programs: { '8': 'preset-1' } });
+assert.equal(validateMidiAdvanced({ volumeCc: 7, wahCc: 7 }).wahCc, null);
+assert.deepEqual(parseAdvancedMessage([0xc1, 8], advanced), { type: 'program', value: 8 });
+assert.equal(parseAdvancedMessage([0xc0, 8], advanced), null);
+assert.equal(parseAdvancedMessage([0xc1, 9], advanced), null);
+const advancedActions = [];
+const advancedHandlers = { program: (id) => advancedActions.push(['program', id]), volume: (value) => advancedActions.push(['volume', value]), wah: (value) => advancedActions.push(['wah', value]) };
+registerMidiAdvancedHandler((data) => dispatchAdvancedMessage(data, advanced, advancedHandlers), (data) => Boolean(parseAdvancedMessage(data, advanced)));
+const beforeAdvanced = bypassCalls.length;
+inputOne.emit([0xc1, 8]);
+inputOne.emit([0xb1, 20, 127]);
+inputOne.emit([0xb1, 11, 0]);
+assert.deepEqual(advancedActions, [['program', 'preset-1'], ['volume', 1], ['wah', 0]]);
+assert.equal(bypassCalls.length, beforeAdvanced, '익스프레션 CC가 페달 스위치에도 적용되었습니다.');
+await useAudioStore.getState().startMidiLearn('drive');
+inputOne.emit([0xb1, 20, 64]);
+assert.equal(useAudioStore.getState().midiLearningPedalId, 'drive');
+assert.match(useAudioStore.getState().midiError, /이미 사용 중/);
+useAudioStore.getState().cancelMidiLearn();
+registerMidiAdvancedHandler(null, null);
 
 const inputTwo = new MockMidiInput('input-2', 'Backup Controller');
 access.inputs.set(inputTwo.id, inputTwo);

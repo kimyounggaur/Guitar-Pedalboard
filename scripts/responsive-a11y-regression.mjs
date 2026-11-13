@@ -96,7 +96,9 @@ assert.equal(
   2,
   '비활성 모바일 미터가 render/sync 양쪽에서 rAF를 중지해야 합니다.',
 );
-assert.match(meterSource, /\}, \[active, isRunning, refreshMeters\]\);/);
+assert.match(meterSource, /\}, \[active, isRunning\]\);/);
+assert.match(meterSource, /window\.setInterval\(update, STORE_REFRESH_INTERVAL_MS\)/);
+assert.match(meterSource, /\}, \[isRunning, refreshMeters\]\);/);
 assert.match(meterSource, /tunerStatus === 'in-tune'[\s\S]*'정확함'/);
 assert.match(meterSource, /roundedCents > 0 \? '높음' : '낮음'/);
 assert.match(meterSource, /const boundedCents = Math\.round\(Math\.min\(50, Math\.max\(-50, hasPitch \? pitch\.cents : 0\)\)\);/);
@@ -151,7 +153,10 @@ assert.ok(namedGenericCount >= 20, `예상보다 적은 named generic 요소를 
 
 assert.match(indexSource, /viewport-fit=cover/);
 assert.match(responsiveCss, /@media \(min-width: 768px\) and \(max-width: 1279px\)/);
-assert.match(responsiveCss, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+assert.match(pedalsCss, /grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 300px\), 1fr\)\)/);
+assert.match(appShellSource, /useState\(false\)/);
+assert.match(appShellSource, /aria-expanded=\{mobileDockOpen\}/);
+assert.match(responsiveCss, /\.mobile-control-panels\[hidden\]/);
 assert.match(responsiveCss, /@media \(max-width: 767px\)/);
 assert.match(responsiveCss, /grid-auto-flow: column/);
 assert.match(responsiveCss, /scroll-snap-type: x mandatory/);

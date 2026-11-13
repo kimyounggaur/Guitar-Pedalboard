@@ -2,6 +2,7 @@ export const MIDI_STORAGE_KEY = 'guitar-pedalboard:midi';
 
 export interface MidiCcMapping {
   channel: number;
+  mode?: 'momentary' | 'toggle';
   cc: number;
   value: number;
   note?: never;
@@ -9,6 +10,7 @@ export interface MidiCcMapping {
 
 export interface MidiNoteMapping {
   channel: number;
+  mode?: 'momentary' | 'toggle';
   note: number;
   value: number;
   cc?: never;
@@ -65,13 +67,14 @@ export function isMidiMapping(value: unknown): value is MidiMapping {
   if (!isPlainRecord(value)) return false;
 
   const keys = Object.keys(value);
-  if (keys.some((key) => key !== 'channel' && key !== 'cc' && key !== 'note' && key !== 'value')) {
+  if (keys.some((key) => key !== 'channel' && key !== 'cc' && key !== 'note' && key !== 'value' && key !== 'mode')) {
     return false;
   }
 
   const hasCc = Object.hasOwn(value, 'cc');
   const hasNote = Object.hasOwn(value, 'note');
   return (
+    (value.mode === undefined || value.mode === 'momentary' || value.mode === 'toggle') &&
     hasCc !== hasNote &&
     isIntegerInRange(value.channel, 1, 16) &&
     isIntegerInRange(value.value, 0, 127) &&
@@ -127,7 +130,7 @@ export function parseMidiMessage(
       channel,
       cc: data1,
       value: data2,
-      bypassed: data2 >= 64,
+      bypassed: data2 < 64,
     };
   }
 
@@ -137,7 +140,7 @@ export function parseMidiMessage(
       channel,
       note: data1,
       value: data2,
-      bypassed: messageType === 0x90 && data2 > 0,
+      bypassed: !(messageType === 0x90 && data2 > 0),
     };
   }
 

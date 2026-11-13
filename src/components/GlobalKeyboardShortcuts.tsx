@@ -28,7 +28,7 @@ export function executeShortcutCommand(
 ): boolean {
   switch (command.type) {
     case 'toggle-pedal': {
-      if (!Number.isInteger(command.index) || command.index < 0 || command.index > 8) return false;
+      if (!Number.isInteger(command.index) || command.index < 0 || command.index > 14) return false;
 
       const pedalStore = usePedalStore.getState();
       const pedal = pedalStore.pedals[command.index];
@@ -43,7 +43,10 @@ export function executeShortcutCommand(
       const audioState = useAudioStore.getState();
       if (audioState.isLoading) return true;
 
-      if (audioState.isRunning) {
+      if (audioState.inputMode === 'file') {
+        if (audioState.isFilePaused) void audioState.playFile();
+        else audioState.pauseFile();
+      } else if (audioState.isRunning) {
         void audioState.stop();
       } else {
         void audioState.start();

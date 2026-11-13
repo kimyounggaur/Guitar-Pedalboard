@@ -1,6 +1,10 @@
+import { KnobNumberInput } from '../KnobNumberInput';
+import { knobDefault } from '../knobDefaults';
 import type { CSSProperties } from 'react';
 import type { DriveParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { useKnobDrag } from '../../hooks/useKnobDrag';
+import { initialPedals } from '../../store/pedalStore';
 
 interface DrivePedalProps {
   params: DriveParams;
@@ -47,8 +51,8 @@ export function DrivePedal({ params, onChange }: DrivePedalProps) {
       </div>
 
       <div className="tube-brand-plate">
-        <strong>TS-9</strong>
-        <span>Tube Screamer</span>
+        <strong>DRIVE</strong>
+        <span>Overdrive</span>
       </div>
 
       <div className="tube-footswitch-pad" aria-hidden="true">
@@ -69,6 +73,7 @@ export function DrivePedal({ params, onChange }: DrivePedalProps) {
         <SliderControl
           label="Mix"
           value={params.mix}
+          defaultValue={knobDefault('drive', 'mix')}
           min={0}
           max={100}
           step={1}
@@ -78,6 +83,7 @@ export function DrivePedal({ params, onChange }: DrivePedalProps) {
         <SliderControl
           label="Bias"
           value={params.bias}
+          defaultValue={knobDefault('drive', 'bias')}
           min={-1}
           max={1}
           step={0.01}
@@ -109,9 +115,12 @@ interface DriveKnobProps {
 function DriveKnob({ label, value, min, max, size = 'large', onChange }: DriveKnobProps) {
   const normalized = (value - min) / (max - min);
   const rotation = -135 + normalized * 270;
+  const defaults = initialPedals.find((pedal) => pedal.type === 'drive')!.params as DriveParams;
+  const defaultValue = ({ Drive: defaults.drive, Tone: defaults.tone, Level: defaults.level } as Record<string, number>)[label];
+  const dragHandlers = useKnobDrag(value, min, max, 1, onChange, defaultValue);
 
   return (
-    <label className={`tube-knob tube-knob-${size}`}>
+    <div className={`tube-knob tube-knob-${size}`}>
       <span className="tube-knob-shell" style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}>
         <input
           type="range"
@@ -119,6 +128,7 @@ function DriveKnob({ label, value, min, max, size = 'large', onChange }: DriveKn
           max={max}
           step={1}
           value={value}
+          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${Math.round(value)}%`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
@@ -126,6 +136,8 @@ function DriveKnob({ label, value, min, max, size = 'large', onChange }: DriveKn
         <i />
       </span>
       <span className="tube-knob-label">{label}</span>
-    </label>
+      <output>{Math.round(value)}%</output>
+      <KnobNumberInput label={label} value={value} min={min} max={max} step={1} onChange={onChange} />
+    </div>
   );
 }

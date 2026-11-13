@@ -1,3 +1,4 @@
+import { knobDefault } from '../knobDefaults';
 import type { ChorusParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 
@@ -22,6 +23,7 @@ export function ChorusPedal({ params, onChange }: ChorusPedalProps) {
         <SliderControl
           label="Rate"
           value={params.rate}
+          defaultValue={knobDefault('chorus', 'rate')}
           min={0.1}
           max={8}
           step={0.1}
@@ -31,6 +33,7 @@ export function ChorusPedal({ params, onChange }: ChorusPedalProps) {
         <SliderControl
           label="Depth"
           value={params.depth}
+          defaultValue={knobDefault('chorus', 'depth')}
           min={0}
           max={100}
           step={1}
@@ -40,6 +43,7 @@ export function ChorusPedal({ params, onChange }: ChorusPedalProps) {
         <SliderControl
           label="Spread"
           value={params.spread}
+          defaultValue={knobDefault('chorus', 'spread')}
           min={0}
           max={100}
           step={1}
@@ -49,6 +53,7 @@ export function ChorusPedal({ params, onChange }: ChorusPedalProps) {
         <SliderControl
           label="Tone"
           value={params.tone}
+          defaultValue={knobDefault('chorus', 'tone')}
           min={0}
           max={100}
           step={1}
@@ -58,6 +63,7 @@ export function ChorusPedal({ params, onChange }: ChorusPedalProps) {
         <SliderControl
           label="Mix"
           value={params.mix}
+          defaultValue={knobDefault('chorus', 'mix')}
           min={0}
           max={100}
           step={1}
@@ -67,6 +73,7 @@ export function ChorusPedal({ params, onChange }: ChorusPedalProps) {
         <SliderControl
           label="Level"
           value={params.level}
+          defaultValue={knobDefault('chorus', 'level')}
           min={0}
           max={200}
           step={1}

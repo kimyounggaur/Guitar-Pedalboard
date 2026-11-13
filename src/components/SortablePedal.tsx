@@ -1,4 +1,5 @@
 import { useSortable } from '@dnd-kit/sortable';
+import { memo } from 'react';
 import { CSS } from '@dnd-kit/utilities';
 import type { PedalState } from '../audio/types';
 import { PedalCard } from './PedalCard';
@@ -7,7 +8,7 @@ interface SortablePedalProps {
   pedal: PedalState;
 }
 
-export function SortablePedal({ pedal }: SortablePedalProps) {
+export const SortablePedal = memo(function SortablePedal({ pedal }: SortablePedalProps) {
   const {
     attributes,
     listeners,
@@ -37,4 +38,4 @@ export function SortablePedal({ pedal }: SortablePedalProps) {
       />
     </div>
   );
-}
+});

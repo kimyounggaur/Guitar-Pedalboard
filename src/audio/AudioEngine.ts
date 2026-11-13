@@ -27,11 +27,17 @@ import type {
   TuningPresetId,
 } from './types';
 import { clamp, dbToGain } from './utils/db';
+import { MAX_CAB_IR_BYTES, validateCabinetWav, validateDecodedCabinetIr } from './utils/cabinetIr';
 import { ImpulseCache } from './utils/impulseCache';
 import { rampParam } from './utils/smoothing';
 import { noiseGateProcessorSource } from './worklets/noise-gate-processor';
 import { envelopeFollowerProcessorSource } from './worklets/envelope-follower-processor';
 import { tunerProcessorSource } from './worklets/tuner-processor';
+import { howlGuardProcessorSource } from './worklets/howl-guard-processor';
+import { flangerProcessorSource } from './worklets/flanger-processor';
+import { phaserProcessorSource } from './worklets/phaser-processor';
+import { compressorProcessorSource } from './worklets/compressor-processor';
+import { peakLimiterProcessorSource } from './worklets/peak-limiter-processor';
 
 type EffectNode = EffectNodeWrapper;
 
@@ -48,13 +54,22 @@ export class AudioEngine {
   private static instance: AudioEngine | null = null;
 
   private context: AudioContext | null = null;
+  private outputDeviceId = '';
   private stream: MediaStream | null = null;
+  private inputEndedHandler: (() => void) | null = null;
+  private inputEndedCleanup: (() => void) | null = null;
   private source: MediaStreamAudioSourceNode | MediaElementAudioSourceNode | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private audioFileUrl: string | null = null;
   private inputGain: GainNode | null = null;
   private chainInput: GainNode | null = null;
   private masterGain: GainNode | null = null;
+  private limiter: AudioWorkletNode | null = null;
+  private howlGuard: AudioWorkletNode | null = null;
+  private inputSplitter: ChannelSplitterNode | null = null;
+  private inputChannelMode: '1' | '2' | 'stereo' = '1';
+  private howlProtectionEnabled = true;
+  private howlHandler: (() => void) | null = null;
   private recorderDestination: MediaStreamAudioDestinationNode | null = null;
   private inputMeter: MeterNode | null = null;
   private outputMeter: MeterNode | null = null;
@@ -62,7 +77,10 @@ export class AudioEngine {
   private tunerActive = false;
   private tunerConnected = false;
   private tuningPreset: TuningPresetId = 'standard';
+  private tuningReferenceHz = 440;
   private effects = new Map<string, EffectNode>();
+  private cabImpulses = new Map<string, { name: string; buffer: AudioBuffer }>();
+  private cabIrRequests = new Map<string, number>();
   private chainConnections = new Map<string, ChainConnection>();
   private reverbImpulseCache: ImpulseCache | null = null;
   private getPedals: () => PedalState[] = () => [];
@@ -82,6 +100,34 @@ export class AudioEngine {
     return AudioEngine.instance;
   }
 
+  setHowlHandler(handler: (() => void) | null): void { this.howlHandler = handler; }
+
+  setInputEndedHandler(handler: (() => void) | null): void { this.inputEndedHandler = handler; }
+
+  private watchInputEnd(stream: MediaStream, generation: number): void {
+    this.inputEndedCleanup?.();
+    const track = stream.getAudioTracks()[0];
+    if (!track) return;
+    let fired = false;
+    const onEnded = () => {
+      if (fired || this.stream !== stream || this.sessionGeneration !== generation) return;
+      fired = true;
+      this.inputEndedHandler?.();
+    };
+    track.addEventListener('ended', onEnded);
+    this.inputEndedCleanup = () => track.removeEventListener('ended', onEnded);
+  }
+
+  setHowlProtection(enabled: boolean): void {
+    this.howlProtectionEnabled = enabled;
+    this.howlGuard?.port.postMessage({ enabled: enabled && !!this.stream });
+  }
+
+  setInputChannelMode(mode: '1' | '2' | 'stereo'): void {
+    this.inputChannelMode = mode;
+    if (this.inputSplitter && this.source && this.inputGain) this.connectInput(this.source);
+  }
+
   setPedalsProvider(provider: () => PedalState[]): void {
     this.getPedals = provider;
   }
@@ -92,6 +138,32 @@ export class AudioEngine {
 
   setPlaybackEndedHandler(handler: (() => void) | null): void {
     this.playbackEndedHandler = handler;
+  }
+
+  get supportsOutputSelection(): boolean {
+    return typeof AudioContext !== 'undefined' && typeof (AudioContext.prototype as AudioContext & { setSinkId?: unknown }).setSinkId === 'function';
+  }
+
+  async listOutputDevices(): Promise<MediaDeviceInfo[]> {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+    return (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === 'audiooutput');
+  }
+
+  async setOutputDevice(deviceId: string): Promise<void> {
+    if (!this.supportsOutputSelection) throw new Error('이 브라우저는 출력 장치 선택을 지원하지 않습니다.');
+    if (this.context) {
+      const context = this.context as AudioContext & { setSinkId: (id: string) => Promise<void> };
+      await context.setSinkId(deviceId);
+    }
+    this.outputDeviceId = deviceId;
+  }
+
+  private async applyOutputDevice(context: AudioContext): Promise<void> {
+    if (!this.outputDeviceId) return;
+    const sinkContext = context as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+    if (!sinkContext.setSinkId) throw new Error('이 브라우저는 출력 장치 선택을 지원하지 않습니다.');
+    try { await sinkContext.setSinkId(this.outputDeviceId); }
+    catch { throw new Error('선택한 출력 장치에 연결할 수 없습니다. 출력 장치를 다시 선택해 주세요.'); }
   }
 
   async listInputDevices(): Promise<MediaDeviceInfo[]> {
@@ -115,6 +187,8 @@ export class AudioEngine {
     this.context = context;
 
     try {
+      await this.applyOutputDevice(context);
+      this.assertCurrentSession(context, generation);
       await this.loadWorklets();
       this.assertCurrentSession(context, generation);
 
@@ -131,11 +205,15 @@ export class AudioEngine {
       this.assertCurrentSession(context, generation);
 
       this.stream = stream;
+      this.watchInputEnd(stream, generation);
       this.source = context.createMediaStreamSource(stream);
       this.createProcessingGraph(this.source);
 
       await context.resume();
       this.assertCurrentSession(context, generation);
+      if (!stream.getAudioTracks().some((track) => track.readyState === 'live')) {
+        throw new Error('입력 장치 연결이 끊어졌습니다. 장치를 다시 연결해 주세요.');
+      }
     } catch (error) {
       if (stream && stream !== this.stream) {
         stream.getTracks().forEach((track) => track.stop());
@@ -158,12 +236,15 @@ export class AudioEngine {
     this.context = context;
 
     try {
+      await this.applyOutputDevice(context);
+      this.assertCurrentSession(context, generation);
       await this.loadWorklets();
       this.assertCurrentSession(context, generation);
 
       audioFileUrl = URL.createObjectURL(file);
       audioElement = new Audio(audioFileUrl);
       audioElement.preload = 'auto';
+      audioElement.loop = true;
       audioElement.addEventListener('ended', () => {
         this.playbackEndedHandler?.();
       });
@@ -251,8 +332,12 @@ export class AudioEngine {
         return new GraphicEQEffect(this.context, pedal);
       case 'eq':
         return new EQEffect(this.context, pedal);
-      case 'cab':
-        return new CabEffect(this.context, pedal);
+      case 'cab': {
+        const effect = new CabEffect(this.context, pedal);
+        const custom = this.cabImpulses.get(pedal.id);
+        if (custom) effect.setCustomImpulse(custom.buffer);
+        return effect;
+      }
       case 'chorus':
         return new ChorusEffect(this.context, pedal);
       case 'flanger':
@@ -284,7 +369,59 @@ export class AudioEngine {
   ): void {
     const pedal = this.getPedals().find((candidate) => candidate.id === pedalId);
     if (!pedal) return;
+    if (pedal.type === 'cab' && _paramName === 'model') this.clearCabinetIr(pedalId);
     this.effects.get(pedalId)?.update(pedal);
+  }
+
+  getCabinetIrName(pedalId: string): string | null {
+    return this.cabImpulses.get(pedalId)?.name ?? null;
+  }
+
+  async loadCabinetIr(pedalId: string, file: File): Promise<void> {
+    const context = this.context;
+    const generation = this.sessionGeneration;
+    if (!context || context.state === 'closed') throw new Error('먼저 오디오를 시작해 주세요.');
+    if (!/\.wav$/i.test(file.name) || file.size > MAX_CAB_IR_BYTES) {
+      throw new Error('IR 파일은 4 MB 이하의 WAV 파일이어야 합니다.');
+    }
+    const requestId = (this.cabIrRequests.get(pedalId) ?? 0) + 1;
+    this.cabIrRequests.set(pedalId, requestId);
+    const bytes = await file.arrayBuffer();
+    validateCabinetWav(bytes);
+    let buffer: AudioBuffer;
+    try { buffer = await context.decodeAudioData(bytes); }
+    catch { throw new Error('WAV IR 파일을 읽지 못했습니다.'); }
+    validateDecodedCabinetIr(buffer);
+    this.assertCurrentSession(context, generation);
+    if (this.cabIrRequests.get(pedalId) !== requestId) throw new Error('IR 적용이 취소되었습니다.');
+    const effect = this.effects.get(pedalId);
+    if (!(effect instanceof CabEffect)) throw new Error('캐비닛 페달을 찾을 수 없습니다.');
+    effect.setCustomImpulse(buffer);
+    this.cabImpulses.set(pedalId, { name: file.name, buffer });
+    // A queued chain rebuild may already have captured the old IR.
+    this.rebuildChain();
+    window.dispatchEvent(new Event('cab-ir-change'));
+  }
+
+  clearCabinetIr(pedalId: string): void {
+    this.cabIrRequests.set(pedalId, (this.cabIrRequests.get(pedalId) ?? 0) + 1);
+    if (!this.cabImpulses.delete(pedalId)) return;
+    const effect = this.effects.get(pedalId);
+    if (effect instanceof CabEffect) effect.setCustomImpulse(null);
+    this.rebuildChain();
+    window.dispatchEvent(new Event('cab-ir-change'));
+  }
+
+  /** Restore built-in IRs when loading a complete preset or comparison snapshot. */
+  clearAllCabinetIrs(): void {
+    this.cabIrRequests.forEach((requestId, pedalId) => this.cabIrRequests.set(pedalId, requestId + 1));
+    if (this.cabImpulses.size === 0) return;
+    this.cabImpulses.forEach((_impulse, pedalId) => {
+      const effect = this.effects.get(pedalId);
+      if (effect instanceof CabEffect) effect.setCustomImpulse(null);
+    });
+    this.cabImpulses.clear();
+    window.dispatchEvent(new Event('cab-ir-change'));
   }
 
   setPedalBypass(pedalId: string, _bypassed: boolean): void {
@@ -295,6 +432,11 @@ export class AudioEngine {
 
   setPedalEnabled(pedalId: string, enabled: boolean): void {
     this.effects.get(pedalId)?.setEnabled(enabled);
+  }
+
+  getCompressorReduction(pedalId: string): number | null {
+    const effect = this.effects.get(pedalId);
+    return effect instanceof CompressorEffect ? effect.getGainReduction() : null;
   }
 
   setInputGain(db: number): void {
@@ -318,7 +460,7 @@ export class AudioEngine {
 
     if (!this.recorderDestination) {
       this.recorderDestination = this.context.createMediaStreamDestination();
-      this.masterGain.connect(this.recorderDestination);
+      this.limiter?.connect(this.recorderDestination);
     }
 
     return this.recorderDestination.stream;
@@ -330,7 +472,7 @@ export class AudioEngine {
     this.recorderDestination = null;
 
     try {
-      this.masterGain?.disconnect(destination);
+      this.limiter?.disconnect(destination);
     } catch {
       // The master may already have been disconnected by panic cleanup.
     }
@@ -346,6 +488,12 @@ export class AudioEngine {
   setTuningPreset(preset: TuningPresetId): void {
     this.tuningPreset = preset;
     this.tuner?.setTuningPreset(preset);
+  }
+
+  setTuningReferenceHz(referenceHz: number): void {
+    if (!Number.isFinite(referenceHz)) return;
+    this.tuningReferenceHz = Math.min(480, Math.max(400, referenceHz));
+    this.tuner?.setReferenceHz(this.tuningReferenceHz);
   }
 
   estimateChainGain(): number {
@@ -377,7 +525,11 @@ export class AudioEngine {
       this.masterGain.gain.setValueAtTime(0, this.context.currentTime);
     }
 
-    this.panicDisconnect();
+    // Stop capture immediately, but leave the recorder graph alive until its final data event.
+    this.inputEndedCleanup?.();
+    this.inputEndedCleanup = null;
+    this.stream?.getTracks().forEach((track) => track.stop());
+    this.audioElement?.pause();
   }
 
   dispose(): void {
@@ -387,6 +539,8 @@ export class AudioEngine {
     this.reverbImpulseCache?.dispose();
     this.reverbImpulseCache = null;
 
+    this.inputEndedCleanup?.();
+    this.inputEndedCleanup = null;
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
 
@@ -407,11 +561,17 @@ export class AudioEngine {
     this.inputGain = null;
     this.chainInput = null;
     this.masterGain = null;
+    this.limiter = null;
+    this.howlGuard = null;
+    this.inputSplitter = null;
     this.recorderDestination = null;
     this.inputMeter = null;
     this.outputMeter = null;
     this.tuner = null;
     this.effects.clear();
+    this.cabImpulses.clear();
+    this.cabIrRequests.clear();
+    window.dispatchEvent(new Event('cab-ir-change'));
     this.workletsLoaded = false;
     this.workletUrls.forEach((url) => URL.revokeObjectURL(url));
     this.workletUrls = [];
@@ -457,26 +617,26 @@ export class AudioEngine {
     };
   }
 
-  readAudioGlitchCount(): number {
-    let glitchCount = 0;
-
-    this.effects.forEach((effect) => {
-      if (effect instanceof NoiseGateEffect) {
-        glitchCount += effect.readGlitchCount();
-      }
-    });
-
-    return glitchCount;
+  readAudioGlitchCount(): number | null {
+    if (!this.context || this.context.state === 'closed') return null;
+    try {
+      const stats = (this.context as AudioContext & { playbackStats?: { underrunEvents?: unknown } }).playbackStats;
+      const count = stats?.underrunEvents;
+      return typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? count : null;
+    } catch { return null; }
   }
 
   readLatency(): LatencyReading {
     if (!this.context || this.context.state === 'closed') {
-      return { base: 0, output: 0, sampleRate: 0 };
+      return { base: null, output: null, input: null, sampleRate: 0 };
     }
-
+    const validMs = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value * 1000 : null;
+    let input: number | null = null;
+    try { input = validMs((this.stream?.getAudioTracks?.()[0]?.getSettings?.() as (MediaTrackSettings & { latency?: number }) | undefined)?.latency); } catch { /* device does not expose latency */ }
     return {
-      base: this.context.baseLatency * 1000,
-      output: (this.context.outputLatency ?? 0) * 1000,
+      base: validMs(this.context.baseLatency),
+      output: validMs(this.context.outputLatency),
+      input,
       sampleRate: this.context.sampleRate,
     };
   }
@@ -504,6 +664,11 @@ export class AudioEngine {
       this.createWorkletUrl(noiseGateProcessorSource),
       this.createWorkletUrl(envelopeFollowerProcessorSource),
       this.createWorkletUrl(tunerProcessorSource),
+      this.createWorkletUrl(howlGuardProcessorSource),
+      this.createWorkletUrl(flangerProcessorSource),
+      this.createWorkletUrl(phaserProcessorSource),
+      this.createWorkletUrl(compressorProcessorSource),
+      this.createWorkletUrl(peakLimiterProcessorSource),
     ];
 
     await Promise.all(moduleUrls.map((url) => context.audioWorklet.addModule(url)));
@@ -560,20 +725,44 @@ export class AudioEngine {
     this.inputGain = this.context.createGain();
     this.chainInput = this.context.createGain();
     this.masterGain = this.context.createGain();
+    this.limiter = new AudioWorkletNode(this.context, 'peak-limiter-processor', { outputChannelCount: [2] });
+    this.howlGuard = new AudioWorkletNode(this.context, 'howl-guard', { outputChannelCount: [2] });
+    this.howlGuard.port.onmessage = (event) => {
+      if (event.data?.type === 'howl') this.howlHandler?.();
+    };
+    this.howlGuard.port.postMessage({ enabled: this.howlProtectionEnabled && !!this.stream });
     this.inputMeter = new MeterNode(this.context);
     this.outputMeter = new MeterNode(this.context);
     this.tuner = new TunerNode(this.context, this.tuningPreset);
+    this.tuner.setReferenceHz(this.tuningReferenceHz);
     this.tunerConnected = false;
 
     rampParam(this.inputGain.gain, dbToGain(this.inputGainDb), this.context, 0.02);
     this.masterGain.gain.value = 0;
 
-    source.connect(this.inputGain);
+    this.connectInput(source);
     this.inputGain.connect(this.inputMeter.input);
     this.inputGain.connect(this.chainInput);
-    this.masterGain.connect(this.outputMeter.input);
-    this.masterGain.connect(this.context.destination);
+    this.masterGain.connect(this.howlGuard);
+    this.howlGuard.connect(this.limiter);
+    this.limiter.connect(this.outputMeter.input);
+    this.limiter.connect(this.context.destination);
     this.syncTunerConnection();
+  }
+
+  private connectInput(source: AudioNode): void {
+    if (!this.context || !this.inputGain) return;
+    source.disconnect();
+    this.inputSplitter?.disconnect();
+    this.inputSplitter = null;
+    if (!this.stream || this.inputChannelMode === 'stereo') {
+      source.connect(this.inputGain);
+      return;
+    }
+    this.inputSplitter = this.context.createChannelSplitter(2);
+    source.connect(this.inputSplitter);
+    // An individual output of a splitter is mono; Web Audio duplicates it to stereo downstream.
+    this.inputSplitter.connect(this.inputGain, this.inputChannelMode === '1' ? 0 : 1);
   }
 
   private syncTunerConnection(): void {
@@ -756,6 +945,9 @@ export class AudioEngine {
     this.tuner?.setActive(false);
     this.tunerConnected = false;
     this.source?.disconnect();
+    this.inputSplitter?.disconnect();
+    this.howlGuard?.disconnect();
+    this.limiter?.disconnect();
     this.inputGain?.disconnect();
     this.chainInput?.disconnect();
     this.masterGain?.disconnect();

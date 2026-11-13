@@ -10,7 +10,6 @@ type CabinetProfile = {
   lowCutHz: number;
   midGainDb: number;
   upperCharacterDb: number;
-  decayShape: number;
   reflections: ReadonlyArray<readonly [delayMs: number, gain: number]>;
 };
 
@@ -22,7 +21,6 @@ const cabinetProfiles: Record<ActiveCabModel, CabinetProfile> = {
     lowCutHz: 85,
     midGainDb: 5.2,
     upperCharacterDb: 1.5,
-    decayShape: 5.2,
     reflections: [[7, 0.2], [16, -0.13], [31, 0.09]],
   },
   'greenback-4x12': {
@@ -32,7 +30,6 @@ const cabinetProfiles: Record<ActiveCabModel, CabinetProfile> = {
     lowCutHz: 90,
     midGainDb: 4.5,
     upperCharacterDb: -1.2,
-    decayShape: 5.6,
     reflections: [[8, 0.18], [19, -0.11], [34, 0.08]],
   },
   'blue-1x12': {
@@ -42,7 +39,6 @@ const cabinetProfiles: Record<ActiveCabModel, CabinetProfile> = {
     lowCutHz: 100,
     midGainDb: 4.2,
     upperCharacterDb: 2.2,
-    decayShape: 6.3,
     reflections: [[6, 0.17], [14, -0.1], [26, 0.07]],
   },
   'jensen-1x12': {
@@ -52,7 +48,6 @@ const cabinetProfiles: Record<ActiveCabModel, CabinetProfile> = {
     lowCutHz: 110,
     midGainDb: 3.8,
     upperCharacterDb: 0.3,
-    decayShape: 6.7,
     reflections: [[5, 0.16], [13, -0.09], [24, 0.06]],
   },
   'tweed-1x10': {
@@ -62,7 +57,6 @@ const cabinetProfiles: Record<ActiveCabModel, CabinetProfile> = {
     lowCutHz: 130,
     midGainDb: 5.5,
     upperCharacterDb: -1.8,
-    decayShape: 7.4,
     reflections: [[4, 0.14], [10, -0.08]],
   },
 };
@@ -188,6 +182,84 @@ function safeControl(value: number, fallback: number): number {
   return Number.isFinite(value) ? clamp(value, 0, 100) : fallback;
 }
 
+// A fixed six-string harmonic spectrum gives all generated cabinets the same
+// reproducible reference level; it is not a substitute for listening tests.
+const GUITAR_FUNDAMENTALS = [82.4069, 110, 146.8324, 195.9977, 246.9417, 329.6276];
+const MAX_REFERENCE_PEAK = Math.pow(10, 8 / 20);
+
+function responseMagnitude(samples: Float32Array, sampleRate: number, frequency: number): number {
+  const angle = -2 * Math.PI * frequency / sampleRate;
+  const stepReal = Math.cos(angle);
+  const stepImag = Math.sin(angle);
+  let real = 1, imag = 0, sumReal = 0, sumImag = 0;
+  for (const sample of samples) {
+    sumReal += sample * real;
+    sumImag += sample * imag;
+    const nextReal = real * stepReal - imag * stepImag;
+    imag = real * stepImag + imag * stepReal;
+    real = nextReal;
+  }
+  return Math.hypot(sumReal, sumImag);
+}
+
+// Zero-padded radix-2 FFT finds narrow peaks efficiently across the audible band.
+function maximumBandGain(samples: Float32Array, sampleRate: number): number {
+  let size = 1;
+  while (size < Math.max(samples.length * 2, 16384)) size *= 2;
+  const real = new Float64Array(size);
+  const imag = new Float64Array(size);
+  real.set(samples);
+  for (let index = 1, reversed = 0; index < size; index++) {
+    let bit = size >> 1;
+    for (; reversed & bit; bit >>= 1) reversed ^= bit;
+    reversed ^= bit;
+    if (index < reversed) {
+      const value = real[index]; real[index] = real[reversed]; real[reversed] = value;
+    }
+  }
+  for (let width = 2; width <= size; width *= 2) {
+    const angle = -2 * Math.PI / width;
+    const stepReal = Math.cos(angle), stepImag = Math.sin(angle);
+    for (let offset = 0; offset < size; offset += width) {
+      let twiddleReal = 1, twiddleImag = 0;
+      for (let index = 0; index < width / 2; index++) {
+        const left = offset + index, right = left + width / 2;
+        const rightReal = real[right] * twiddleReal - imag[right] * twiddleImag;
+        const rightImag = real[right] * twiddleImag + imag[right] * twiddleReal;
+        real[right] = real[left] - rightReal; imag[right] = imag[left] - rightImag;
+        real[left] += rightReal; imag[left] += rightImag;
+        const nextReal = twiddleReal * stepReal - twiddleImag * stepImag;
+        twiddleImag = twiddleReal * stepImag + twiddleImag * stepReal;
+        twiddleReal = nextReal;
+      }
+    }
+  }
+  let peak = 0;
+  const first = Math.ceil(20 * size / sampleRate);
+  const last = Math.min(size / 2, Math.floor(12000 * size / sampleRate));
+  for (let bin = first; bin <= last; bin++) peak = Math.max(peak, Math.hypot(real[bin], imag[bin]));
+  return peak;
+}
+
+function calibrateCabinet(samples: Float32Array, sampleRate: number): number {
+  let inputEnergy = 0, outputEnergy = 0;
+  for (const fundamental of GUITAR_FUNDAMENTALS) {
+    for (let harmonic = 1; harmonic <= 16; harmonic++) {
+      const frequency = fundamental * harmonic;
+      if (frequency >= sampleRate / 2) continue;
+      const weight = 1 / (harmonic * harmonic);
+      const magnitude = responseMagnitude(samples, sampleRate, frequency);
+      inputEnergy += weight;
+      outputEnergy += weight * magnitude * magnitude;
+    }
+  }
+  const reference = Math.sqrt(outputEnergy / inputEnergy);
+  const peak = maximumBandGain(samples, sampleRate);
+  if (!(reference > 0) || !(peak > 0)) return 1;
+  // Leave slight margin for peaks between FFT bins.
+  return Math.min(1 / reference, MAX_REFERENCE_PEAK * 0.96 / peak);
+}
+
 export function createCabinetImpulse(
   context: BaseAudioContext,
   model: CabParams['model'],
@@ -215,21 +287,20 @@ export function createCabinetImpulse(
   for (let channel = 0; channel < 2; channel += 1) {
     const samples = impulse.getChannelData(channel);
     const random = createSeededRandom(
-      hashSeed(`${model}:${Math.round(mic * 100)}:${Math.round(roomDistance * 100)}:${channel}`),
+      hashSeed(`${model}:${Math.round(mic * 100)}:${Math.round(roomDistance * 100)}`),
     );
     const directGain = 0.92 - roomDistance * 0.22;
-    samples[0] = directGain * (channel === 0 ? 1 : 0.985);
+    samples[0] = directGain;
 
     for (let index = 1; index < length; index += 1) {
-      const progress = index / length;
-      const envelope = Math.exp(-progress * profile.decayShape);
+      const envelope = Math.exp(-index / (sampleRate * 0.0025));
       const coneNoise = random() * 2 - 1;
       const coneResonance = Math.sin((2 * Math.PI * profile.midPeakHz * index) / sampleRate);
-      samples[index] = envelope * (coneNoise * 0.095 + coneResonance * 0.018);
+      samples[index] = envelope * (coneNoise * 0.004 + coneResonance * 0.0018);
     }
 
     profile.reflections.forEach(([delayMs, gain], reflectionIndex) => {
-      const stereoOffset = channel === 0 ? -reflectionIndex : reflectionIndex + 1;
+      const stereoOffset = 0;
       const delayWithDistance = delayMs + roomDistance * (5 + reflectionIndex * 2);
       const sampleIndex = Math.round((delayWithDistance * sampleRate) / 1000) + stereoOffset;
       if (sampleIndex > 0 && sampleIndex < samples.length) {
@@ -248,12 +319,10 @@ export function createCabinetImpulse(
   }
 
   if (absolutePeak > 0) {
-    const scale = 0.92 / absolutePeak;
+    const scale = calibrateCabinet(impulse.getChannelData(0), sampleRate);
     for (let channel = 0; channel < impulse.numberOfChannels; channel += 1) {
       const samples = impulse.getChannelData(channel);
-      for (let index = 0; index < samples.length; index += 1) {
-        samples[index] *= scale;
-      }
+      for (let index = 0; index < samples.length; index += 1) samples[index] *= scale;
     }
   }
 

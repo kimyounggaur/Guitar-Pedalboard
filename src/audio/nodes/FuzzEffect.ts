@@ -27,7 +27,7 @@ export class FuzzEffect extends BaseEffect {
 
     this.lowCut.type = 'highpass';
     this.lowCut.Q.value = 0.82;
-    this.shaper.oversample = '4x';
+    this.shaper.oversample = '2x';
     this.tone.type = 'lowpass';
     this.tone.Q.value = 0.9;
 

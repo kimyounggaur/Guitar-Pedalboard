@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { Blob, Buffer, File } from 'node:buffer';
 import console from 'node:console';
+import { setImmediate } from 'node:timers';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
@@ -15,7 +16,7 @@ const [engineSource, storeSource, meterSource, appShellSource, cssSource] = awai
 
 assert.match(engineSource, /createRecorderStream\(\): MediaStream/);
 assert.match(engineSource, /this\.context\.createMediaStreamDestination\(\)/);
-assert.match(engineSource, /this\.masterGain\.connect\(this\.recorderDestination\)/);
+assert.match(engineSource, /this\.limiter\?\.connect\(this\.recorderDestination\)/);
 assert.match(engineSource, /destination\.stream\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/);
 assert.match(storeSource, /disposeRecordingRuntime[\s\S]*audioEngine\.disposeRecorderStream\(\)/);
 assert.match(storeSource, /export type RecordingStatus = 'idle' \| 'recording' \| 'ready'/);
@@ -26,16 +27,16 @@ assert.match(storeSource, /selectRecorderMimeType/);
 assert.match(storeSource, /revokeRecordingUrl\(state\.recordedUrl\)/);
 assert.match(storeSource, /setSelectedDevice:[\s\S]*finishActiveRecording\('finalize'\)/);
 assert.match(storeSource, /startFile:[\s\S]*finishActiveRecording\('finalize'\)/);
-assert.match(storeSource, /panic:[\s\S]*finishActiveRecording\('abort'\)[\s\S]*audioEngine\.panic\(\)/);
-assert.match(storeSource, /HOWL_DURATION_MS[\s\S]*finishActiveRecording\('abort'\)[\s\S]*engine\.panic\(\)/);
+assert.match(storeSource, /panic:[\s\S]*audioEngine\.panic\(\)[\s\S]*finishActiveRecording\('finalize'\)/);
+assert.match(storeSource, /audioEngine\.setHowlHandler/);
 assert.match(appShellSource, /useEffect\(\(\) => \(\) => disposeRecording\(\)/);
 for (const label of ['녹음', '정지', '다운로드']) {
   assert.match(meterSource, new RegExp(`>\\s*${label}\\s*<\\/button>`));
 }
-assert.match(meterSource, /disabled=\{!recordingSupported \|\| !isRunning/);
+assert.match(meterSource, /disabled=\{!selectedRecordingSupported \|\| !isRunning/);
 assert.match(meterSource, /disabled=\{recordingStatus !== 'recording'\}/);
 assert.match(meterSource, /aria-live="polite"/);
-assert.match(meterSource, /createRecordingFilename\(\)/);
+assert.match(meterSource, /createRecordingFilename\(new Date\(\), recordedFormat\)/);
 assert.match(cssSource, /\.recording-panel/);
 assert.match(cssSource, /\.recording-actions/);
 
@@ -48,7 +49,7 @@ const helperBundle = await build({
   write: false,
 });
 const helperUrl = `data:text/javascript;base64,${Buffer.from(helperBundle.outputFiles[0].text).toString('base64')}`;
-const { createRecordingFilename, selectRecorderMimeType } = await import(helperUrl);
+const { createRecordingFilename, selectRecorderMimeType, recordingFormatFromMime, encodePcmWav, WavRecorder } = await import(helperUrl);
 
 assert.equal(
   selectRecorderMimeType((mimeType) => mimeType === 'audio/webm;codecs=opus'),
@@ -60,10 +61,64 @@ assert.equal(
 );
 assert.equal(selectRecorderMimeType(() => false), undefined);
 assert.equal(selectRecorderMimeType(), undefined);
+assert.equal(recordingFormatFromMime('audio/mp4;codecs=mp4a.40.2'), 'm4a');
+assert.equal(recordingFormatFromMime('video/mp4'), 'mp4');
+assert.equal(recordingFormatFromMime('audio/ogg;codecs=opus'), 'ogg');
+assert.equal(recordingFormatFromMime('audio/webm;codecs=opus'), 'webm');
+assert.equal(recordingFormatFromMime(''), 'unknown');
+assert.doesNotMatch(createRecordingFilename(new Date(2026, 8, 28), 'unknown'), /\.[a-z]+$/);
 assert.equal(
   createRecordingFilename(new Date(2026, 8, 28, 7, 5, 9)),
   'pedalboard-20260928-070509.webm',
 );
+
+const wav = encodePcmWav([new Float32Array([-1, 1, 0, 0.5])], 48000);
+const wavData = new DataView(await wav.arrayBuffer());
+const ascii = (start, count) => Array.from({ length: count }, (_, i) => String.fromCharCode(wavData.getUint8(start + i))).join('');
+assert.equal(wav.type, 'audio/wav');
+assert.equal(ascii(0, 4), 'RIFF');
+assert.equal(ascii(8, 4), 'WAVE');
+assert.equal(wavData.getUint32(4, true), 44);
+assert.equal(wavData.getUint16(20, true), 1);
+assert.equal(wavData.getUint16(22, true), 2);
+assert.equal(wavData.getUint32(24, true), 48000);
+assert.equal(wavData.getUint32(28, true), 192000);
+assert.equal(wavData.getUint32(40, true), 8);
+assert.equal(wavData.getInt16(44, true), -32768);
+assert.equal(wavData.getInt16(46, true), 32767);
+assert.equal(wavData.getInt16(50, true), 16384);
+assert.equal(wavData.getUint32(40, true) / wavData.getUint32(28, true), 2 / 48000);
+assert.match(createRecordingFilename(new Date(2026, 8, 28), 'wav'), /\.wav$/);
+assert.throws(() => encodePcmWav([new Float32Array(1)], 48000));
+
+class MockWavContext {
+  static instances = [];
+  constructor() { this.sampleRate = 48000; this.destination = {}; MockWavContext.instances.push(this); }
+  createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+  createScriptProcessor() { this.processor = { connect() {}, disconnect() {}, onaudioprocess: null }; return this.processor; }
+  createGain() { return { gain: { value: 1 }, connect() {}, disconnect() {} }; }
+  async resume() {}
+  async close() { this.closed = true; }
+}
+globalThis.AudioContext = MockWavContext;
+let limitCalls = 0;
+const wavRecorder = new WavRecorder({}, () => { limitCalls += 1; });
+MockWavContext.instances.at(-1).processor.onaudioprocess({ inputBuffer: { numberOfChannels: 2, getChannelData(channel) { return channel ? new Float32Array([1, 0.5]) : new Float32Array([-1, 0]); } } });
+const captured = new DataView(await (await wavRecorder.stop()).arrayBuffer());
+assert.equal(captured.getUint32(40, true), 8);
+assert.deepEqual([44, 46, 48, 50].map((offset) => captured.getInt16(offset, true)), [-32768, 32767, 0, 16384]);
+assert.equal(MockWavContext.instances.at(-1).processor.onaudioprocess, null);
+assert.equal(MockWavContext.instances.at(-1).closed, true);
+assert.equal(limitCalls, 0);
+class ShortLimitContext extends MockWavContext { constructor() { super(); this.sampleRate = 1; } }
+globalThis.AudioContext = ShortLimitContext;
+const limitedRecorder = new WavRecorder({}, () => { limitCalls += 1; });
+const samples = new Float32Array(130).fill(0.5);
+MockWavContext.instances.at(-1).processor.onaudioprocess({ inputBuffer: { numberOfChannels: 1, getChannelData() { return samples; } } });
+assert.equal(limitCalls, 1);
+const limitedWav = new DataView(await (await limitedRecorder.stop()).arrayBuffer());
+assert.equal(limitedWav.getUint32(40, true), 120 * 4);
+delete globalThis.AudioContext;
 
 let now = 1_000;
 Object.defineProperty(globalThis, 'performance', {
@@ -181,6 +236,28 @@ const runtimeUrl = `data:text/javascript;base64,${Buffer.from(runtimeBundle.outp
 const { AudioEngine, useAudioStore } = await import(runtimeUrl);
 const engine = AudioEngine.getInstance();
 
+// A fresh module instance represents a page reload using the same browser storage.
+assert.equal(useAudioStore.getState().tuningReferenceHz, 440);
+useAudioStore.getState().setTuningReferenceHz(442);
+useAudioStore.getState().setInputGainDb(3);
+useAudioStore.getState().setMasterVolume(0.5);
+useAudioStore.getState().setHowlProtectionEnabled(false);
+const savedIo = JSON.parse(storage.get('guitar-pedalboard:io'));
+assert.equal(savedIo.tuningReferenceHz, 442);
+assert.equal(savedIo.inputGainDb, 3);
+assert.equal(savedIo.masterVolume, 0.5);
+assert.equal(savedIo.howlProtectionEnabled, false);
+const reloaded = await import(`${runtimeUrl}#reference-reload`);
+assert.equal(reloaded.useAudioStore.getState().tuningReferenceHz, 442);
+assert.equal(reloaded.AudioEngine.getInstance().tuningReferenceHz, 442);
+storage.set('guitar-pedalboard:io', JSON.stringify({ tuningReferenceHz: 'invalid' }));
+const invalidSettings = await import(`${runtimeUrl}#invalid-reference`);
+assert.equal(invalidSettings.useAudioStore.getState().tuningReferenceHz, 440);
+storage.set('guitar-pedalboard:io', JSON.stringify({ tuningReferenceHz: 500 }));
+const outOfRange = await import(`${runtimeUrl}#out-of-range-reference`);
+assert.equal(outOfRange.useAudioStore.getState().tuningReferenceHz, 480);
+storage.delete('guitar-pedalboard:io');
+
 let destinationCreates = 0;
 let recorderTrackStops = 0;
 let destinationDisconnects = 0;
@@ -209,11 +286,17 @@ engine.context = {
   },
 };
 engine.masterGain = master;
+engine.limiter = master;
+let inputStops = 0;
+engine.stream = { getTracks: () => [{ stop: () => inputStops++ }] };
 assert.equal(engine.createRecorderStream(), recorderStream);
 assert.equal(engine.createRecorderStream(), recorderStream);
 assert.equal(destinationCreates, 1, 'recorder destination을 재사용하지 않았습니다.');
 assert.deepEqual(masterConnects, [destination]);
 engine.panic();
+assert.equal(inputStops, 1, 'Panic must stop microphone input immediately');
+assert.equal(recorderTrackStops, 0, 'Panic keeps recorder alive for finalization');
+engine.disposeRecorderStream();
 assert.equal(recorderTrackStops, 1);
 assert.equal(destinationDisconnects, 1);
 
@@ -232,6 +315,7 @@ engine.createRecorderStream = () => {
 engine.panic = () => {
   enginePanics += 1;
 };
+engine.dispose = () => {};
 engine.stop = async () => {
   engineStops += 1;
 };
@@ -308,12 +392,12 @@ useAudioStore.getState().startRecording();
 recorder = MockMediaRecorder.instances.at(-1);
 const urlsBeforePanic = createdUrls.length;
 useAudioStore.getState().panic();
-await Promise.resolve();
+await new Promise(resolve => setImmediate(resolve));
 assert.equal(enginePanics, 1);
 assert.equal(recorder.stopCalls, 1);
-assert.equal(useAudioStore.getState().recordingStatus, 'idle');
-assert.equal(useAudioStore.getState().recordedUrl, null);
-assert.equal(createdUrls.length, urlsBeforePanic, 'Panic abort가 Blob URL을 만들었습니다.');
+assert.equal(useAudioStore.getState().recordingStatus, 'ready');
+assert.ok(useAudioStore.getState().recordedUrl);
+assert.equal(createdUrls.length, urlsBeforePanic + 1, 'Panic should save recorded audio');
 
 useAudioStore.setState({
   isRunning: true,
@@ -322,21 +406,12 @@ useAudioStore.setState({
   error: null,
 });
 useAudioStore.getState().startRecording();
-const loudLevel = {
-  db: 0,
-  linear: 1,
-  peakDb: 0,
-  peakLinear: 1,
-  isClipping: true,
-  clipHoldUntil: 0,
-};
-useAudioStore.getState().refreshMeters(loudLevel, loudLevel);
-now += 1_300;
-useAudioStore.getState().refreshMeters(loudLevel, loudLevel);
-await Promise.resolve();
+engine.howlHandler();
+await new Promise(resolve => setImmediate(resolve));
 assert.equal(enginePanics, 2);
-assert.equal(useAudioStore.getState().recordingStatus, 'idle');
-assert.match(useAudioStore.getState().error, /하울링/);
+assert.equal(useAudioStore.getState().recordingStatus, 'ready');
+assert.ok(useAudioStore.getState().recordedUrl);
+assert.match(useAudioStore.getState().error, /피드백/);
 
 useAudioStore.setState({ isRunning: true, inputMode: 'device', error: null });
 useAudioStore.getState().startRecording();
@@ -351,6 +426,70 @@ assert.equal(recorderStreamDisposals, 1, 'unmount cleanup이 recorder track을 �
 assert.equal(intervals.size, 0);
 assert.equal(timeouts.size, 0);
 
+MockMediaRecorder.isTypeSupported = () => false;
+useAudioStore.setState({ isRunning: true, inputMode: 'device', error: null });
+useAudioStore.getState().startRecording();
+recorder = MockMediaRecorder.instances.at(-1);
+recorder.mimeType = 'audio/mp4;codecs=mp4a.40.2';
+await useAudioStore.getState().stopRecording();
+assert.equal(useAudioStore.getState().recordedFormat, 'm4a');
+assert.match(createdBlobs.at(-1).type, /^audio\/mp4/);
+assert.match(createRecordingFilename(new Date(2026, 8, 28), useAudioStore.getState().recordedFormat), /\.m4a$/);
+useAudioStore.getState().startRecording();
+await useAudioStore.getState().stopRecording();
+assert.equal(useAudioStore.getState().recordedFormat, 'unknown');
+assert.equal(createdBlobs.at(-1).type, '');
+useAudioStore.getState().startRecording();
+recorder = MockMediaRecorder.instances.at(-1);
+recorder.stop = function () {
+  this.state = 'inactive';
+  void Promise.resolve().then(() => {
+    this.ondataavailable?.({ data: new Blob(['audio'], { type: 'audio/ogg;codecs=opus' }) });
+    this.onstop?.();
+  });
+};
+await useAudioStore.getState().stopRecording();
+assert.equal(useAudioStore.getState().recordedFormat, 'ogg');
+assert.match(createdBlobs.at(-1).type, /^audio\/ogg/);
+
+globalThis.AudioContext = ShortLimitContext;
+useAudioStore.setState({ isRunning: true, inputMode: 'device', error: null });
+useAudioStore.getState().setRecordingFormat('wav');
+useAudioStore.getState().startRecording();
+assert.equal(useAudioStore.getState().recordingStatus, 'recording');
+MockWavContext.instances.at(-1).processor.onaudioprocess({ inputBuffer: { numberOfChannels: 1, getChannelData() { return samples; } } });
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(useAudioStore.getState().recordingStatus, 'ready');
+assert.equal(useAudioStore.getState().recordedFormat, 'wav');
+assert.ok(useAudioStore.getState().recordedUrl);
+assert.match(useAudioStore.getState().error, /WAV 녹음 제한/);
+useAudioStore.getState().disposeRecording();
+delete globalThis.AudioContext;
+
+// Default input unplug: the current track ends, the recording finalizes, and stale events are ignored.
+useAudioStore.setState({ isRunning: true, isLoading: false, inputMode: 'device', selectedDeviceId: '', error: null });
+useAudioStore.getState().setRecordingFormat('webm');
+useAudioStore.getState().startRecording();
+let endedCallback;
+const lostTrack = { addEventListener: (_type, cb) => { endedCallback = cb; }, removeEventListener() {} };
+const liveStream = { getAudioTracks: () => [lostTrack] };
+engine.stream = liveStream;
+const generation = engine.sessionGeneration;
+engine.watchInputEnd(liveStream, generation);
+const stopsBeforeDisconnect = engineStops;
+endedCallback();
+endedCallback();
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(engineStops, stopsBeforeDisconnect + 1);
+assert.equal(useAudioStore.getState().recordingStatus, 'ready');
+assert.match(useAudioStore.getState().error, /입력 장치 연결이 끊어져/);
+assert.equal(useAudioStore.getState().isRunning, false);
+engine.sessionGeneration += 1;
+endedCallback();
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(engineStops, stopsBeforeDisconnect + 1);
+useAudioStore.getState().disposeRecording();
+
 console.log(
-  'Recording regression passed: reusable master destination, MIME selection, timer/data finalization, URL revoke, device/start/file/stop finalize, panic/howl/unmount abort and UI contract.',
+  'Recording regression passed: reusable master destination, MIME selection, timer/data finalization, URL revoke, device/start/file/stop finalize, panic/howl finalize, unmount cleanup and UI contract.',
 );

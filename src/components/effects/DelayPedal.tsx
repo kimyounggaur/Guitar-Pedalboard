@@ -1,9 +1,13 @@
+import { KnobNumberInput } from '../KnobNumberInput';
+import { knobDefault } from '../knobDefaults';
 import type { CSSProperties } from 'react';
 import type { DelayParams, PedalParamValue } from '../../audio/types';
 import { useAudioStore } from '../../store/audioStore';
 import { SliderControl } from '../SliderControl';
 import { TapTempoControl } from '../TapTempoControl';
 import { ToggleSwitch } from '../ToggleSwitch';
+import { useKnobDrag } from '../../hooks/useKnobDrag';
+import { initialPedals } from '../../store/pedalStore';
 
 interface DelayPedalProps {
   pedalId: string;
@@ -43,6 +47,7 @@ export function DelayPedal({ pedalId, params, onChange }: DelayPedalProps) {
           min={20}
           max={2000}
           ariaValueText={`${Math.round(params.timeMs)} ms`}
+          disabled={params.sync}
           onChange={(value) => onChange('timeMs', value)}
         />
         <DelayKnob
@@ -96,6 +101,7 @@ export function DelayPedal({ pedalId, params, onChange }: DelayPedalProps) {
         <SliderControl
           label="Tone"
           value={params.tone}
+          defaultValue={knobDefault('delay', 'tone')}
           min={0}
           max={100}
           step={1}
@@ -124,15 +130,19 @@ interface DelayKnobProps {
   max: number;
   step?: number;
   ariaValueText: string;
+  disabled?: boolean;
   onChange: (value: number) => void;
 }
 
-function DelayKnob({ label, value, min, max, step = 1, ariaValueText, onChange }: DelayKnobProps) {
+function DelayKnob({ label, value, min, max, step = 1, ariaValueText, disabled = false, onChange }: DelayKnobProps) {
   const normalized = (value - min) / (max - min);
   const rotation = -135 + normalized * 270;
+  const defaults = initialPedals.find((pedal) => pedal.type === 'delay')!.params as DelayParams;
+  const defaultValue = ({ 'E.Level': defaults.mix, 'D.Time': defaults.timeMs, 'F.Back': defaults.feedback * 100, Mode: delayModes.indexOf(defaults.mode) } as Record<string, number>)[label];
+  const dragHandlers = useKnobDrag(value, min, max, step, onChange, defaultValue);
 
   return (
-    <label className="delay-knob">
+    <div className="delay-knob" title={disabled ? 'Sync 사용 중에는 템포와 음표 단위로 시간이 결정됩니다.' : undefined} style={disabled ? { opacity: 0.55 } : undefined}>
       <span className="delay-knob-shell" style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}>
         <input
           type="range"
@@ -140,6 +150,8 @@ function DelayKnob({ label, value, min, max, step = 1, ariaValueText, onChange }
           max={max}
           step={step}
           value={value}
+          {...dragHandlers}
+          disabled={disabled}
           aria-label={label}
           aria-valuetext={`${label} ${ariaValueText}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
@@ -147,6 +159,8 @@ function DelayKnob({ label, value, min, max, step = 1, ariaValueText, onChange }
         <i />
       </span>
       <span>{label}</span>
-    </label>
+      <output>{disabled ? 'Sync' : ariaValueText}</output>
+      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} disabled={disabled} onChange={onChange} />
+    </div>
   );
 }

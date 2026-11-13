@@ -33,7 +33,7 @@ Web Audio API로 동작하는 반응형 웹 기타 멀티 이펙터입니다. �
 
 ## 로컬 실행
 
-Node.js 20 이상을 권장합니다.
+Node.js 22 이상을 권장합니다.
 
 ```bash
 npm install
@@ -45,6 +45,7 @@ npm run dev
 ```bash
 npm run typecheck
 npm run lint
+npm test
 npm run build
 npm run preview
 ```
@@ -62,25 +63,27 @@ flowchart TD
   C --> CI[Chain Input]
   CI --> FX[15개 페달 체인\n드래그로 순서 변경]
   FX --> MG[Master Gain]
-  MG --> OM[Output Meter / Waveform]
-  MG --> RD[MediaStream Destination\nMediaRecorder]
-  MG --> OUT[AudioContext Destination]
+  MG --> HP[피드백 감시]
+  HP --> LM[마스터 피크 리미터]
+  LM --> OM[Output Meter / Waveform]
+  LM --> RD[WebM 또는 WAV 녹음]
+  LM --> OUT[AudioContext Destination]
 ```
 
-각 페달은 `BaseEffect`의 dry/wet, makeup gain, level, true-bypass 경로를 공유합니다. 순서 변경은 짧은 마스터 페이드와 연결 차이 적용으로 처리하고, Delay/Reverb의 trails는 바이패스 뒤에도 자연스럽게 감쇠합니다. Noise Gate, Auto Wah envelope follower, Tuner는 AudioWorklet에서 처리하며 Reverb IR은 Worker와 캐시를 사용해 생성합니다.
+각 페달은 `BaseEffect`의 dry/wet, makeup gain, level, true-bypass 경로를 공유합니다. 순서 변경은 짧은 마스터 페이드와 연결 차이 적용으로 처리하고, Delay/Reverb의 trails는 바이패스 뒤에도 자연스럽게 감쇠합니다. Noise Gate, Compressor, Auto Wah envelope follower, Flanger, Phaser, 피드백 감시, 마스터 리미터와 Tuner는 AudioWorklet에서 처리하며 Reverb IR은 Worker와 캐시를 사용해 생성합니다.
 
 ## 이펙터와 파라미터
 
-모든 페달은 공통으로 Mix, Level, On/Off, Bypass를 가집니다.
+모든 페달은 Mix, Level과 단일 효과 스위치를 가집니다. 구버전 두 스위치의 실제 활성 상태는 자동 변환합니다.
 
 | 이펙터 | 주요 파라미터 | 범위 또는 선택지 |
 | --- | --- | --- |
 | Noise Gate | Threshold, Attack, Hold, Release/Decay, Hysteresis | -80~-20 dB, 1~50 ms, 0~300 ms, 20~1000 ms, 0~10 dB |
-| Compressor | Threshold, Ratio, Attack, Release, Knee/Tone, Sustain | -60~-10 dB, 1:1~20:1, 0~1 s, 0~1 s, 0~40 dB, 0~100% |
+| Compressor | Threshold, Ratio, Attack, Release, Knee, Sustain | -60~-10 dB, 1:1~20:1, 0~1 s, 0~1 s, 0~40 dB, 0~100% |
 | Auto Wah | Sensitivity, Range, Resonance, Mode, Manual | 0~100%, Auto/Manual |
 | Drive | Mode, Drive, Tone, Bias | Overdrive/Crunch/Distortion/Fuzz, 0~100%, -1~1 |
 | Crunch | Gain, Tone, Presence, Low Cut, Volume | 0~100%, 40~400 Hz, 0~160% |
-| Fuzz | Mode, Fuzz, Tone, Bias, Gate, Low Cut | 3 modes, 0~100%, 40~400 Hz |
+| Fuzz | Mode, Fuzz, Tone, Bias, 출력 감쇠, Low Cut | 3 modes, 0~100%, 40~400 Hz |
 | Graphic EQ | 100/200/400/800 Hz, 1.6/3.2/6.4 kHz | 각 -12~+12 dB |
 | EQ | Low Cut, Bass, Mid Freq/Gain/Q, Treble, Presence | 20~400 Hz, gain ±12 dB, Q 0.3~4 |
 | Cab | Model, Mic Position, Distance, Low/High Cut, Presence | 5 models+Off, 0~100%, 40~200 Hz, 3~12 kHz, ±6 dB |
@@ -95,12 +98,17 @@ flowchart TD
 
 - 40개 팩토리 프리셋과 사용자 프리셋 저장·가져오기·내보내기
 - A/B 프리셋 슬롯과 탭 템포
-- Standard, Drop D, Half Step Down, Open G 튜닝
-- MIDI 우클릭 학습: CC 0~63=Off, 64~127=On 및 Note On/Off
-- 마스터 출력 WebM 녹음과 다운로드
-- 키보드 단축키: `1`~`9`, `Space`, `T`, `A`, `B`, `Esc`, `?`
+- Standard, Drop D, Half Step Down, Open G 및 크로매틱 튜닝, A4 기준음 400~480 Hz 저장
+- MIDI 풋스위치 학습과 누름 유지/토글, Program Change 프리셋 전환, 볼륨·수동 와우 익스프레션 CC
+- 마스터 출력 WebM 또는 16비트 스테레오 PCM WAV 녹음과 다운로드
+- WAV는 최대 2분 또는 600만 프레임에 도달하면 자동 저장
+- 사용자 캐비닛 WAV IR 불러오기(최대 4 MB·2초, 오디오 세션 동안 보관하며 전체 프리셋/A·B/기본 체인 적용 시 해제)
+- 페달 설정·순서·프리셋 변경의 실행 취소/다시 실행
+- 입력 1번/2번/스테레오와 지원 브라우저의 출력 장치 선택
+- 음원 반복·탐색과 Space 재생/일시정지
+- 키보드 단축키: `1`~`9`·`0`·`Q/W/E/R/Y`, `Space`, `T`, `A`, `B`, `Esc`, `?`, `Ctrl/⌘+Z`
 - 키보드 센서를 포함한 페달 순서 변경
-- 입력/출력 RMS·peak, 클리핑 텍스트, 파형, 지연시간, 실제 오디오 글리치 카운터
+- 입력/출력 RMS·peak와 파형, 브라우저가 제공하는 지연 설정·출력 버퍼 부족 지표(미지원은 명시)
 
 ## 알려진 제약
 
@@ -109,10 +117,14 @@ flowchart TD
 - Web MIDI는 지원 범위가 제한적이며 HTTPS와 사용자 권한이 필요합니다. 미지원 브라우저에서는 MIDI UI가 표시되지 않습니다.
 - 브라우저와 운영체제에 따라 실제 입출력 지연, 사용 가능한 장치명, MediaRecorder 코덱이 달라집니다.
 - 웹 오디오만으로 운영체제 드라이버 버퍼 크기를 직접 제어할 수 없습니다.
-- 실제 기타·오디오 인터페이스·헤드폰을 사용한 청감 및 하울링 검증은 자동 테스트로 대체할 수 없습니다.
+- 실제 기타·오디오 인터페이스·헤드폰을 사용한 청감 및 하울링 검증은 자동 테스트로 대체할 수 없습니다. 피드백 감시는 긴 지속음을 오인하거나 변동하는 피드백을 놓칠 수 있습니다.
+- WAV 캡처는 메인 스레드에 의존하므로 백그라운드 탭이나 기기 부하가 큰 환경에서 누락이 생길 수 있습니다.
+- 생성 Cab IR은 6현 배음 기준으로 음량을 보정하며, 주파수 피크 제한을 우선합니다. 이는 실제 기타 녹음이나 브라우저 렌더링의 음량 정렬을 보장하지 않습니다. 사용자 IR에는 이 보정을 적용하지 않습니다.
+- 40개 프리셋 기준 음량의 전체 정렬은 아직 검증되지 않았습니다. 새 컴프레서와 Cab 처리의 영향까지 포함해 동일 기타 신호로 렌더링·청취 확인이 필요합니다.
+- 현재 자동 신호 검사와 타입·린트·빌드 검증은 수행했지만, 이 개발 환경의 브라우저 연결 제한으로 최신 화면의 실기기·브라우저 검증은 완료하지 못했습니다.
 
 ## 라이선스
 
 애플리케이션 코드는 [MIT License](./LICENSE)로 배포됩니다.
 
-`Source/` 폴더의 스톡 이미지, 제품 사진, 참고 이미지는 배포 번들에 포함되지 않는 로컬 참고 자료입니다. 해당 자산을 재사용하거나 재배포하기 전에는 원저작자의 라이선스와 상표 사용 권한을 별도로 확인해야 합니다.
+`Source/`의 참고 이미지는 현재 소스 트리에서 제거되었습니다. 이전 Git 기록에는 남아 있을 수 있습니다.

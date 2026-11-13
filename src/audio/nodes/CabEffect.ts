@@ -16,11 +16,14 @@ export class CabEffect extends BaseEffect {
   private readonly highCut: BiquadFilterNode;
   private readonly presence: BiquadFilterNode;
   private lastModel: CabParams['model'] | null = null;
+  private customImpulse: AudioBuffer | null = null;
+  private currentPedal: PedalState;
   private lastMicPosition = Number.NaN;
   private lastDistance = Number.NaN;
 
   constructor(context: AudioContext, pedal: PedalState) {
     super(context, pedal);
+    this.currentPedal = pedal;
 
     this.lowCut = context.createBiquadFilter();
     this.convolver = context.createConvolver();
@@ -53,6 +56,7 @@ export class CabEffect extends BaseEffect {
 
   override update(pedal: PedalState): void {
     super.update(pedal);
+    this.currentPedal = pedal;
     const params = pedal.params as CabParams;
     const micPosition = finiteParam(params.micPosition, 55, 0, 100);
     const distance = finiteParam(params.distance, 30, 0, 100);
@@ -60,6 +64,16 @@ export class CabEffect extends BaseEffect {
     smoothParam(this.lowCut.frequency, finiteParam(params.lowCut, 85, 40, 200), this.context);
     smoothParam(this.highCut.frequency, finiteParam(params.highCut, 5400, 3000, 12000), this.context);
     smoothParam(this.presence.gain, finiteParam(params.presence, 1.5, -6, 6), this.context);
+
+    if (this.customImpulse) {
+      if (this.convolver.buffer !== this.customImpulse || !this.convolver.normalize) {
+        this.convolver.normalize = true;
+        this.convolver.buffer = this.customImpulse;
+      }
+      smoothParam(this.convolvedGain.gain, 1, this.context);
+      smoothParam(this.bypassGain.gain, 0, this.context);
+      return;
+    }
 
     if (params.model === 'off') {
       smoothParam(this.convolvedGain.gain, 0, this.context);
@@ -75,6 +89,7 @@ export class CabEffect extends BaseEffect {
       micPosition !== this.lastMicPosition ||
       distance !== this.lastDistance
     ) {
+      this.convolver.normalize = false;
       this.convolver.buffer = createCabinetImpulse(
         this.context,
         params.model,
@@ -90,9 +105,17 @@ export class CabEffect extends BaseEffect {
     smoothParam(this.bypassGain.gain, 0, this.context);
   }
 
+  setCustomImpulse(buffer: AudioBuffer | null): void {
+    this.customImpulse = buffer;
+    this.lastModel = null;
+    this.update(this.currentPedal);
+  }
+
   override dispose(): void {
     this.lowCut.disconnect();
     this.convolver.disconnect();
+    this.convolver.buffer = null;
+    this.customImpulse = null;
     this.convolvedGain.disconnect();
     this.bypassGain.disconnect();
     this.highCut.disconnect();

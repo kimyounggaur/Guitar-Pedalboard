@@ -1,9 +1,10 @@
+import { notifyStorageFailure } from './storageNotice';
 import { create } from 'zustand';
 import type { PedalParamValue, PedalParams, PedalState, PedalType } from '../audio/types';
 
 const STORAGE_KEY = 'guitar-pedalboard:pedals';
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export type StoredPedal = {
   id: string;
@@ -305,7 +306,7 @@ function stripBypassParams(params: Record<string, PedalParamValue>): Record<stri
 }
 
 function canUseStorage(): boolean {
-  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+  try { return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'; } catch { return false; }
 }
 
 function toStoredPedals(pedals: PedalState[]): StoredPedal[] {
@@ -317,13 +318,36 @@ function toStoredPedals(pedals: PedalState[]): StoredPedal[] {
   }));
 }
 
+let pendingPedalSave: ReturnType<typeof setTimeout> | undefined;
+let pendingPedals: PedalState[] | undefined;
 function savePedals(pedals: PedalState[]): void {
-  if (!canUseStorage()) return;
+  if (pendingPedalSave !== undefined) clearTimeout(pendingPedalSave);
+  pendingPedalSave = undefined;
+  pendingPedals = undefined;
   const storedState: StoredState = {
     version: SCHEMA_VERSION,
     pedals: toStoredPedals(pedals),
   };
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(storedState));
+  try {
+    if (!canUseStorage()) throw new Error('Storage unavailable');
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(storedState));
+  } catch {
+    notifyStorageFailure();
+  }
+}
+
+function schedulePedalSave(pedals: PedalState[]): void {
+  if (pendingPedalSave !== undefined) clearTimeout(pendingPedalSave);
+  pendingPedals = pedals;
+  pendingPedalSave = setTimeout(() => {
+    if (pendingPedals) savePedals(pendingPedals);
+  }, 300);
+}
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('pagehide', () => {
+    if (pendingPedals) savePedals(pendingPedals);
+  });
 }
 
 function isParamValue(value: unknown): value is PedalParamValue {
@@ -781,6 +805,15 @@ export const migrations: Record<number, (state: StoredState) => StoredState> = {
     version: 10,
     pedals: insertDefaultGraphicEQ(state.pedals),
   }),
+  10: (state) => ({
+    version: 11,
+    // Preserve the old audible state for every combination of the two switches.
+    pedals: state.pedals.map((pedal) => ({
+      ...pedal,
+      enabled: true,
+      bypassed: !pedal.enabled || pedal.bypassed,
+    })),
+  }),
 };
 
 export function migrateStoredState(input: StoredState): StoredState {
@@ -908,7 +941,7 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
   togglePedal: (id) =>
     set((state) => {
       const pedals = state.pedals.map((pedal) =>
-        pedal.id === id ? { ...clonePedal(pedal), enabled: !pedal.enabled } : clonePedal(pedal),
+        pedal.id === id ? { ...clonePedal(pedal), enabled: true, bypassed: pedal.enabled && !pedal.bypassed } : clonePedal(pedal),
       );
       savePedals(pedals);
       return { pedals };
@@ -917,7 +950,7 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
   setPedalBypass: (id, bypassed) =>
     set((state) => {
       const pedals = state.pedals.map((pedal) =>
-        pedal.id === id ? clonePedal({ ...pedal, bypassed }) : clonePedal(pedal),
+        pedal.id === id ? clonePedal({ ...pedal, enabled: true, bypassed }) : clonePedal(pedal),
       );
       savePedals(pedals);
       return { pedals };
@@ -926,8 +959,8 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
   updatePedalParam: (id, paramName, value) =>
     set((state) => {
       const pedals = state.pedals.map((pedal) => {
-        if (pedal.id !== id) return clonePedal(pedal);
-        if (paramName === 'bypass' || paramName === 'bypassed') return clonePedal(pedal);
+        if (pedal.id !== id) return pedal;
+        if (paramName === 'bypass' || paramName === 'bypassed') return pedal;
 
         const nextValue =
           pedal.type === 'delay' && paramName === 'feedback' && typeof value === 'number'
@@ -943,7 +976,7 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
         });
       });
 
-      savePedals(pedals);
+      schedulePedalSave(pedals);
       return { pedals };
     }),
 

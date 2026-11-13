@@ -1,7 +1,11 @@
+import { KnobNumberInput } from '../KnobNumberInput';
+import { knobDefault } from '../knobDefaults';
 import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import type { NoiseGateParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { useKnobDrag } from '../../hooks/useKnobDrag';
+import { initialPedals } from '../../store/pedalStore';
 
 interface NoiseGatePedalProps {
   params: NoiseGateParams;
@@ -22,9 +26,12 @@ interface NoiseGateKnobProps {
 function NoiseGateKnob({ label, value, min, max, step, className = '', ariaValueText, onChange }: NoiseGateKnobProps) {
   const normalized = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(normalized, 0), 1) * 270;
+  const defaults = initialPedals.find((pedal) => pedal.type === 'noiseGate')!.params as NoiseGateParams;
+  const defaultValue = ({ Threshold: defaults.thresholdDb, Decay: defaults.releaseMs, '간격': defaults.hysteresisDb } as Record<string, number>)[label];
+  const dragHandlers = useKnobDrag(value, min, max, step, onChange, defaultValue);
 
   return (
-    <label className={`noise-gate-knob ${className}`}>
+    <div className={`noise-gate-knob ${className}`}>
       <span
         className="noise-gate-knob-shell"
         style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}
@@ -35,6 +42,7 @@ function NoiseGateKnob({ label, value, min, max, step, className = '', ariaValue
           max={max}
           step={step}
           value={value}
+          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${ariaValueText}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
@@ -42,7 +50,9 @@ function NoiseGateKnob({ label, value, min, max, step, className = '', ariaValue
         <i aria-hidden="true" />
       </span>
       <strong>{label}</strong>
-    </label>
+      <output>{ariaValueText}</output>
+      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+    </div>
   );
 }
 
@@ -86,7 +96,7 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
             onChange={(value) => onChange('releaseMs', value)}
           />
           <NoiseGateKnob
-            label="Mode"
+            label="간격"
             value={params.hysteresisDb}
             min={0}
             max={10}
@@ -111,6 +121,7 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
         <SliderControl
           label="Reduction"
           value={params.reductionDb}
+          defaultValue={knobDefault('noiseGate', 'reductionDb')}
           min={-80}
           max={0}
           step={1}
@@ -120,6 +131,7 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
         <SliderControl
           label="Attack"
           value={params.attackMs}
+          defaultValue={knobDefault('noiseGate', 'attackMs')}
           min={1}
           max={50}
           step={1}
@@ -129,6 +141,7 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
         <SliderControl
           label="Hold"
           value={params.holdMs}
+          defaultValue={knobDefault('noiseGate', 'holdMs')}
           min={0}
           max={300}
           step={5}
@@ -138,6 +151,7 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
         <SliderControl
           label="Mix"
           value={params.mix}
+          defaultValue={knobDefault('noiseGate', 'mix')}
           min={0}
           max={100}
           step={1}
@@ -147,6 +161,7 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
         <SliderControl
           label="Level"
           value={params.level}
+          defaultValue={knobDefault('noiseGate', 'level')}
           min={0}
           max={100}
           step={1}

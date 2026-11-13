@@ -10,7 +10,7 @@ export function ChainText() {
   return (
     <section className="side-panel chain-panel">
       <div className="panel-title">
-        <p className="eyebrow">Signal Chain</p>
+        <p className="eyebrow">신호 흐름</p>
         <h2>체인 순서</h2>
       </div>
       <ol className="chain-list">
@@ -21,7 +21,7 @@ export function ChainText() {
               <PedalIcon type={pedal.type} color={pedal.color} />
               {pedal.name}
             </strong>
-            {pedal.bypassed && <em>Bypass</em>}
+            {pedal.bypassed && <em>꺼짐</em>}
           </li>
         ))}
       </ol>

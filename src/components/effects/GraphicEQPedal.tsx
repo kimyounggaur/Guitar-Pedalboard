@@ -1,5 +1,7 @@
 import type { GraphicEQParams, PedalParamValue } from '../../audio/types';
 import { VerticalFader } from '../VerticalFader';
+import { knobDefault } from '../knobDefaults';
+import { KnobNumberInput } from '../KnobNumberInput';
 
 interface GraphicEQPedalProps {
   params: GraphicEQParams;
@@ -44,6 +46,7 @@ export function GraphicEQPedal({ params, onChange }: GraphicEQPedalProps) {
               key={key}
               label={`${label} Hz`}
               value={value}
+              defaultValue={knobDefault('graphicEQ', key)}
               min={-12}
               max={12}
               step={0.5}
@@ -56,7 +59,7 @@ export function GraphicEQPedal({ params, onChange }: GraphicEQPedalProps) {
       </div>
 
       <div className="graphic-eq7-utility-controls">
-        <label>
+        <div>
           <span>
             Mix <output>{Math.round(params.mix)}%</output>
           </span>
@@ -68,10 +71,12 @@ export function GraphicEQPedal({ params, onChange }: GraphicEQPedalProps) {
             value={params.mix}
             aria-label="Graphic EQ Mix"
             aria-valuetext={`Graphic EQ Mix ${Math.round(params.mix)}%`}
+            onDoubleClick={() => onChange('mix', knobDefault('graphicEQ', 'mix'))}
             onChange={(event) => onChange('mix', Number(event.currentTarget.value))}
           />
-        </label>
-        <label>
+          <KnobNumberInput label="Graphic EQ Mix" value={params.mix} min={0} max={100} step={1} onChange={(value) => onChange('mix', value)} />
+        </div>
+        <div>
           <span>
             Level <output>{Math.round(params.level)}%</output>
           </span>
@@ -83,9 +88,11 @@ export function GraphicEQPedal({ params, onChange }: GraphicEQPedalProps) {
             value={params.level}
             aria-label="Graphic EQ Level"
             aria-valuetext={`Graphic EQ Level ${Math.round(params.level)}%`}
+            onDoubleClick={() => onChange('level', knobDefault('graphicEQ', 'level'))}
             onChange={(event) => onChange('level', Number(event.currentTarget.value))}
           />
-        </label>
+          <KnobNumberInput label="Graphic EQ Level" value={params.level} min={0} max={200} step={1} onChange={(value) => onChange('level', value)} />
+        </div>
       </div>
 
       <div className="graphic-eq7-brand-plate">

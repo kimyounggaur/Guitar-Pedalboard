@@ -28,7 +28,7 @@ export class CrunchEffect extends BaseEffect {
 
     this.lowCut.type = 'highpass';
     this.lowCut.Q.value = 0.72;
-    this.shaper.oversample = '4x';
+    this.shaper.oversample = '2x';
     this.tone.type = 'lowpass';
     this.tone.Q.value = 0.78;
     this.presence.type = 'peaking';
@@ -56,7 +56,7 @@ export class CrunchEffect extends BaseEffect {
       this.shaper.curve = createCrunchCurve(params.gain);
     }
 
-    const preGain = 1 + (params.gain / 100) * 22;
+    const preGain = 1 + (params.gain / 100) * 3;
     const toneFrequency = 1200 + (params.tone / 100) * 9400;
     const presenceFrequency = 3000 + (params.presence / 100) * 2200;
     const presenceGain = -3 + (params.presence / 100) * 9;

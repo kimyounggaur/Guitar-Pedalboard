@@ -1,6 +1,10 @@
+import { KnobNumberInput } from '../KnobNumberInput';
+import { knobDefault } from '../knobDefaults';
 import type { CSSProperties } from 'react';
 import type { FuzzParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { useKnobDrag } from '../../hooks/useKnobDrag';
+import { initialPedals } from '../../store/pedalStore';
 
 interface FuzzPedalProps {
   params: FuzzParams;
@@ -29,9 +33,12 @@ function FuzzKnob({ label, value, min, max, step, size = 'large', ariaValueText,
   const progress = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(progress, 0), 1) * 270;
   const accessibleValue = ariaValueText ?? `${Math.round(value)}%`;
+  const defaults = initialPedals.find((pedal) => pedal.type === 'fuzz')!.params as FuzzParams;
+  const defaultValue = ({ Level: defaults.level, Fuzz: defaults.fuzz, Mode: fuzzModes.indexOf(defaults.mode) } as Record<string, number>)[label];
+  const dragHandlers = useKnobDrag(value, min, max, step, onChange, defaultValue);
 
   return (
-    <label className={`fuzz-knob fuzz-knob-${size}`}>
+    <div className={`fuzz-knob fuzz-knob-${size}`}>
       <span
         className="fuzz-knob-shell"
         style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}
@@ -43,13 +50,16 @@ function FuzzKnob({ label, value, min, max, step, size = 'large', ariaValueText,
           max={max}
           step={step}
           value={value}
+          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${accessibleValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
       <strong>{label}</strong>
-    </label>
+      <output>{accessibleValue}</output>
+      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+    </div>
   );
 }
 
@@ -105,6 +115,7 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
         <SliderControl
           label="Tone"
           value={params.tone}
+          defaultValue={knobDefault('fuzz', 'tone')}
           min={0}
           max={100}
           step={1}
@@ -114,6 +125,7 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
         <SliderControl
           label="Bias"
           value={params.bias}
+          defaultValue={knobDefault('fuzz', 'bias')}
           min={0}
           max={100}
           step={1}
@@ -121,8 +133,9 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
           onChange={(value) => onChange('bias', value)}
         />
         <SliderControl
-          label="Gate"
+          label="출력 감쇠"
           value={params.gate}
+          defaultValue={knobDefault('fuzz', 'gate')}
           min={0}
           max={100}
           step={1}
@@ -132,6 +145,7 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
         <SliderControl
           label="Low Cut"
           value={params.lowCut}
+          defaultValue={knobDefault('fuzz', 'lowCut')}
           min={40}
           max={180}
           step={1}
@@ -141,6 +155,7 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
         <SliderControl
           label="Mix"
           value={params.mix}
+          defaultValue={knobDefault('fuzz', 'mix')}
           min={0}
           max={100}
           step={1}

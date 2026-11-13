@@ -1,3 +1,4 @@
+import { knobDefault } from '../knobDefaults';
 import type { AutoWahParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 
@@ -39,6 +40,7 @@ export function AutoWahPedal({ params, onChange }: AutoWahPedalProps) {
         <SliderControl
           label="Sensitivity"
           value={params.sensitivity}
+          defaultValue={knobDefault('autoWah', 'sensitivity')}
           min={0}
           max={100}
           step={1}
@@ -48,6 +50,7 @@ export function AutoWahPedal({ params, onChange }: AutoWahPedalProps) {
         <SliderControl
           label="Range"
           value={params.range}
+          defaultValue={knobDefault('autoWah', 'range')}
           min={0}
           max={100}
           step={1}
@@ -57,6 +60,7 @@ export function AutoWahPedal({ params, onChange }: AutoWahPedalProps) {
         <SliderControl
           label="Resonance"
           value={params.resonance}
+          defaultValue={knobDefault('autoWah', 'resonance')}
           min={0}
           max={100}
           step={1}
@@ -67,6 +71,7 @@ export function AutoWahPedal({ params, onChange }: AutoWahPedalProps) {
           <SliderControl
             label="Manual"
             value={params.manual}
+          defaultValue={knobDefault('autoWah', 'manual')}
             min={0}
             max={100}
             step={1}
@@ -77,6 +82,7 @@ export function AutoWahPedal({ params, onChange }: AutoWahPedalProps) {
         <SliderControl
           label="Mix"
           value={params.mix}
+          defaultValue={knobDefault('autoWah', 'mix')}
           min={0}
           max={100}
           step={1}
@@ -86,6 +92,7 @@ export function AutoWahPedal({ params, onChange }: AutoWahPedalProps) {
         <SliderControl
           label="Level"
           value={params.level}
+          defaultValue={knobDefault('autoWah', 'level')}
           min={0}
           max={200}
           step={1}

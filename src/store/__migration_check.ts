@@ -220,12 +220,20 @@ function assertCurrentPresetPreserved(preset: Preset | undefined, label: string)
 }
 
 export function runMigrationChecks(): void {
+  for (const enabled of [false, true]) {
+    for (const bypassed of [false, true]) {
+      const migrated = migrateStoredState({ version: 10, pedals: [{ id: 'drive', enabled, bypassed, params: {} }] });
+      assert(migrated.pedals[0].enabled === true, '통합 스위치 활성 상태 정규화');
+      assert(migrated.pedals[0].bypassed === (!enabled || bypassed), '기존 스위치 조합의 청감 상태 보존');
+    }
+  }
+
   const [gateState, timingState, toneState] = legacySamples.map((sample) =>
     migrateStoredState(JSON.parse(sample) as StoredState),
   );
 
   const gate = gateState.pedals[0];
-  assert(gateState.version === 10, '스키마 버전');
+  assert(gateState.version === SCHEMA_VERSION, '스키마 버전');
   assert(gate.params.thresholdDb === -48, 'Noise Gate threshold 변환');
   assert(gate.params.releaseMs === 240, 'Noise Gate release 변환');
   assert(gate.params.mix === 100 && gate.params.level === 80, '공통 퍼센트 변환');
@@ -272,7 +280,7 @@ export function runMigrationChecks(): void {
     ],
   });
 
-  assert(versionTwoWithoutCab.version === 10, 'v2에서 최신 버전 전환');
+  assert(versionTwoWithoutCab.version === SCHEMA_VERSION, 'v2에서 최신 버전 전환');
   assert(
     versionTwoWithoutCab.pedals.map((pedal) => pedal.id).join(',') ===
       'auto-wah,graphic-eq,eq,cab,chorus,flanger,phaser,tremolo,delay',
@@ -301,7 +309,7 @@ export function runMigrationChecks(): void {
     ],
   });
 
-  assert(versionThreeTrails.version === 10, 'v3에서 최신 버전 전환');
+  assert(versionThreeTrails.version === SCHEMA_VERSION, 'v3에서 최신 버전 전환');
   assert(
     versionThreeTrails.pedals.find((pedal) => pedal.id === 'delay')?.params.trails === true,
     'Delay Trails 기본값',
@@ -332,7 +340,7 @@ export function runMigrationChecks(): void {
     ],
   });
 
-  assert(versionFourWithoutChorus.version === 10, 'v4에서 최신 버전 전환');
+  assert(versionFourWithoutChorus.version === SCHEMA_VERSION, 'v4에서 최신 버전 전환');
   assert(
     versionFourWithoutChorus.pedals.map((pedal) => pedal.id).join(',') ===
       'auto-wah,graphic-eq,cab,chorus,flanger,phaser,tremolo,delay',
@@ -387,7 +395,7 @@ export function runMigrationChecks(): void {
     ],
   });
 
-  assert(versionFiveWithoutFlanger.version === 10, 'v5에서 최신 버전 전환');
+  assert(versionFiveWithoutFlanger.version === SCHEMA_VERSION, 'v5에서 최신 버전 전환');
   assert(
     versionFiveWithoutFlanger.pedals.map((pedal) => pedal.id).join(',') ===
       'auto-wah,graphic-eq,chorus,flanger,phaser,tremolo,delay',
@@ -445,7 +453,7 @@ export function runMigrationChecks(): void {
     ],
   });
 
-  assert(versionSixWithoutPhaser.version === 10, 'v6에서 최신 버전 전환');
+  assert(versionSixWithoutPhaser.version === SCHEMA_VERSION, 'v6에서 최신 버전 전환');
   assert(
     versionSixWithoutPhaser.pedals.map((pedal) => pedal.id).join(',') ===
       'auto-wah,graphic-eq,flanger,phaser,tremolo,delay',
@@ -506,7 +514,7 @@ export function runMigrationChecks(): void {
     ],
   });
 
-  assert(versionSevenWithoutTremolo.version === 10, 'v7에서 최신 버전 전환');
+  assert(versionSevenWithoutTremolo.version === SCHEMA_VERSION, 'v7에서 최신 버전 전환');
   assert(
     versionSevenWithoutTremolo.pedals.map((pedal) => pedal.id).join(',') ===
       'auto-wah,graphic-eq,phaser,tremolo,delay',
@@ -570,7 +578,7 @@ export function runMigrationChecks(): void {
     ],
   });
 
-  assert(versionEightWithoutAutoWah.version === 10, 'v8에서 최신 버전 전환');
+  assert(versionEightWithoutAutoWah.version === SCHEMA_VERSION, 'v8에서 최신 버전 전환');
   assert(
     versionEightWithoutAutoWah.pedals.map((pedal) => pedal.id).join(',') ===
       'compressor,auto-wah,drive,graphic-eq',
@@ -596,8 +604,8 @@ export function runMigrationChecks(): void {
   );
   assert(
     versionEightWithAutoWah.pedals.filter((pedal) => pedal.id === 'auto-wah').length === 1 &&
-      preservedAutoWah?.enabled === false &&
-      preservedAutoWah.bypassed === false &&
+      preservedAutoWah?.enabled === true &&
+      preservedAutoWah.bypassed === true &&
       preservedAutoWah.params.sensitivity === 81 &&
       preservedAutoWah.params.mode === 'manual' &&
       preservedAutoWah.params.manual === 67,
@@ -635,7 +643,7 @@ export function runMigrationChecks(): void {
     ],
   });
 
-  assert(versionNineWithoutGraphicEQ.version === 10, 'v9에서 v10 전환');
+  assert(versionNineWithoutGraphicEQ.version === SCHEMA_VERSION, 'v9에서 최신 버전 전환');
   assert(
     versionNineWithoutGraphicEQ.pedals.map((pedal) => pedal.id).join(',') ===
       'fuzz,graphic-eq,eq',
@@ -657,8 +665,8 @@ export function runMigrationChecks(): void {
   );
   assert(
     versionNineWithGraphicEQ.pedals.filter((pedal) => pedal.id === 'graphic-eq').length === 1 &&
-      preservedGraphicEQ?.enabled === false &&
-      preservedGraphicEQ.bypassed === false &&
+      preservedGraphicEQ?.enabled === true &&
+      preservedGraphicEQ.bypassed === true &&
       preservedGraphicEQ.params.mix === 83 &&
       preservedGraphicEQ.params.level === 117 &&
       preservedGraphicEQ.params.band100 === -8 &&

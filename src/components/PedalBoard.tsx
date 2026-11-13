@@ -19,7 +19,7 @@ import { usePedalStore } from '../store/pedalStore';
 import { PedalIcon } from './PedalIcon';
 import { SortablePedal } from './SortablePedal';
 
-const logoUrl = `${import.meta.env.BASE_URL}logo.png`;
+const logoUrl = `${import.meta.env.BASE_URL}logo.webp`;
 
 interface PedalBoardProps {
   inputPanel?: ReactNode;
@@ -93,7 +93,7 @@ export function PedalBoard({ inputPanel }: PedalBoardProps) {
           </h1>
         </div>
         <div className="header-tools">
-          <span className="hint">드래그 종료 후 체인을 재연결합니다</span>
+          <span className="hint">페달을 끌어서 순서를 바꿀 수 있습니다.</span>
           {inputPanel}
         </div>
       </div>
@@ -106,7 +106,7 @@ export function PedalBoard({ inputPanel }: PedalBoardProps) {
         aria-atomic="true"
         tabIndex={0}
       >
-        <span className="chain-endpoint">Guitar Input</span>
+        <span className="chain-endpoint">기타 입력</span>
         {pedals.map((pedal) => (
           <span className="signal-chain-hop" key={pedal.id}>
             <span className="chain-arrow" aria-hidden="true">
@@ -122,7 +122,7 @@ export function PedalBoard({ inputPanel }: PedalBoardProps) {
           <span className="chain-arrow" aria-hidden="true">
             -&gt;
           </span>
-          <span className="chain-endpoint">Output</span>
+          <span className="chain-endpoint">출력</span>
         </span>
       </div>
 
@@ -144,7 +144,7 @@ export function PedalBoard({ inputPanel }: PedalBoardProps) {
 
       {showChainToast && (
         <div className="chain-toast" role="status">
-          Signal Chain Updated
+          페달 순서가 변경되었습니다.
         </div>
       )}
     </section>

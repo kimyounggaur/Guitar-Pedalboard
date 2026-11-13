@@ -1,3 +1,4 @@
+import { notifyStorageFailure } from './storageNotice';
 import { create } from 'zustand';
 import { AudioEngine } from '../audio/AudioEngine';
 import type {
@@ -26,12 +27,15 @@ import {
   type MidiDeviceInfo,
   type MidiMappings,
 } from '../audio/midi';
-import { selectRecorderMimeType } from '../audio/recording';
+import { recordingFormatFromMime, selectRecorderMimeType, WavRecorder, type RecordingFileFormat } from '../audio/recording';
 import { usePedalStore } from './pedalStore';
 
 const IO_STORAGE_KEY = 'guitar-pedalboard:io';
-const HOWL_THRESHOLD_DB = -3;
-const HOWL_DURATION_MS = 1200;
+const OUTPUT_STORAGE_KEY = 'guitar-pedalboard:output-device';
+function readOutputDevice(): string {
+  try { return typeof window === 'undefined' ? '' : window.localStorage.getItem(OUTPUT_STORAGE_KEY) ?? ''; } catch { return ''; }
+}
+const initialOutputDevice = readOutputDevice();
 const RECORDING_TIMER_INTERVAL_MS = 250;
 const RECORDING_STOP_FALLBACK_MS = 1000;
 
@@ -39,12 +43,14 @@ interface IoSettings {
   inputGainDb: number;
   masterVolume: number;
   howlProtectionEnabled: boolean;
+  tuningReferenceHz: number;
 }
 
 const defaultIoSettings: IoSettings = {
   inputGainDb: 0,
   masterVolume: 0.9,
   howlProtectionEnabled: true,
+  tuningReferenceHz: 440,
 };
 
 const silentLevel: LevelReading = {
@@ -56,18 +62,15 @@ const silentLevel: LevelReading = {
   clipHoldUntil: 0,
 };
 const emptyPitch: PitchReading = { frequency: null, note: null, cents: 0 };
-const emptyLatency: LatencyReading = { base: 0, output: 0, sampleRate: 0 };
+const emptyLatency: LatencyReading = { base: null, output: null, input: null, sampleRate: 0 };
 
-let howlThresholdStartedAt: number | null = null;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
 function readIoSettings(): IoSettings {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    return { ...defaultIoSettings };
-  }
+  if (typeof window === 'undefined') return { ...defaultIoSettings };
 
   try {
     const raw = window.localStorage.getItem(IO_STORAGE_KEY);
@@ -93,6 +96,10 @@ function readIoSettings(): IoSettings {
         typeof stored.howlProtectionEnabled === 'boolean'
           ? stored.howlProtectionEnabled
           : defaultIoSettings.howlProtectionEnabled,
+      tuningReferenceHz:
+        typeof stored.tuningReferenceHz === 'number' && Number.isFinite(stored.tuningReferenceHz)
+          ? Math.round(clamp(stored.tuningReferenceHz, 400, 480))
+          : defaultIoSettings.tuningReferenceHz,
     };
   } catch {
     return { ...defaultIoSettings };
@@ -100,24 +107,27 @@ function readIoSettings(): IoSettings {
 }
 
 function persistIoSettings(settings: IoSettings): void {
-  if (typeof window === 'undefined' || !window.localStorage) return;
+  if (typeof window === 'undefined') return;
 
   try {
     window.localStorage.setItem(IO_STORAGE_KEY, JSON.stringify(settings));
   } catch {
-    // Audio controls continue to work even if storage is unavailable or full.
+    notifyStorageFailure();
   }
 }
 
 function resetHowlWatch(): void {
-  howlThresholdStartedAt = null;
+  // Detection state is held in the audio worklet.
 }
 
 function isSamePitch(left: PitchReading, right: PitchReading): boolean {
   return (
     left.frequency === right.frequency &&
     left.note === right.note &&
-    left.cents === right.cents
+    left.cents === right.cents &&
+    left.targetNote === right.targetNote &&
+    left.stringNumber === right.stringNumber &&
+    left.octaveMismatch === right.octaveMismatch
   );
 }
 
@@ -125,6 +135,7 @@ function isSameLatency(left: LatencyReading, right: LatencyReading): boolean {
   return (
     left.base === right.base &&
     left.output === right.output &&
+    left.input === right.input &&
     left.sampleRate === right.sampleRate
   );
 }
@@ -135,6 +146,7 @@ audioEngine.setInputGain(initialIoSettings.inputGainDb);
 audioEngine.setMasterVolume(initialIoSettings.masterVolume);
 audioEngine.setTunerActive(false);
 audioEngine.setTuningPreset('standard');
+audioEngine.setTuningReferenceHz(initialIoSettings.tuningReferenceHz);
 
 const MIDI_SUPPORTED =
   typeof navigator !== 'undefined' && typeof navigator.requestMIDIAccess === 'function';
@@ -160,15 +172,27 @@ function persistMidiMappings(mappings: MidiMappings): void {
   try {
     window.localStorage?.setItem(MIDI_STORAGE_KEY, JSON.stringify(mappings));
   } catch {
-    // MIDI control remains available for this session if storage is unavailable.
+    notifyStorageFailure();
   }
 }
 
+let midiAdvancedHandler: ((data: Uint8Array) => boolean) | null = null;
+let midiAdvancedMatches: ((data: Uint8Array) => boolean) | null = null;
+export function registerMidiAdvancedHandler(handler: ((data: Uint8Array) => boolean) | null, matches: ((data: Uint8Array) => boolean) | null): void {
+  midiAdvancedHandler = handler;
+  midiAdvancedMatches = matches;
+}
+const midiPressed = new Map<string, boolean>();
+
 function handleMidiMessage(event: MIDIMessageEvent): void {
+  const audioState = useAudioStore.getState();
+  if (audioState.midiLearningPedalId && event.data && midiAdvancedMatches?.(event.data)) {
+    useAudioStore.setState({ midiError: '이 MIDI 신호는 익스프레션 또는 프리셋 전환에 이미 사용 중입니다.' });
+    return;
+  }
+  if (!audioState.midiLearningPedalId && event.data && midiAdvancedHandler?.(event.data)) return;
   const message = parseMidiMessage(event.data);
   if (!message) return;
-
-  const audioState = useAudioStore.getState();
   const learningPedalId = audioState.midiLearningPedalId;
   if (learningPedalId) {
     const pedalExists = usePedalStore
@@ -197,10 +221,18 @@ function handleMidiMessage(event: MIDIMessageEvent): void {
 
     const pedalStore = usePedalStore.getState();
     const pedal = pedalStore.pedals.find((candidate) => candidate.id === pedalId);
-    if (!pedal || pedal.bypassed === message.bypassed) return;
-
-    pedalStore.setPedalBypass(pedalId, message.bypassed);
-    audioEngine.setPedalBypass(pedalId, message.bypassed);
+    if (!pedal) return;
+    let bypassed = message.bypassed;
+    if (mapping.mode === 'toggle') {
+      const pressed = !message.bypassed;
+      const wasPressed = midiPressed.get(pedalId) ?? false;
+      midiPressed.set(pedalId, pressed);
+      if (!pressed || wasPressed) return;
+      bypassed = !pedal.bypassed;
+    }
+    if (pedal.bypassed === bypassed) return;
+    pedalStore.setPedalBypass(pedalId, bypassed);
+    audioEngine.setPedalBypass(pedalId, bypassed);
   });
 }
 
@@ -284,6 +316,9 @@ type RecordingEndMode = 'finalize' | 'abort';
 
 const MEDIA_RECORDER_SUPPORTED = typeof MediaRecorder !== 'undefined';
 let activeRecorder: MediaRecorder | null = null;
+let activeWavRecorder: WavRecorder | null = null;
+let wavCompletion: Promise<void> | null = null;
+let wavAbortRequested = false;
 let recordingChunks: Blob[] = [];
 let recordingTimer: number | null = null;
 let recordingStopFallback: number | null = null;
@@ -291,7 +326,7 @@ let recordingStartedAt = 0;
 let recordingGeneration = 0;
 let recordingEndMode: RecordingEndMode = 'finalize';
 let recordingStopRequested = false;
-let recordingMimeType = 'audio/webm';
+let recordingMimeType = '';
 let recordingCompletion: Promise<void> | null = null;
 let resolveRecordingCompletion: (() => void) | null = null;
 
@@ -344,11 +379,13 @@ function settleRecording(
 
   if (mode === 'finalize') {
     try {
-      const blob = new Blob(chunks, { type: candidate.mimeType || recordingMimeType });
+      const mime = candidate.mimeType || recordingMimeType || chunks.find((chunk) => chunk.type)?.type || '';
+      const blob = new Blob(chunks, { type: mime });
       const recordedUrl = URL.createObjectURL(blob);
       useAudioStore.setState({
         recordingStatus: 'ready',
         recordedUrl,
+        recordedFormat: recordingFormatFromMime(mime),
         recordingElapsed: elapsed,
       });
     } catch {
@@ -372,6 +409,26 @@ function settleRecording(
 }
 
 function finishActiveRecording(mode: RecordingEndMode): Promise<void> {
+  if (wavCompletion) {
+    if (mode === 'abort') wavAbortRequested = true;
+    return wavCompletion;
+  }
+  if (activeWavRecorder) {
+    const recorder = activeWavRecorder;
+    activeWavRecorder = null;
+    wavAbortRequested = mode === 'abort';
+    clearRecordingTimer();
+    const elapsed = Math.floor((recordingNow() - recordingStartedAt) / 1000);
+    wavCompletion = recorder.stop().then((blob) => {
+      if (!wavAbortRequested) {
+        useAudioStore.setState({ recordingStatus: 'ready', recordedUrl: URL.createObjectURL(blob), recordedFormat: 'wav', recordingElapsed: elapsed });
+      } else {
+        useAudioStore.setState({ recordingStatus: 'idle', recordedUrl: null, recordingElapsed: 0 });
+      }
+    }).catch(() => useAudioStore.setState({ recordingStatus: 'idle', error: 'WAV 녹음을 저장하지 못했습니다.' }))
+      .finally(() => { wavCompletion = null; });
+    return wavCompletion;
+  }
   const candidate = activeRecorder;
   if (!candidate) {
     clearRecordingTimer();
@@ -486,6 +543,10 @@ function applyTempoSyncToPedal(pedalId: string, sync: boolean, bpm: number): voi
 interface AudioStore {
   devices: MediaDeviceInfo[];
   selectedDeviceId: string;
+  outputDevices: MediaDeviceInfo[];
+  selectedOutputDeviceId: string;
+  outputSelectionSupported: boolean;
+  setOutputDevice: (deviceId: string) => Promise<void>;
   inputMode: InputMode;
   uploadedFileName: string | null;
   fileCurrentTime: number;
@@ -497,14 +558,17 @@ interface AudioStore {
   inputLevel: LevelReading;
   outputLevel: LevelReading;
   activeEffectCount: number;
-  audioGlitchCount: number;
+  audioGlitchCount: number | null;
   pitch: PitchReading;
   isTunerActive: boolean;
   tuningPreset: TuningPresetId;
+  tuningReferenceHz: number;
   latency: LatencyReading;
   inputGainDb: number;
   masterVolume: number;
   howlProtectionEnabled: boolean;
+  inputChannelMode: '1' | '2' | 'stereo';
+  setInputChannelMode: (mode: '1' | '2' | 'stereo') => void;
   chainGainWarning: string | null;
   estimatedChainGainDb: number;
   tapTempo: { taps: number[]; bpm: number };
@@ -514,6 +578,9 @@ interface AudioStore {
   midiMappings: MidiMappings;
   midiError: string | null;
   recordingSupported: boolean;
+  recordingFormat: 'webm' | 'wav';
+  recordedFormat: RecordingFileFormat;
+  setRecordingFormat: (format: 'webm' | 'wav') => void;
   recordingStatus: RecordingStatus;
   recordedUrl: string | null;
   recordingElapsed: number;
@@ -523,6 +590,7 @@ interface AudioStore {
   setHowlProtectionEnabled: (enabled: boolean) => void;
   setTunerActive: (active: boolean) => void;
   setTuningPreset: (preset: TuningPresetId) => void;
+  setTuningReferenceHz: (referenceHz: number) => void;
   refreshChainGainWarning: () => void;
   setSelectedDevice: (deviceId: string) => Promise<void>;
   start: () => Promise<void>;
@@ -536,6 +604,8 @@ interface AudioStore {
   setGlobalBpm: (bpm: number) => void;
   setTempoSync: (pedalId: string, sync: boolean) => void;
   adoptTempoFromPedals: () => void;
+  connectSavedMidi: (force?: boolean) => Promise<void>;
+  setMidiMode: (pedalId: string, mode: 'momentary' | 'toggle') => void;
   startMidiLearn: (pedalId: string) => Promise<void>;
   cancelMidiLearn: () => void;
   removeMidiMapping: (pedalId: string) => void;
@@ -547,7 +617,13 @@ interface AudioStore {
 }
 
 function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
+  if (error instanceof Error) {
+    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') return '마이크 권한이 차단되었습니다. 브라우저 주소창의 사이트 설정에서 마이크를 허용해 주세요.';
+    if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError' || error.name === 'OverconstrainedError') return '선택한 입력 장치를 찾을 수 없습니다. 연결 상태를 확인하고 장치 목록을 새로고침해 주세요.';
+    if (error.name === 'NotReadableError' || error.name === 'TrackStartError') return '입력 장치를 사용할 수 없습니다. 다른 앱에서 장치를 사용 중인지 확인해 주세요.';
+    if (error.name === 'AbortError') return '오디오 장치 연결이 중단되었습니다. 장치를 확인한 뒤 다시 시도해 주세요.';
+    if (/[가-힣]/.test(error.message)) return error.message;
+  }
   return '오디오 장치를 시작하지 못했습니다.';
 }
 
@@ -556,7 +632,7 @@ function resetReadings() {
     inputLevel: silentLevel,
     outputLevel: silentLevel,
     activeEffectCount: 0,
-    audioGlitchCount: 0,
+    audioGlitchCount: null,
     pitch: emptyPitch,
     latency: emptyLatency,
     fileCurrentTime: 0,
@@ -578,6 +654,9 @@ async function switchInputDevice(deviceId: string) {
 export const useAudioStore = create<AudioStore>((set, get) => ({
   devices: [],
   selectedDeviceId: '',
+  outputDevices: [],
+  selectedOutputDeviceId: initialOutputDevice,
+  outputSelectionSupported: audioEngine.supportsOutputSelection,
   inputMode: 'idle',
   uploadedFileName: null,
   fileCurrentTime: 0,
@@ -589,14 +668,17 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   inputLevel: silentLevel,
   outputLevel: silentLevel,
   activeEffectCount: 0,
-  audioGlitchCount: 0,
+  audioGlitchCount: null,
   pitch: emptyPitch,
   isTunerActive: false,
   tuningPreset: 'standard',
+  tuningReferenceHz: initialIoSettings.tuningReferenceHz,
   latency: emptyLatency,
   inputGainDb: initialIoSettings.inputGainDb,
   masterVolume: initialIoSettings.masterVolume,
   howlProtectionEnabled: initialIoSettings.howlProtectionEnabled,
+  inputChannelMode: '1',
+  setInputChannelMode: (mode) => { audioEngine.setInputChannelMode(mode); set({ inputChannelMode: mode }); },
   chainGainWarning: null,
   estimatedChainGainDb: 0,
   tapTempo: { taps: [], bpm: readInitialTempoBpm() },
@@ -606,6 +688,9 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   midiMappings: readMidiMappings(),
   midiError: null,
   recordingSupported: MEDIA_RECORDER_SUPPORTED,
+  recordingFormat: 'webm',
+  recordedFormat: 'webm',
+  setRecordingFormat: (format) => { if (get().recordingStatus !== 'recording') set({ recordingFormat: format }); },
   recordingStatus: 'idle',
   recordedUrl: null,
   recordingElapsed: 0,
@@ -618,6 +703,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       inputGainDb,
       masterVolume: get().masterVolume,
       howlProtectionEnabled: get().howlProtectionEnabled,
+      tuningReferenceHz: get().tuningReferenceHz,
     });
   },
 
@@ -629,16 +715,19 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       inputGainDb: get().inputGainDb,
       masterVolume,
       howlProtectionEnabled: get().howlProtectionEnabled,
+      tuningReferenceHz: get().tuningReferenceHz,
     });
   },
 
   setHowlProtectionEnabled: (enabled) => {
     resetHowlWatch();
+    audioEngine.setHowlProtection(enabled);
     set({ howlProtectionEnabled: enabled });
     persistIoSettings({
       inputGainDb: get().inputGainDb,
       masterVolume: get().masterVolume,
       howlProtectionEnabled: enabled,
+      tuningReferenceHz: get().tuningReferenceHz,
     });
   },
 
@@ -650,6 +739,19 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   setTuningPreset: (preset) => {
     audioEngine.setTuningPreset(preset);
     set({ tuningPreset: preset, pitch: emptyPitch });
+  },
+
+  setTuningReferenceHz: (referenceHz) => {
+    if (!Number.isFinite(referenceHz)) return;
+    const value = Math.round(clamp(referenceHz, 400, 480));
+    audioEngine.setTuningReferenceHz(value);
+    set({ tuningReferenceHz: value, pitch: emptyPitch });
+    persistIoSettings({
+      inputGainDb: get().inputGainDb,
+      masterVolume: get().masterVolume,
+      howlProtectionEnabled: get().howlProtectionEnabled,
+      tuningReferenceHz: value,
+    });
   },
 
   refreshChainGainWarning: () => {
@@ -678,10 +780,28 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
   loadDevices: async () => {
     try {
-      const devices = await AudioEngine.getInstance().listInputDevices();
-      set({ devices });
+      const [devices, outputDevices] = await Promise.all([audioEngine.listInputDevices(), audioEngine.listOutputDevices()]);
+      set({ outputDevices });
+      const state = get();
+      const missing = Boolean(state.selectedDeviceId) && !devices.some((device) => device.deviceId === state.selectedDeviceId);
+      if (missing && state.isRunning && state.inputMode === 'device') {
+        await state.stop();
+        set({ devices, selectedDeviceId: '', error: '선택한 입력 장치가 연결 해제되어 오디오를 중지했습니다. 장치를 다시 선택해 주세요.' });
+      } else {
+        set({ devices, ...(missing ? { selectedDeviceId: '' } : {}) });
+      }
     } catch (error) {
       set({ error: toErrorMessage(error) });
+    }
+  },
+
+  setOutputDevice: async (deviceId) => {
+    try {
+      await audioEngine.setOutputDevice(deviceId);
+      set({ selectedOutputDeviceId: deviceId, error: null });
+      try { window.localStorage.setItem(OUTPUT_STORAGE_KEY, deviceId); } catch { notifyStorageFailure(); }
+    } catch {
+      set({ error: '출력 장치를 변경할 수 없습니다. 장치 연결과 브라우저 권한을 확인해 주세요.' });
     }
   },
 
@@ -689,7 +809,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     const wasRunning = get().isRunning;
     set({ selectedDeviceId: deviceId, error: null });
 
-    if (!wasRunning) return;
+    if (!wasRunning || get().inputMode !== 'device') return;
 
     resetHowlWatch();
     set({ isLoading: true });
@@ -858,15 +978,14 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
   panic: () => {
     resetHowlWatch();
-    void finishActiveRecording('abort');
     audioEngine.panic();
     set({
-      isRunning: false,
-      inputMode: 'idle',
-      uploadedFileName: null,
-      isLoading: false,
-      error: '긴급 정지: 모든 오디오 노드를 차단하고 마스터 출력을 0으로 내렸습니다.',
-      ...resetReadings(),
+      isRunning: false, inputMode: 'idle', uploadedFileName: null, isLoading: true,
+      error: '긴급 정지: 입력과 출력을 차단했습니다.', ...resetReadings(),
+    });
+    void finishActiveRecording('finalize').finally(() => {
+      audioEngine.dispose();
+      set({ isLoading: false });
     });
   },
 
@@ -899,6 +1018,26 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
     set({ tapTempo: { taps: [], bpm } });
     applyGlobalBpmToSyncedPedals(bpm);
+  },
+
+  connectSavedMidi: async (force = false) => {
+    if (!get().midiSupported || (!force && !Object.keys(get().midiMappings).length)) return;
+    const generation = midiSessionGeneration;
+    try {
+      const access = await requestMidiAccessForLearn();
+      if (generation === midiSessionGeneration) attachMidiAccess(access);
+    } catch {
+      if (generation === midiSessionGeneration) set({ midiError: '저장된 MIDI 매핑을 연결하지 못했습니다. MIDI 권한을 확인해 주세요.' });
+    }
+  },
+
+  setMidiMode: (pedalId, mode) => {
+    const mapping = get().midiMappings[pedalId];
+    if (!mapping) return;
+    const midiMappings = { ...get().midiMappings, [pedalId]: { ...mapping, mode } };
+    midiPressed.delete(pedalId);
+    persistMidiMappings(midiMappings);
+    set({ midiMappings });
   },
 
   startMidiLearn: async (pedalId) => {
@@ -946,7 +1085,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
   startRecording: () => {
     const state = get();
-    if (!state.recordingSupported || !state.isRunning || activeRecorder) return;
+    if (!state.isRunning || activeRecorder || activeWavRecorder || wavCompletion || (state.recordingFormat === 'webm' && !state.recordingSupported)) return;
 
     revokeRecordingUrl(state.recordedUrl);
     set({
@@ -958,6 +1097,17 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
     try {
       const stream = audioEngine.createRecorderStream();
+      if (state.recordingFormat === 'wav') {
+        if (typeof AudioContext === 'undefined' || !AudioContext.prototype.createScriptProcessor) throw new Error('이 브라우저는 WAV 녹음을 지원하지 않습니다.');
+        recordingStartedAt = recordingNow();
+        activeWavRecorder = new WavRecorder(stream, () => {
+          void finishActiveRecording('finalize');
+          useAudioStore.setState({ error: 'WAV 녹음 제한에 도달했거나 오디오를 시작할 수 없어 녹음을 종료했습니다.' });
+        });
+        recordingTimer = window.setInterval(() => useAudioStore.setState({ recordingElapsed: Math.floor((recordingNow() - recordingStartedAt) / 1000) }), RECORDING_TIMER_INTERVAL_MS);
+        set({ recordingStatus: 'recording', recordingElapsed: 0 });
+        return;
+      }
       const mimeType = selectRecorderMimeType(
         typeof MediaRecorder.isTypeSupported === 'function'
           ? MediaRecorder.isTypeSupported.bind(MediaRecorder)
@@ -973,7 +1123,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       recordingStartedAt = recordingNow();
       recordingEndMode = 'finalize';
       recordingStopRequested = false;
-      recordingMimeType = mimeType ?? (candidate.mimeType || 'audio/webm');
+      recordingMimeType = mimeType ?? candidate.mimeType ?? '';
       recordingCompletion = new Promise((resolve) => {
         resolveRecordingCompletion = resolve;
       });
@@ -1043,30 +1193,6 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       .getState()
       .pedals.filter((pedal) => pedal.enabled && !pedal.bypassed).length;
     const audioGlitchCount = engine.readAudioGlitchCount();
-    const now = performance.now();
-    const shouldWatchForHowl =
-      state.isRunning && state.inputMode === 'device' && state.howlProtectionEnabled;
-
-    if (shouldWatchForHowl && outputLevel.peakDb >= HOWL_THRESHOLD_DB) {
-      howlThresholdStartedAt ??= now;
-
-      if (now - howlThresholdStartedAt >= HOWL_DURATION_MS) {
-        resetHowlWatch();
-        void finishActiveRecording('abort');
-        engine.panic();
-        set({
-          isRunning: false,
-          inputMode: 'idle',
-          uploadedFileName: null,
-          isLoading: false,
-          error: '하울링이 감지되어 출력을 차단했습니다. 헤드폰을 사용하세요.',
-          ...resetReadings(),
-        });
-        return;
-      }
-    } else {
-      resetHowlWatch();
-    }
 
     set((current) => ({
       inputLevel,
@@ -1081,3 +1207,24 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     }));
   },
 }));
+
+if (initialOutputDevice && audioEngine.supportsOutputSelection) {
+  void audioEngine.setOutputDevice(initialOutputDevice);
+}
+
+audioEngine.setInputEndedHandler(() => {
+  const state = useAudioStore.getState();
+  if (!state.isRunning || state.inputMode !== 'device' || state.isLoading) return;
+  void state.stop().finally(() => {
+    useAudioStore.setState({ error: '입력 장치 연결이 끊어져 오디오를 중지했습니다. 녹음 결과를 확인하고 장치를 다시 연결해 주세요.' });
+  });
+});
+
+// The audio worklet detects and mutes without depending on any mounted meter UI.
+audioEngine.setHowlProtection(initialIoSettings.howlProtectionEnabled);
+audioEngine.setHowlHandler(() => {
+  const state = useAudioStore.getState();
+  if (!state.isRunning || state.inputMode !== 'device' || !state.howlProtectionEnabled) return;
+  state.panic();
+  useAudioStore.setState({ error: '지속적인 피드백이 감지되어 입력과 출력을 차단했습니다. 헤드폰을 사용하세요.' });
+});

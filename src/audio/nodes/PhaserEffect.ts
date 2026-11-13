@@ -14,7 +14,6 @@ export const PHASER_MAX_FEEDBACK = 0.9;
 export const PHASER_STAGE_OPTIONS = [4, 6, 8, 12] as const;
 const PHASER_MAX_DETUNE_CENTS =
   1200 * Math.log2(PHASER_MAX_FREQUENCY / PHASER_CENTER_FREQUENCY);
-const FEEDBACK_DELAY_MAX_SECONDS = 0.005;
 const MIN_WET_MAKEUP = 0.3;
 
 const DEFAULT_PARAMS: PhaserParams = {
@@ -25,14 +24,6 @@ const DEFAULT_PARAMS: PhaserParams = {
   stages: 6,
   feedback: 40,
 };
-
-interface PhaserBank {
-  stages: PhaserParams['stages'];
-  filters: BiquadFilterNode[];
-  outputGain: GainNode;
-  feedbackGain: GainNode;
-  feedbackDelay: DelayNode;
-}
 
 export interface PhaserSweep {
   detuneCents: number;
@@ -95,91 +86,52 @@ export function getPhaserWetMakeup(feedback: number): number {
 }
 
 export class PhaserEffect extends BaseEffect {
-  private readonly oscillator: OscillatorNode;
-  private readonly modulationDepth: GainNode;
-  private readonly banks: PhaserBank[] = [];
+  private readonly processor: AudioWorkletNode;
   private disposed = false;
 
   constructor(context: AudioContext, pedal: PedalState) {
-    super(context, normalizePhaserPedal(pedal));
-
-    this.oscillator = new OscillatorNode(context, {
-      type: 'sine',
-      frequency: DEFAULT_PARAMS.rate,
+    const safePedal = normalizePhaserPedal(pedal);
+    super(context, safePedal);
+    const params = safePedal.params as PhaserParams;
+    this.processor = new AudioWorkletNode(context, 'phaser-processor', {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      outputChannelCount: [2],
+      processorOptions: { stages: params.stages },
+      parameterData: { stages: params.stages },
     });
-    this.modulationDepth = new GainNode(context, { gain: 0 });
-
-    PHASER_STAGE_OPTIONS.forEach((stages) => {
-      const filters = Array.from(
-        { length: stages },
-        () =>
-          new BiquadFilterNode(context, {
-            type: 'allpass',
-            frequency: PHASER_CENTER_FREQUENCY,
-            Q: 0.8,
-          }),
-      );
-      const outputGain = new GainNode(context, {
-        gain: stages === DEFAULT_PARAMS.stages ? 1 : 0,
-      });
-      const feedbackGain = new GainNode(context, { gain: 0 });
-      const feedbackDelay = new DelayNode(context, {
-        maxDelayTime: FEEDBACK_DELAY_MAX_SECONDS,
-        delayTime: Math.max(1 / context.sampleRate, 0.00002),
-      });
-
-      this.effectInput.connect(filters[0]);
-      for (let index = 1; index < filters.length; index += 1) {
-        filters[index - 1].connect(filters[index]);
-      }
-
-      const lastFilter = filters[filters.length - 1];
-      lastFilter.connect(outputGain);
-      outputGain.connect(this.effectOutput);
-      lastFilter.connect(feedbackGain);
-      feedbackGain.connect(feedbackDelay);
-      feedbackDelay.connect(filters[0]);
-
-      filters.forEach((filter) => {
-        this.modulationDepth.connect(filter.detune);
-      });
-      this.banks.push({ stages, filters, outputGain, feedbackGain, feedbackDelay });
-    });
-
-    this.oscillator.connect(this.modulationDepth);
-    this.oscillator.start();
-    this.update(pedal);
+    this.effectInput.connect(this.processor);
+    this.processor.connect(this.effectOutput);
+    this.update(safePedal);
   }
 
   override update(pedal: PedalState): void {
     const safePedal = normalizePhaserPedal(pedal);
     const params = safePedal.params as PhaserParams;
     const feedback = clamp(params.feedback / 100, 0, PHASER_MAX_FEEDBACK);
-    const sweep = getPhaserSweep(params.depth);
-
     super.update(safePedal);
-    smoothParam(this.oscillator.frequency, params.rate, this.context);
-    smoothParam(this.modulationDepth.gain, sweep.detuneCents, this.context);
-    this.banks.forEach((bank) => {
-      smoothParam(bank.outputGain.gain, bank.stages === params.stages ? 1 : 0, this.context);
-      smoothParam(bank.feedbackGain.gain, feedback, this.context);
-    });
+    this.setProcessorParam('rate', params.rate);
+    this.setProcessorParam('depth', params.depth);
+    this.setProcessorParam('feedback', feedback);
+    // The processor crossfades the selected stage tap internally.
+    const stages = this.processor.parameters.get('stages');
+    if (stages) {
+      stages.cancelScheduledValues(this.context.currentTime);
+      stages.setValueAtTime(params.stages, this.context.currentTime);
+    }
     this.setMakeup(getPhaserWetMakeup(feedback));
+  }
+
+  private setProcessorParam(name: string, value: number): void {
+    const param = this.processor.parameters.get(name);
+    if (param) smoothParam(param, value, this.context);
   }
 
   override dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-
-    this.oscillator.stop();
-    this.oscillator.disconnect();
-    this.modulationDepth.disconnect();
-    this.banks.forEach((bank) => {
-      bank.filters.forEach((filter) => filter.disconnect());
-      bank.outputGain.disconnect();
-      bank.feedbackGain.disconnect();
-      bank.feedbackDelay.disconnect();
-    });
+    this.processor.port.postMessage({ type: 'dispose' });
+    this.processor.disconnect();
     super.dispose();
   }
 }

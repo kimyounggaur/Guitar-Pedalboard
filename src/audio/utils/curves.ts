@@ -23,7 +23,7 @@ export function createDriveCurve(
       shaped = soft * 0.62 + hard * 0.38;
     } else if (mode === 'distortion') {
       const threshold = Math.max(0.12, 0.78 - (drive / 100) * 0.55);
-      shaped = Math.max(-threshold, Math.min(threshold, shifted * amount * 0.16)) / threshold;
+      shaped = Math.max(-threshold, Math.min(threshold, shifted * amount * (0.16 + (drive / 100) * 0.8))) / threshold;
     } else {
       const threshold = Math.max(0.05, 0.3 - (drive / 100) * 0.22);
       shaped = shifted >= threshold ? 1 : shifted <= -threshold ? -1 : shifted / threshold;
@@ -37,13 +37,14 @@ export function createDriveCurve(
 
 export function createCrunchCurve(gain: number, samples = 4096): Float32Array {
   const curve = new Float32Array(samples);
-  const drive = 1.6 + (gain / 100) * 34;
+  const drive = 1.4 + (gain / 100) * 6;
   const hardClip = 0.86 - (gain / 100) * 0.36;
   const sag = 0.08 + (gain / 100) * 0.12;
 
   for (let i = 0; i < samples; i += 1) {
     const x = (i * 2) / (samples - 1) - 1;
-    const asymmetrical = x + (x > 0 ? sag * 0.18 : -sag * 0.08);
+    // Scale the input instead of adding a fixed offset: both halves meet at zero.
+    const asymmetrical = x * (x > 0 ? 1 + sag * 0.18 : 1 - sag * 0.08);
     const soft = Math.tanh(asymmetrical * drive) / Math.tanh(drive);
     const clipped = Math.max(-hardClip, Math.min(hardClip, soft)) / hardClip;
     const body = Math.tanh((soft * 0.7 + clipped * 0.3) * 1.08);

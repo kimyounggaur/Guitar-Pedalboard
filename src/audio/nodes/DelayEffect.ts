@@ -105,7 +105,7 @@ export class DelayEffect extends BaseEffect {
     smoothParam(this.delay.delayTime, isPingPong ? delayTime / 2 : delayTime, this.context);
     smoothParam(this.feedback.gain, isPingPong ? 0 : feedbackAmount, this.context);
     smoothParam(this.tone.frequency, toneFrequency, this.context);
-    smoothParam(this.flutterDepth.gain, params.mode === 'tape' ? 0.006 : 0, this.context);
+    smoothParam(this.flutterDepth.gain, params.mode === 'tape' ? 0.0002 : 0, this.context);
     smoothParam(this.flutter.frequency, params.mode === 'tape' ? 4.2 : 0.1, this.context);
     smoothParam(this.pingPongLeftDelay.delayTime, delayTime, this.context);
     smoothParam(this.pingPongRightDelay.delayTime, delayTime, this.context);

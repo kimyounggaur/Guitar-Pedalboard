@@ -1,3 +1,4 @@
+import { knobDefault } from '../knobDefaults';
 import type { FlangerParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 
@@ -24,6 +25,7 @@ export function FlangerPedal({ params, onChange }: FlangerPedalProps) {
         <SliderControl
           label="Rate"
           value={params.rate}
+          defaultValue={knobDefault('flanger', 'rate')}
           min={0.05}
           max={5}
           step={0.05}
@@ -33,6 +35,7 @@ export function FlangerPedal({ params, onChange }: FlangerPedalProps) {
         <SliderControl
           label="Depth"
           value={params.depth}
+          defaultValue={knobDefault('flanger', 'depth')}
           min={0}
           max={100}
           step={1}
@@ -42,6 +45,7 @@ export function FlangerPedal({ params, onChange }: FlangerPedalProps) {
         <SliderControl
           label="Feedback"
           value={params.feedback}
+          defaultValue={knobDefault('flanger', 'feedback')}
           min={-95}
           max={95}
           step={1}
@@ -51,6 +55,7 @@ export function FlangerPedal({ params, onChange }: FlangerPedalProps) {
         <SliderControl
           label="Manual"
           value={params.manual}
+          defaultValue={knobDefault('flanger', 'manual')}
           min={0.5}
           max={10}
           step={0.1}
@@ -60,6 +65,7 @@ export function FlangerPedal({ params, onChange }: FlangerPedalProps) {
         <SliderControl
           label="Mix"
           value={params.mix}
+          defaultValue={knobDefault('flanger', 'mix')}
           min={0}
           max={100}
           step={1}
@@ -69,6 +75,7 @@ export function FlangerPedal({ params, onChange }: FlangerPedalProps) {
         <SliderControl
           label="Level"
           value={params.level}
+          defaultValue={knobDefault('flanger', 'level')}
           min={0}
           max={200}
           step={1}

@@ -15,7 +15,7 @@ export class DriveEffect extends BaseEffect {
   constructor(context: AudioContext, pedal: PedalState) {
     super(context, pedal);
     this.shaper = context.createWaveShaper();
-    this.shaper.oversample = '4x';
+    this.shaper.oversample = '2x';
     this.dcBlocker = createDcBlocker(context);
     this.tone = context.createBiquadFilter();
     this.tone.type = 'lowpass';

@@ -1,3 +1,6 @@
+import { knobDefault } from '../knobDefaults';
+import { KnobNumberInput } from '../KnobNumberInput';
+import { useKnobDrag } from '../../hooks/useKnobDrag';
 import type { EQParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 
@@ -27,9 +30,11 @@ function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFad
   const progress = max === min ? 0 : (value - min) / (max - min);
   const clampedProgress = Math.min(Math.max(progress, 0), 1);
   const position = 100 - clampedProgress * 100;
+  const key = ({ 'Low Cut': 'lowCut', Bass: 'bassGain', Mid: 'midGain', 'Mid Hz': 'midFreq', 'Mid Q': 'midQ', Treble: 'trebleGain', Presence: 'presenceGain', Level: 'level' } as Record<string, string>)[label];
+  const dragHandlers = useKnobDrag(value, min, max, step, onChange, knobDefault('eq', key));
 
   return (
-    <label className="graphic-eq-fader">
+    <div className="graphic-eq-fader">
       <span>{label}</span>
       <span className="graphic-eq-slot">
         <span className="graphic-eq-scale" aria-hidden="true" />
@@ -40,13 +45,15 @@ function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFad
           max={max}
           step={step}
           value={value}
+          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
       <output>{displayValue}</output>
-    </label>
+      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+    </div>
   );
 }
 
@@ -63,7 +70,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
         <div className="graphic-eq-led" aria-hidden="true" />
         <div className="graphic-eq-fader-bank">
           <EQFader
-            label="100"
+            label="Low Cut"
             value={params.lowCut}
             min={40}
             max={160}
@@ -72,7 +79,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
             onChange={(value) => onChange('lowCut', value)}
           />
           <EQFader
-            label="200"
+            label="Bass"
             value={params.bassGain}
             min={-12}
             max={12}
@@ -81,7 +88,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
             onChange={(value) => onChange('bassGain', value)}
           />
           <EQFader
-            label="400"
+            label="Mid"
             value={params.midGain}
             min={-12}
             max={12}
@@ -90,7 +97,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
             onChange={(value) => onChange('midGain', value)}
           />
           <EQFader
-            label="800"
+            label="Mid Hz"
             value={params.midFreq}
             min={250}
             max={1500}
@@ -99,7 +106,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
             onChange={(value) => onChange('midFreq', value)}
           />
           <EQFader
-            label="1.6k"
+            label="Mid Q"
             value={params.midQ}
             min={0.3}
             max={4}
@@ -108,7 +115,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
             onChange={(value) => onChange('midQ', value)}
           />
           <EQFader
-            label="3.2k"
+            label="Treble"
             value={params.trebleGain}
             min={-12}
             max={12}
@@ -117,7 +124,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
             onChange={(value) => onChange('trebleGain', value)}
           />
           <EQFader
-            label="6.4k"
+            label="Presence"
             value={params.presenceGain}
             min={-12}
             max={12}
@@ -160,6 +167,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
         <SliderControl
           label="Mix"
           value={params.mix}
+          defaultValue={knobDefault('eq', 'mix')}
           min={0}
           max={100}
           step={1}

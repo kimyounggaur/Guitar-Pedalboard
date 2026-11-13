@@ -1,7 +1,7 @@
 export const tunerProcessorSource = `
 const TUNER_BUFFER_SIZE = 4096;
 const TUNER_RMS_THRESHOLD = 0.008;
-const TUNER_MIN_FREQUENCY = 70;
+const TUNER_MIN_FREQUENCY = 28;
 const TUNER_MAX_FREQUENCY = 1400;
 const TUNER_PEAK_THRESHOLD = 0.85;
 const TUNER_MIN_CLARITY = 0.6;

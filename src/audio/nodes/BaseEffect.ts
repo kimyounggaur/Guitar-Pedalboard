@@ -128,7 +128,8 @@ export class BaseEffect {
     const mix = clamp(this.commonParams.mix / 100, 0, 1);
     const active = this.enabled && !this.bypassed;
     const preserveTrails = !active && this.trails;
-    const dry = active ? 1 - mix : 0;
+    // Time-based effects add repeats/ambience without attenuating the direct guitar.
+    const dry = active ? (this.type === 'delay' || this.type === 'reverb' ? 1 : 1 - mix) : 0;
     this.wetTarget = active || preserveTrails ? mix : 0;
 
     this.setRoutingParam(
