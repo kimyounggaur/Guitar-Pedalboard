@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
 import { MIDI_ADVANCED_KEY, dispatchAdvancedMessage, parseAdvancedMessage, readMidiAdvanced, validateMidiAdvanced, type MidiAdvancedConfig } from '../audio/midiAdvanced';
 import { registerMidiAdvancedHandler, useAudioStore } from '../store/audioStore';
-import { clonePedals, usePedalStore } from '../store/pedalStore';
-import { usePresetStore } from '../store/presetStore';
+import { usePedalStore } from '../store/pedalStore';
+import { applyPresetPedals, usePresetStore } from '../store/presetStore';
 import { notifyStorageFailure } from '../store/storageNotice';
 
 export function MidiAdvancedControls() {
@@ -36,9 +36,7 @@ export function MidiAdvancedControls() {
       program: (id) => {
         const preset = usePresetStore.getState().presets.find((item) => item.id === id);
         if (!preset) { setNotice('지정된 프리셋을 찾을 수 없습니다. 매핑을 다시 설정하세요.'); return; }
-        usePedalStore.getState().setPedals(clonePedals(preset.pedals));
-        useAudioStore.getState().adoptTempoFromPedals();
-        AudioEngine.getInstance().rebuildChain();
+        applyPresetPedals(preset.pedals);
         setNotice(`MIDI: ${preset.name} 프리셋을 불러왔습니다.`);
       },
       volume: (value) => {

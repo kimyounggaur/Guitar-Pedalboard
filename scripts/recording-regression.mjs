@@ -49,7 +49,7 @@ const helperBundle = await build({
   write: false,
 });
 const helperUrl = `data:text/javascript;base64,${Buffer.from(helperBundle.outputFiles[0].text).toString('base64')}`;
-const { createRecordingFilename, selectRecorderMimeType, encodePcmWav, WavRecorder } = await import(helperUrl);
+const { createRecordingFilename, selectRecorderMimeType, recordingFormatFromMime, encodePcmWav, WavRecorder } = await import(helperUrl);
 
 assert.equal(
   selectRecorderMimeType((mimeType) => mimeType === 'audio/webm;codecs=opus'),
@@ -61,6 +61,12 @@ assert.equal(
 );
 assert.equal(selectRecorderMimeType(() => false), undefined);
 assert.equal(selectRecorderMimeType(), undefined);
+assert.equal(recordingFormatFromMime('audio/mp4;codecs=mp4a.40.2'), 'm4a');
+assert.equal(recordingFormatFromMime('video/mp4'), 'mp4');
+assert.equal(recordingFormatFromMime('audio/ogg;codecs=opus'), 'ogg');
+assert.equal(recordingFormatFromMime('audio/webm;codecs=opus'), 'webm');
+assert.equal(recordingFormatFromMime(''), 'unknown');
+assert.doesNotMatch(createRecordingFilename(new Date(2026, 8, 28), 'unknown'), /\.[a-z]+$/);
 assert.equal(
   createRecordingFilename(new Date(2026, 8, 28, 7, 5, 9)),
   'pedalboard-20260928-070509.webm',
@@ -420,6 +426,32 @@ assert.equal(recorderStreamDisposals, 1, 'unmount cleanup이 recorder track을 �
 assert.equal(intervals.size, 0);
 assert.equal(timeouts.size, 0);
 
+MockMediaRecorder.isTypeSupported = () => false;
+useAudioStore.setState({ isRunning: true, inputMode: 'device', error: null });
+useAudioStore.getState().startRecording();
+recorder = MockMediaRecorder.instances.at(-1);
+recorder.mimeType = 'audio/mp4;codecs=mp4a.40.2';
+await useAudioStore.getState().stopRecording();
+assert.equal(useAudioStore.getState().recordedFormat, 'm4a');
+assert.match(createdBlobs.at(-1).type, /^audio\/mp4/);
+assert.match(createRecordingFilename(new Date(2026, 8, 28), useAudioStore.getState().recordedFormat), /\.m4a$/);
+useAudioStore.getState().startRecording();
+await useAudioStore.getState().stopRecording();
+assert.equal(useAudioStore.getState().recordedFormat, 'unknown');
+assert.equal(createdBlobs.at(-1).type, '');
+useAudioStore.getState().startRecording();
+recorder = MockMediaRecorder.instances.at(-1);
+recorder.stop = function () {
+  this.state = 'inactive';
+  void Promise.resolve().then(() => {
+    this.ondataavailable?.({ data: new Blob(['audio'], { type: 'audio/ogg;codecs=opus' }) });
+    this.onstop?.();
+  });
+};
+await useAudioStore.getState().stopRecording();
+assert.equal(useAudioStore.getState().recordedFormat, 'ogg');
+assert.match(createdBlobs.at(-1).type, /^audio\/ogg/);
+
 globalThis.AudioContext = ShortLimitContext;
 useAudioStore.setState({ isRunning: true, inputMode: 'device', error: null });
 useAudioStore.getState().setRecordingFormat('wav');
@@ -433,6 +465,30 @@ assert.ok(useAudioStore.getState().recordedUrl);
 assert.match(useAudioStore.getState().error, /WAV 녹음 제한/);
 useAudioStore.getState().disposeRecording();
 delete globalThis.AudioContext;
+
+// Default input unplug: the current track ends, the recording finalizes, and stale events are ignored.
+useAudioStore.setState({ isRunning: true, isLoading: false, inputMode: 'device', selectedDeviceId: '', error: null });
+useAudioStore.getState().setRecordingFormat('webm');
+useAudioStore.getState().startRecording();
+let endedCallback;
+const lostTrack = { addEventListener: (_type, cb) => { endedCallback = cb; }, removeEventListener() {} };
+const liveStream = { getAudioTracks: () => [lostTrack] };
+engine.stream = liveStream;
+const generation = engine.sessionGeneration;
+engine.watchInputEnd(liveStream, generation);
+const stopsBeforeDisconnect = engineStops;
+endedCallback();
+endedCallback();
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(engineStops, stopsBeforeDisconnect + 1);
+assert.equal(useAudioStore.getState().recordingStatus, 'ready');
+assert.match(useAudioStore.getState().error, /입력 장치 연결이 끊어져/);
+assert.equal(useAudioStore.getState().isRunning, false);
+engine.sessionGeneration += 1;
+endedCallback();
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(engineStops, stopsBeforeDisconnect + 1);
+useAudioStore.getState().disposeRecording();
 
 console.log(
   'Recording regression passed: reusable master destination, MIME selection, timer/data finalization, URL revoke, device/start/file/stop finalize, panic/howl finalize, unmount cleanup and UI contract.',

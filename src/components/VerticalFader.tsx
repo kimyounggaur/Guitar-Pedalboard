@@ -1,4 +1,6 @@
 import type { CSSProperties } from 'react';
+import { useKnobDrag } from '../hooks/useKnobDrag';
+import { KnobNumberInput } from './KnobNumberInput';
 
 interface VerticalFaderProps {
   label: string;
@@ -9,6 +11,7 @@ interface VerticalFaderProps {
   displayValue: string;
   ariaValueText?: string;
   onChange: (value: number) => void;
+  defaultValue: number;
 }
 
 export function VerticalFader({
@@ -20,12 +23,14 @@ export function VerticalFader({
   displayValue,
   ariaValueText = displayValue,
   onChange,
+  defaultValue,
 }: VerticalFaderProps) {
   const progress = max === min ? 0 : (value - min) / (max - min);
   const clampedProgress = Math.min(Math.max(progress, 0), 1);
+  const dragHandlers = useKnobDrag(value, min, max, step, onChange, defaultValue);
 
   return (
-    <label className="vertical-fader">
+    <div className="vertical-fader">
       <span className="vertical-fader-label">{label}</span>
       <span
         className="vertical-fader-rail"
@@ -39,6 +44,7 @@ export function VerticalFader({
           max={max}
           step={step}
           value={value}
+          {...dragHandlers}
           aria-label={label}
           aria-orientation="vertical"
           aria-valuetext={`${label} ${ariaValueText}`}
@@ -46,6 +52,7 @@ export function VerticalFader({
         />
       </span>
       <output>{displayValue}</output>
-    </label>
+      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+    </div>
   );
 }

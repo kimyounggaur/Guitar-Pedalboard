@@ -1,3 +1,5 @@
+import { knobDefault } from '../knobDefaults';
+import { KnobNumberInput } from '../KnobNumberInput';
 import { useEffect, useState } from 'react';
 import { AudioEngine } from '../../audio/AudioEngine';
 import type { CabParams, PedalParamValue } from '../../audio/types';
@@ -66,7 +68,7 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
         <p>{irName ? `사용 중: ${irName}` : '기본 캐비닛 IR 사용 중'}</p>
         {irName && <small>마이크 위치와 거리 조절은 기본 IR에만 적용됩니다.</small>}
         {irName && <button type="button" onClick={() => AudioEngine.getInstance().clearCabinetIr(pedalId)}>기본 IR로 돌아가기</button>}
-        <small>모노·스테레오 PCM 또는 32비트 float WAV, 최대 2초·4 MB. 오디오 종료 또는 새로고침 시 삭제되며 프리셋에는 저장되지 않습니다.</small>
+        <small>모노·스테레오 PCM 또는 32비트 float WAV, 최대 2초·4 MB. 프리셋·A/B 슬롯·기본 설정을 불러오거나 오디오 종료·새로고침 시 해제되며 프리셋에는 저장되지 않습니다.</small>
         {irError && <p role="alert">{irError}</p>}
       </div>
 
@@ -74,6 +76,7 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
         <SliderControl
           label="마이크 위치"
           value={params.micPosition}
+          defaultValue={knobDefault('cab', 'micPosition')}
           min={0}
           max={100}
           step={1}
@@ -83,6 +86,7 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
         <SliderControl
           label="거리"
           value={params.distance}
+          defaultValue={knobDefault('cab', 'distance')}
           min={0}
           max={100}
           step={1}
@@ -92,6 +96,7 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
         <SliderControl
           label="프레즌스"
           value={params.presence}
+          defaultValue={knobDefault('cab', 'presence')}
           min={-6}
           max={6}
           step={0.1}
@@ -101,6 +106,7 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
         <SliderControl
           label="믹스"
           value={params.mix}
+          defaultValue={knobDefault('cab', 'mix')}
           min={0}
           max={100}
           step={1}
@@ -110,6 +116,7 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
         <SliderControl
           label="레벨"
           value={params.level}
+          defaultValue={knobDefault('cab', 'level')}
           min={0}
           max={200}
           step={1}
@@ -122,6 +129,7 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
         <CabRangeControl
           label="로우 컷"
           value={params.lowCut}
+          defaultValue={knobDefault('cab', 'lowCut')}
           min={40}
           max={200}
           step={1}
@@ -131,6 +139,7 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
         <CabRangeControl
           label="하이 컷"
           value={params.highCut}
+          defaultValue={knobDefault('cab', 'highCut')}
           min={3000}
           max={12000}
           step={100}
@@ -150,6 +159,7 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
 interface CabRangeControlProps {
   label: string;
   value: number;
+  defaultValue: number;
   min: number;
   max: number;
   step: number;
@@ -160,6 +170,7 @@ interface CabRangeControlProps {
 function CabRangeControl({
   label,
   value,
+  defaultValue,
   min,
   max,
   step,
@@ -167,7 +178,7 @@ function CabRangeControl({
   onChange,
 }: CabRangeControlProps) {
   return (
-    <label className="cab-range-control">
+    <div className="cab-range-control">
       <span>
         <strong>{label}</strong>
         <output>{displayValue}</output>
@@ -180,8 +191,10 @@ function CabRangeControl({
         value={value}
         aria-label={label}
         aria-valuetext={`${label} ${displayValue}`}
+        onDoubleClick={() => onChange(defaultValue)}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
       />
-    </label>
+      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+    </div>
   );
 }

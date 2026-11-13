@@ -1,3 +1,4 @@
+import { knobDefault } from '../knobDefaults';
 import type { PedalParamValue, PhaserParams } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 
@@ -23,6 +24,7 @@ export function PhaserPedal({ params, onChange }: PhaserPedalProps) {
         <SliderControl
           label="Rate"
           value={params.rate}
+          defaultValue={knobDefault('phaser', 'rate')}
           min={0.05}
           max={8}
           step={0.05}
@@ -32,6 +34,7 @@ export function PhaserPedal({ params, onChange }: PhaserPedalProps) {
         <SliderControl
           label="Depth"
           value={params.depth}
+          defaultValue={knobDefault('phaser', 'depth')}
           min={0}
           max={100}
           step={1}
@@ -41,6 +44,7 @@ export function PhaserPedal({ params, onChange }: PhaserPedalProps) {
         <SliderControl
           label="Feedback"
           value={params.feedback}
+          defaultValue={knobDefault('phaser', 'feedback')}
           min={0}
           max={90}
           step={1}
@@ -50,6 +54,7 @@ export function PhaserPedal({ params, onChange }: PhaserPedalProps) {
         <SliderControl
           label="Mix"
           value={params.mix}
+          defaultValue={knobDefault('phaser', 'mix')}
           min={0}
           max={100}
           step={1}
@@ -59,6 +64,7 @@ export function PhaserPedal({ params, onChange }: PhaserPedalProps) {
         <SliderControl
           label="Level"
           value={params.level}
+          defaultValue={knobDefault('phaser', 'level')}
           min={0}
           max={200}
           step={1}

@@ -1,3 +1,4 @@
+import { knobDefault } from '../knobDefaults';
 import type { PedalParamValue, TremoloParams } from '../../audio/types';
 import { useAudioStore } from '../../store/audioStore';
 import { SliderControl } from '../SliderControl';
@@ -30,6 +31,7 @@ export function TremoloPedal({ pedalId, params, onChange }: TremoloPedalProps) {
         <SliderControl
           label="Rate"
           value={params.rate}
+          defaultValue={knobDefault('tremolo', 'rate')}
           min={0.5}
           max={20}
           step={0.1}
@@ -39,6 +41,7 @@ export function TremoloPedal({ pedalId, params, onChange }: TremoloPedalProps) {
         <SliderControl
           label="Depth"
           value={params.depth}
+          defaultValue={knobDefault('tremolo', 'depth')}
           min={0}
           max={100}
           step={1}
@@ -48,6 +51,7 @@ export function TremoloPedal({ pedalId, params, onChange }: TremoloPedalProps) {
         <SliderControl
           label="Mix"
           value={params.mix}
+          defaultValue={knobDefault('tremolo', 'mix')}
           min={0}
           max={100}
           step={1}
@@ -57,6 +61,7 @@ export function TremoloPedal({ pedalId, params, onChange }: TremoloPedalProps) {
         <SliderControl
           label="Level"
           value={params.level}
+          defaultValue={knobDefault('tremolo', 'level')}
           min={0}
           max={200}
           step={1}

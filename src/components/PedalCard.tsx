@@ -28,6 +28,7 @@ import { formatMidiMapping } from '../audio/midi';
 import { useAudioStore } from '../store/audioStore';
 import { usePedalStore } from '../store/pedalStore';
 import { SliderControl } from './SliderControl';
+import { knobDefault } from './knobDefaults';
 import { StompToggleSwitch } from './StompToggleSwitch';
 import { NoiseGatePedal } from './effects/NoiseGatePedal';
 import { PhaserPedal } from './effects/PhaserPedal';
@@ -186,6 +187,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
             <SliderControl
               label="Mix"
               value={pedal.params.mix}
+              defaultValue={knobDefault(pedal.type, 'mix')}
               min={0}
               max={100}
               step={1}
@@ -195,6 +197,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
             <SliderControl
               label="Level"
               value={pedal.params.level}
+              defaultValue={knobDefault(pedal.type, 'level')}
               min={0}
               max={100}
               step={1}

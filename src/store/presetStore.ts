@@ -376,7 +376,7 @@ function isPreset(value: unknown): value is Preset {
     !!preset &&
     typeof preset.id === 'string' &&
     typeof preset.name === 'string' &&
-    typeof preset.updatedAt === 'number' &&
+    typeof preset.updatedAt === 'number' && Number.isFinite(preset.updatedAt) &&
     Array.isArray(preset.pedals)
   );
 }
@@ -385,9 +385,9 @@ function normalizeImportedPreset(preset: Preset, version: number): Preset {
   return {
     id: preset.id || createId(),
     name: preset.name.trim() || 'Imported Preset',
-    libraryId: preset.libraryId,
-    libraryName: preset.libraryName,
-    description: preset.description,
+    libraryId: typeof preset.libraryId === 'string' ? preset.libraryId : undefined,
+    libraryName: typeof preset.libraryName === 'string' ? preset.libraryName : undefined,
+    description: typeof preset.description === 'string' ? preset.description : undefined,
     tags: Array.isArray(preset.tags) ? preset.tags.filter((tag) => typeof tag === 'string') : undefined,
     pedals: migratePedalCollection(preset.pedals, version),
     updatedAt: typeof preset.updatedAt === 'number' ? preset.updatedAt : Date.now(),
@@ -481,6 +481,15 @@ interface PresetStore {
   activateSlot: (slot: PresetComparisonSlot) => boolean;
 }
 
+/** Apply a complete preset snapshot. Session-only cabinet IRs are never part of snapshots. */
+export function applyPresetPedals(pedals: PedalState[]): void {
+  const engine = AudioEngine.getInstance();
+  engine.clearAllCabinetIrs();
+  usePedalStore.getState().setPedals(clonePedals(pedals));
+  useAudioStore.getState().adoptTempoFromPedals();
+  engine.rebuildChain();
+}
+
 export const usePresetStore = create<PresetStore>((set, get) => ({
   presets: toPresetList(readUserPresets()),
   slotA: null,
@@ -565,9 +574,7 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
     const storedPedals = slot === 'A' ? get().slotA : get().slotB;
     if (!storedPedals) return false;
 
-    usePedalStore.getState().setPedals(clonePedals(storedPedals));
-    useAudioStore.getState().adoptTempoFromPedals();
-    AudioEngine.getInstance().rebuildChain();
+    applyPresetPedals(storedPedals);
     set({ activeSlot: slot });
     return true;
   },

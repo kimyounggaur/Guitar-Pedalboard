@@ -959,8 +959,8 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
   updatePedalParam: (id, paramName, value) =>
     set((state) => {
       const pedals = state.pedals.map((pedal) => {
-        if (pedal.id !== id) return clonePedal(pedal);
-        if (paramName === 'bypass' || paramName === 'bypassed') return clonePedal(pedal);
+        if (pedal.id !== id) return pedal;
+        if (paramName === 'bypass' || paramName === 'bypassed') return pedal;
 
         const nextValue =
           pedal.type === 'delay' && paramName === 'feedback' && typeof value === 'number'

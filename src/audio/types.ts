@@ -222,8 +222,9 @@ export interface LevelReading {
 }
 
 export interface LatencyReading {
-  base: number;
-  output: number;
+  base: number | null;
+  output: number | null;
+  input: number | null;
   sampleRate: number;
 }
 

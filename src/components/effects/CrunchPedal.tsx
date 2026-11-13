@@ -1,6 +1,10 @@
+import { KnobNumberInput } from '../KnobNumberInput';
+import { knobDefault } from '../knobDefaults';
 import type { CSSProperties } from 'react';
 import type { CrunchParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { useKnobDrag } from '../../hooks/useKnobDrag';
+import { initialPedals } from '../../store/pedalStore';
 
 interface CrunchPedalProps {
   params: CrunchParams;
@@ -19,9 +23,12 @@ interface CrunchKnobProps {
 function CrunchKnob({ label, value, min, max, step, onChange }: CrunchKnobProps) {
   const progress = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(progress, 0), 1) * 270;
+  const defaults = initialPedals.find((pedal) => pedal.type === 'crunch')!.params as CrunchParams;
+  const defaultValue = ({ 'Vol.': defaults.volume, Tone: defaults.tone, Gain: defaults.gain } as Record<string, number>)[label];
+  const dragHandlers = useKnobDrag(value, min, max, step, onChange, defaultValue);
 
   return (
-    <label className={`crunch-knob crunch-knob-${label.toLowerCase().replace('.', '')}`}>
+    <div className={`crunch-knob crunch-knob-${label.toLowerCase().replace('.', '')}`}>
       <span
         className="crunch-knob-shell"
         style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}
@@ -33,13 +40,16 @@ function CrunchKnob({ label, value, min, max, step, onChange }: CrunchKnobProps)
           max={max}
           step={step}
           value={value}
+          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${Math.round(value)}%`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
       <strong>{label}</strong>
-    </label>
+      <output>{Math.round(value)}%</output>
+      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+    </div>
   );
 }
 
@@ -88,6 +98,7 @@ export function CrunchPedal({ params, onChange }: CrunchPedalProps) {
         <SliderControl
           label="Presence"
           value={params.presence}
+          defaultValue={knobDefault('crunch', 'presence')}
           min={0}
           max={100}
           step={1}
@@ -97,6 +108,7 @@ export function CrunchPedal({ params, onChange }: CrunchPedalProps) {
         <SliderControl
           label="Low Cut"
           value={params.lowCut}
+          defaultValue={knobDefault('crunch', 'lowCut')}
           min={40}
           max={180}
           step={1}
@@ -106,6 +118,7 @@ export function CrunchPedal({ params, onChange }: CrunchPedalProps) {
         <SliderControl
           label="Mix"
           value={params.mix}
+          defaultValue={knobDefault('crunch', 'mix')}
           min={0}
           max={100}
           step={1}
@@ -115,6 +128,7 @@ export function CrunchPedal({ params, onChange }: CrunchPedalProps) {
         <SliderControl
           label="Level"
           value={params.level}
+          defaultValue={knobDefault('crunch', 'level')}
           min={0}
           max={100}
           step={1}

@@ -7,11 +7,23 @@ export function selectRecorderMimeType(
   return WEBM_MIME_TYPES.find((mimeType) => isTypeSupported(mimeType));
 }
 
-export function createRecordingFilename(date = new Date(), format: 'webm' | 'wav' = 'webm'): string {
+export type RecordingFileFormat = 'webm' | 'wav' | 'm4a' | 'mp4' | 'ogg' | 'unknown';
+
+export function recordingFormatFromMime(mime: string): RecordingFileFormat {
+  const type = mime.split(';', 1)[0].trim().toLowerCase();
+  if (type === 'audio/webm' || type === 'video/webm') return 'webm';
+  if (type === 'audio/mp4' || type === 'audio/x-m4a' || type === 'audio/m4a') return 'm4a';
+  if (type === 'video/mp4' || type === 'application/mp4') return 'mp4';
+  if (type === 'audio/ogg' || type === 'application/ogg' || type === 'video/ogg') return 'ogg';
+  if (type === 'audio/wav' || type === 'audio/x-wav' || type === 'audio/wave') return 'wav';
+  return 'unknown';
+}
+
+export function createRecordingFilename(date = new Date(), format: RecordingFileFormat = 'webm'): string {
   const pad = (value: number) => String(value).padStart(2, '0');
   const datePart = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
   const timePart = `${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
-  return `pedalboard-${datePart}-${timePart}.${format}`;
+  return `pedalboard-${datePart}-${timePart}${format === 'unknown' ? '' : `.${format}`}`;
 }
 
 /** Encode two-channel PCM as a standard little-endian 16-bit WAV file. */

@@ -1,6 +1,7 @@
 import { useId } from 'react';
 import { useAudioStore } from '../store/audioStore';
 import { SliderControl } from './SliderControl';
+import { TAP_TEMPO_DEFAULT_BPM } from '../audio/tapTempo';
 
 export function TapTempoControl() {
   const statusId = useId();
@@ -14,6 +15,7 @@ export function TapTempoControl() {
       <SliderControl
         label="BPM"
         value={bpm}
+        defaultValue={TAP_TEMPO_DEFAULT_BPM}
         min={40}
         max={240}
         step={1}

@@ -25,11 +25,15 @@
     "preview": "vite preview",
     "test:dsp-safety": "node scripts/dsp-safety-regression.mjs",
     "test:howl": "node scripts/howl-guard-regression.mjs",
-    "test": "npm run test:chorus && npm run test:flanger && npm run test:phaser && npm run test:tremolo && npm run test:tap-tempo && npm run test:preset-ab && npm run test:shortcuts && npm run test:midi && npm run test:recording && npm run test:pwa && npm run test:auto-wah && npm run test:graphic-eq && npm run test:tuner && npm run test:dsp-safety && npm run test:howl && npm run test:compressor-phase && npm run test:output-device && npm run test:history && npm run test:cabinet-ir",
+    "test": "npm run test:chorus && npm run test:flanger && npm run test:phaser && npm run test:tremolo && npm run test:tap-tempo && npm run test:preset-ab && npm run test:shortcuts && npm run test:midi && npm run test:recording && npm run test:pwa && npm run test:auto-wah && npm run test:graphic-eq && npm run test:tuner && npm run test:dsp-safety && npm run test:howl && npm run test:compressor-phase && npm run test:output-device && npm run test:history && npm run test:cabinet-ir && npm run test:knob && npm run test:latency && npm run test:peak-limiter && npm run test:cabinet-response",
     "test:compressor-phase": "node scripts/compressor-phase-regression.mjs",
     "test:output-device": "node scripts/output-device-regression.mjs",
     "test:history": "node scripts/history-regression.mjs",
-    "test:cabinet-ir": "node scripts/cabinet-ir-regression.mjs"
+    "test:cabinet-ir": "node scripts/cabinet-ir-regression.mjs",
+    "test:knob": "node scripts/knob-regression.mjs",
+    "test:latency": "node scripts/latency-regression.mjs",
+    "test:peak-limiter": "node scripts/peak-limiter-regression.mjs",
+    "test:cabinet-response": "node scripts/cabinet-response-analysis.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

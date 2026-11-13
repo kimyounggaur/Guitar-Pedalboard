@@ -55,13 +55,16 @@ const pedal = { id: 'cab', type: 'cab', enabled: true, bypassed: false,
   params: { mix: 100, level: 100, model: 'v30-4x12', micPosition: 55, distance: 30, lowCut: 85, highCut: 5400, presence: 1.5 } };
 const effect = new CabEffect(context, pedal);
 const builtIn = convolver.buffer;
+assert.equal(convolver.normalize, false, 'generated IR uses calibrated unnormalized convolution');
 const custom = decoded([0, .2, -.1]);
 effect.setCustomImpulse(custom);
 assert.equal(convolver.buffer, custom);
+assert.equal(convolver.normalize, true, 'custom IR retains Web Audio normalization');
 effect.update({ ...pedal, params: { ...pedal.params, micPosition: 25 } });
 assert.equal(convolver.buffer, custom, 'parameter changes do not silently discard the IR');
 effect.setCustomImpulse(null);
 assert.notEqual(convolver.buffer, custom);
+assert.equal(convolver.normalize, false, 'generated normalization restored after custom IR removal');
 assert.ok(convolver.buffer && builtIn, 'restoring the selected built-in IR works');
 effect.dispose();
 assert.equal(convolver.buffer, null, 'dispose releases the loaded IR');

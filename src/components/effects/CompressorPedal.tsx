@@ -1,3 +1,6 @@
+import { knobDefault } from '../knobDefaults';
+import { KnobNumberInput } from '../KnobNumberInput';
+import { useKnobDrag } from '../../hooks/useKnobDrag';
 import { useEffect, useState, type CSSProperties } from 'react';
 import { AudioEngine } from '../../audio/AudioEngine';
 import { useAudioStore } from '../../store/audioStore';
@@ -31,9 +34,11 @@ function CompressorKnob({
 }: CompressorKnobProps) {
   const progress = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(progress, 0), 1) * 270;
+  const key = ({ Level: 'level', Knee: 'knee', Attack: 'attack', Sustain: 'sustain', Ratio: 'ratio' } as Record<string, string>)[label];
+  const dragHandlers = useKnobDrag(value, min, max, step, onChange, knobDefault('compressor', key));
 
   return (
-    <label className="compressor-knob">
+    <div className="compressor-knob">
       <span>{label}</span>
       <span
         className="compressor-knob-shell"
@@ -46,13 +51,15 @@ function CompressorKnob({
           max={max}
           step={step}
           value={value}
+          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
       <output>{displayValue}</output>
-    </label>
+      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+    </div>
   );
 }
 
@@ -159,6 +166,7 @@ export function CompressorPedal({ pedalId, params, onChange }: CompressorPedalPr
         <SliderControl
           label="Threshold"
           value={params.threshold}
+          defaultValue={knobDefault('compressor', 'threshold')}
           min={-60}
           max={-10}
           step={1}
@@ -168,6 +176,7 @@ export function CompressorPedal({ pedalId, params, onChange }: CompressorPedalPr
         <SliderControl
           label="Release"
           value={params.release}
+          defaultValue={knobDefault('compressor', 'release')}
           min={0.05}
           max={1}
           step={0.01}
@@ -177,6 +186,7 @@ export function CompressorPedal({ pedalId, params, onChange }: CompressorPedalPr
         <SliderControl
           label="Mix"
           value={params.mix}
+          defaultValue={knobDefault('compressor', 'mix')}
           min={0}
           max={100}
           step={1}

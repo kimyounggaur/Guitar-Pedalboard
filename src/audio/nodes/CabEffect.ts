@@ -66,7 +66,10 @@ export class CabEffect extends BaseEffect {
     smoothParam(this.presence.gain, finiteParam(params.presence, 1.5, -6, 6), this.context);
 
     if (this.customImpulse) {
-      if (this.convolver.buffer !== this.customImpulse) this.convolver.buffer = this.customImpulse;
+      if (this.convolver.buffer !== this.customImpulse || !this.convolver.normalize) {
+        this.convolver.normalize = true;
+        this.convolver.buffer = this.customImpulse;
+      }
       smoothParam(this.convolvedGain.gain, 1, this.context);
       smoothParam(this.bypassGain.gain, 0, this.context);
       return;
@@ -86,6 +89,7 @@ export class CabEffect extends BaseEffect {
       micPosition !== this.lastMicPosition ||
       distance !== this.lastDistance
     ) {
+      this.convolver.normalize = false;
       this.convolver.buffer = createCabinetImpulse(
         this.context,
         params.model,

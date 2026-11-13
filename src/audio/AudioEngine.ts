@@ -36,6 +36,8 @@ import { tunerProcessorSource } from './worklets/tuner-processor';
 import { howlGuardProcessorSource } from './worklets/howl-guard-processor';
 import { flangerProcessorSource } from './worklets/flanger-processor';
 import { phaserProcessorSource } from './worklets/phaser-processor';
+import { compressorProcessorSource } from './worklets/compressor-processor';
+import { peakLimiterProcessorSource } from './worklets/peak-limiter-processor';
 
 type EffectNode = EffectNodeWrapper;
 
@@ -54,13 +56,15 @@ export class AudioEngine {
   private context: AudioContext | null = null;
   private outputDeviceId = '';
   private stream: MediaStream | null = null;
+  private inputEndedHandler: (() => void) | null = null;
+  private inputEndedCleanup: (() => void) | null = null;
   private source: MediaStreamAudioSourceNode | MediaElementAudioSourceNode | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private audioFileUrl: string | null = null;
   private inputGain: GainNode | null = null;
   private chainInput: GainNode | null = null;
   private masterGain: GainNode | null = null;
-  private limiter: WaveShaperNode | null = null;
+  private limiter: AudioWorkletNode | null = null;
   private howlGuard: AudioWorkletNode | null = null;
   private inputSplitter: ChannelSplitterNode | null = null;
   private inputChannelMode: '1' | '2' | 'stereo' = '1';
@@ -97,6 +101,22 @@ export class AudioEngine {
   }
 
   setHowlHandler(handler: (() => void) | null): void { this.howlHandler = handler; }
+
+  setInputEndedHandler(handler: (() => void) | null): void { this.inputEndedHandler = handler; }
+
+  private watchInputEnd(stream: MediaStream, generation: number): void {
+    this.inputEndedCleanup?.();
+    const track = stream.getAudioTracks()[0];
+    if (!track) return;
+    let fired = false;
+    const onEnded = () => {
+      if (fired || this.stream !== stream || this.sessionGeneration !== generation) return;
+      fired = true;
+      this.inputEndedHandler?.();
+    };
+    track.addEventListener('ended', onEnded);
+    this.inputEndedCleanup = () => track.removeEventListener('ended', onEnded);
+  }
 
   setHowlProtection(enabled: boolean): void {
     this.howlProtectionEnabled = enabled;
@@ -185,11 +205,15 @@ export class AudioEngine {
       this.assertCurrentSession(context, generation);
 
       this.stream = stream;
+      this.watchInputEnd(stream, generation);
       this.source = context.createMediaStreamSource(stream);
       this.createProcessingGraph(this.source);
 
       await context.resume();
       this.assertCurrentSession(context, generation);
+      if (!stream.getAudioTracks().some((track) => track.readyState === 'live')) {
+        throw new Error('입력 장치 연결이 끊어졌습니다. 장치를 다시 연결해 주세요.');
+      }
     } catch (error) {
       if (stream && stream !== this.stream) {
         stream.getTracks().forEach((track) => track.stop());
@@ -388,6 +412,18 @@ export class AudioEngine {
     window.dispatchEvent(new Event('cab-ir-change'));
   }
 
+  /** Restore built-in IRs when loading a complete preset or comparison snapshot. */
+  clearAllCabinetIrs(): void {
+    this.cabIrRequests.forEach((requestId, pedalId) => this.cabIrRequests.set(pedalId, requestId + 1));
+    if (this.cabImpulses.size === 0) return;
+    this.cabImpulses.forEach((_impulse, pedalId) => {
+      const effect = this.effects.get(pedalId);
+      if (effect instanceof CabEffect) effect.setCustomImpulse(null);
+    });
+    this.cabImpulses.clear();
+    window.dispatchEvent(new Event('cab-ir-change'));
+  }
+
   setPedalBypass(pedalId: string, _bypassed: boolean): void {
     const pedal = this.getPedals().find((candidate) => candidate.id === pedalId);
     if (!pedal) return;
@@ -490,6 +526,8 @@ export class AudioEngine {
     }
 
     // Stop capture immediately, but leave the recorder graph alive until its final data event.
+    this.inputEndedCleanup?.();
+    this.inputEndedCleanup = null;
     this.stream?.getTracks().forEach((track) => track.stop());
     this.audioElement?.pause();
   }
@@ -501,6 +539,8 @@ export class AudioEngine {
     this.reverbImpulseCache?.dispose();
     this.reverbImpulseCache = null;
 
+    this.inputEndedCleanup?.();
+    this.inputEndedCleanup = null;
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
 
@@ -577,26 +617,26 @@ export class AudioEngine {
     };
   }
 
-  readAudioGlitchCount(): number {
-    let glitchCount = 0;
-
-    this.effects.forEach((effect) => {
-      if (effect instanceof NoiseGateEffect) {
-        glitchCount += effect.readGlitchCount();
-      }
-    });
-
-    return glitchCount;
+  readAudioGlitchCount(): number | null {
+    if (!this.context || this.context.state === 'closed') return null;
+    try {
+      const stats = (this.context as AudioContext & { playbackStats?: { underrunEvents?: unknown } }).playbackStats;
+      const count = stats?.underrunEvents;
+      return typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? count : null;
+    } catch { return null; }
   }
 
   readLatency(): LatencyReading {
     if (!this.context || this.context.state === 'closed') {
-      return { base: 0, output: 0, sampleRate: 0 };
+      return { base: null, output: null, input: null, sampleRate: 0 };
     }
-
+    const validMs = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value * 1000 : null;
+    let input: number | null = null;
+    try { input = validMs((this.stream?.getAudioTracks?.()[0]?.getSettings?.() as (MediaTrackSettings & { latency?: number }) | undefined)?.latency); } catch { /* device does not expose latency */ }
     return {
-      base: this.context.baseLatency * 1000,
-      output: (this.context.outputLatency ?? 0) * 1000,
+      base: validMs(this.context.baseLatency),
+      output: validMs(this.context.outputLatency),
+      input,
       sampleRate: this.context.sampleRate,
     };
   }
@@ -627,6 +667,8 @@ export class AudioEngine {
       this.createWorkletUrl(howlGuardProcessorSource),
       this.createWorkletUrl(flangerProcessorSource),
       this.createWorkletUrl(phaserProcessorSource),
+      this.createWorkletUrl(compressorProcessorSource),
+      this.createWorkletUrl(peakLimiterProcessorSource),
     ];
 
     await Promise.all(moduleUrls.map((url) => context.audioWorklet.addModule(url)));
@@ -683,13 +725,7 @@ export class AudioEngine {
     this.inputGain = this.context.createGain();
     this.chainInput = this.context.createGain();
     this.masterGain = this.context.createGain();
-    this.limiter = this.context.createWaveShaper();
-    const curve = new Float32Array(65537);
-    for (let i = 0; i < curve.length; i++) {
-      const value = (i / (curve.length - 1)) * 2 - 1;
-      curve[i] = Math.max(-0.89, Math.min(0.89, value));
-    }
-    this.limiter.curve = curve;
+    this.limiter = new AudioWorkletNode(this.context, 'peak-limiter-processor', { outputChannelCount: [2] });
     this.howlGuard = new AudioWorkletNode(this.context, 'howl-guard', { outputChannelCount: [2] });
     this.howlGuard.port.onmessage = (event) => {
       if (event.data?.type === 'howl') this.howlHandler?.();

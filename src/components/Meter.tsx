@@ -41,6 +41,7 @@ export function Meter({ active = true }: MeterProps) {
   const tuningPreset = useAudioStore((state) => state.tuningPreset);
   const tuningReferenceHz = useAudioStore((state) => state.tuningReferenceHz);
   const latency = useAudioStore((state) => state.latency);
+  const audioGlitchCount = useAudioStore((state) => state.audioGlitchCount);
   const masterVolume = useAudioStore((state) => state.masterVolume);
   const setMasterVolume = useAudioStore((state) => state.setMasterVolume);
   const setTunerActive = useAudioStore((state) => state.setTunerActive);
@@ -63,8 +64,8 @@ export function Meter({ active = true }: MeterProps) {
   const waveformRef = useRef<WaveformCanvasHandle>(null);
   const clipIndicatorRef = useRef<HTMLDivElement>(null);
   const outputWarningRef = useRef<HTMLParagraphElement>(null);
-  const latencyTotal = latency.base + latency.output;
-  const hasLatencyReading = latency.sampleRate > 0;
+  const latencyTotal = latency.base !== null && latency.output !== null ? latency.base + latency.output : null;
+  const hasLatencyReading = latency.sampleRate > 0 && latencyTotal !== null;
   const hasPitch = isTunerActive && pitch.frequency !== null && pitch.note !== null;
   const absoluteCents = Math.abs(pitch.cents);
   const tunerStatus = !hasPitch
@@ -227,10 +228,11 @@ export function Meter({ active = true }: MeterProps) {
       <div className="recording-panel">
         <label>녹음 형식
           <select value={recordingFormat} disabled={recordingStatus === 'recording'} onChange={(event) => setRecordingFormat(event.currentTarget.value as 'webm' | 'wav')}>
-            <option value="webm">WebM (Opus)</option>
+            <option value="webm">압축 녹음 (브라우저 지원 형식)</option>
             <option value="wav">WAV (16-bit PCM)</option>
           </select>
         </label>
+        {recordingFormat === 'webm' ? <p>압축 녹음 형식은 브라우저에 따라 WebM, MP4 또는 기타 형식으로 저장됩니다.</p> : null}
         {recordingFormat === 'wav' ? <p>WAV 녹음은 최대 2분이며 메모리 제한에 도달하면 자동 저장됩니다. 녹음 중에는 화면을 열어 두세요. 기기가 바쁘거나 백그라운드 상태일 때 소리가 끊길 수 있습니다.</p> : null}
         <div className="recording-actions" role="group" aria-label="마스터 출력 녹음">
           <button
@@ -270,7 +272,7 @@ export function Meter({ active = true }: MeterProps) {
             : recordingStatus === 'recording'
               ? `녹음 중 ${formatElapsed(recordingElapsed)}`
               : recordingStatus === 'ready'
-                ? `녹음 완료 ${formatElapsed(recordingElapsed)}`
+                ? `녹음 완료 ${formatElapsed(recordingElapsed)} · ${recordedFormat === 'unknown' ? '파일 형식 확인 불가 (확장자 없음)' : recordedFormat.toUpperCase()}`
                 : '녹음 대기'}
         </p>
       </div>
@@ -278,10 +280,12 @@ export function Meter({ active = true }: MeterProps) {
       <div className="latency-status" aria-live="polite">
         <span>
           {hasLatencyReading
-            ? `출력 지연 추정 ${latencyTotal.toFixed(1)}ms @ ${(latency.sampleRate / 1000).toFixed(1)}kHz`
+            ? `출력 지연 추정 ${(latencyTotal ?? 0).toFixed(1)}ms @ ${(latency.sampleRate / 1000).toFixed(1)}kHz`
             : '지연시간 측정 대기'}
         </span>
-        {hasLatencyReading && latencyTotal > 20 ? (
+        <p>입력 장치 설정 지연: {latency.input === null ? '확인 불가' : `${latency.input.toFixed(1)}ms`} · 활성 이펙터 처리 지연: 추정 미지원</p>
+        <p>입력 값은 장치 설정상의 목표치이며 실제 왕복 지연 측정값이 아닙니다. 출력 추정에는 이펙터 처리가 포함되지 않습니다.</p>
+        {latencyTotal !== null && latencyTotal > 20 ? (
           <p>
             지연이 큽니다. 유선 헤드폰과 오디오 인터페이스를 사용하고 다른 작업을 줄여 보세요.
           </p>
@@ -294,11 +298,11 @@ export function Meter({ active = true }: MeterProps) {
         </span>
         <i aria-hidden="true">·</i>
         <span>
-          출력 지연 추정 <output>{hasLatencyReading ? `${latencyTotal.toFixed(1)}ms` : '--'}</output>
+          출력 지연 추정 <output>{hasLatencyReading ? `${(latencyTotal ?? 0).toFixed(1)}ms` : '--'}</output>
         </span>
         <i aria-hidden="true">·</i>
         <span>
-          끊김 횟수 <output>측정 미지원</output>
+          출력 버퍼 부족 <output>{audioGlitchCount === null ? '측정 미지원' : `${audioGlitchCount}회`}</output>
         </span>
       </div>
 

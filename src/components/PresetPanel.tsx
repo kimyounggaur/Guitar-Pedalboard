@@ -1,9 +1,9 @@
 import { notifyStorageFailure } from '../store/storageNotice';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
-import { useAudioStore } from '../store/audioStore';
-import { usePedalStore, clonePedals } from '../store/pedalStore';
+import { usePedalStore } from '../store/pedalStore';
 import {
+  applyPresetPedals,
   presetLibraries,
   usePresetStore,
   type PresetComparisonSlot,
@@ -58,9 +58,7 @@ export function PresetPanel() {
   const [recentIds, setRecentIds] = useState<string[]>(() => readStringList(RECENTS_KEY));
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const pedals = usePedalStore((state) => state.pedals);
-  const setPedals = usePedalStore((state) => state.setPedals);
   const resetPedalOrder = usePedalStore((state) => state.resetPedalOrder);
-  const adoptTempoFromPedals = useAudioStore((state) => state.adoptTempoFromPedals);
   const presets = usePresetStore((state) => state.presets);
   const savePreset = usePresetStore((state) => state.savePreset);
   const deletePreset = usePresetStore((state) => state.deletePreset);
@@ -148,15 +146,12 @@ export function PresetPanel() {
   }, []);
 
   const loadPreset = useCallback((preset: PresetListItem) => {
-    const nextPedals = clonePedals(preset.pedals);
-    setPedals(nextPedals);
-    adoptTempoFromPedals();
-    AudioEngine.getInstance().rebuildChain();
+    applyPresetPedals(preset.pedals);
     setName(preset.name);
     setActivePresetId(preset.id);
     rememberRecent(preset.id);
     setMessage(`${preset.name} 프리셋을 불러왔습니다.`);
-  }, [adoptTempoFromPedals, rememberRecent, setPedals]);
+  }, [rememberRecent]);
 
   const captureComparisonSlot = useCallback((slot: PresetComparisonSlot) => {
     captureCurrentToSlot(slot);
@@ -196,6 +191,7 @@ export function PresetPanel() {
 
   const reset = () => {
     if (!window.confirm('모든 페달 설정을 기본값으로 되돌리시겠습니까?')) return;
+    AudioEngine.getInstance().clearAllCabinetIrs();
     resetPedalOrder();
     AudioEngine.getInstance().rebuildChain();
     setActivePresetId(null);

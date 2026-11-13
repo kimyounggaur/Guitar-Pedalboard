@@ -2,7 +2,7 @@
 :is(.compressor-knob, .compressor-knob output, .fuzz-knob, .reverb-knob,
     .reverb-knob output, .graphic-eq-fader output, .vertical-fader-label,
     .vertical-fader output, .tap-tempo-button kbd, .tap-tempo-status,
-    .cab-mic-legend, .graphic-eq7-utility-controls label,
+    .cab-mic-legend, .graphic-eq7-utility-controls > div,
     .chorus-ui .knob-control-head, .flanger-ui .knob-control-head,
     .phaser-ui .knob-control-head, .tremolo-ui .knob-control-head,
     .auto-wah-ui .knob-control-head, .preset-tabs em, .preset-tool-title,
@@ -30,4 +30,29 @@
 .pedal-card-fuzz .knob-control-head output,
 .pedal-card-delay .knob-control-head output {
   color: #101820;
+}
+
+:is(.noise-gate-knob-shell, .tube-knob-shell, .crunch-knob-shell,
+    .fuzz-knob-shell, .delay-knob-shell, .compressor-knob-shell,
+    .reverb-knob-shell, .graphic-eq-slot, .vertical-fader-rail) input {
+  touch-action: none;
+}
+
+.knob-number-input {
+  width: 5rem;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 3px 2px;
+  border: 1px solid #5a6778;
+  border-radius: 4px;
+  background: #fff;
+  color: #111;
+  font: 500 11px/1.2 system-ui, sans-serif;
+  text-align: center;
+}
+
+:is(.noise-gate-knob, .tube-knob, .crunch-knob, .fuzz-knob, .delay-knob) output {
+  color: currentColor;
+  font: 700 11px/1.2 system-ui, sans-serif;
 }

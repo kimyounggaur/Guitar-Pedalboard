@@ -27,7 +27,7 @@ import {
   type MidiDeviceInfo,
   type MidiMappings,
 } from '../audio/midi';
-import { selectRecorderMimeType, WavRecorder } from '../audio/recording';
+import { recordingFormatFromMime, selectRecorderMimeType, WavRecorder, type RecordingFileFormat } from '../audio/recording';
 import { usePedalStore } from './pedalStore';
 
 const IO_STORAGE_KEY = 'guitar-pedalboard:io';
@@ -62,7 +62,7 @@ const silentLevel: LevelReading = {
   clipHoldUntil: 0,
 };
 const emptyPitch: PitchReading = { frequency: null, note: null, cents: 0 };
-const emptyLatency: LatencyReading = { base: 0, output: 0, sampleRate: 0 };
+const emptyLatency: LatencyReading = { base: null, output: null, input: null, sampleRate: 0 };
 
 
 function clamp(value: number, min: number, max: number): number {
@@ -135,6 +135,7 @@ function isSameLatency(left: LatencyReading, right: LatencyReading): boolean {
   return (
     left.base === right.base &&
     left.output === right.output &&
+    left.input === right.input &&
     left.sampleRate === right.sampleRate
   );
 }
@@ -325,7 +326,7 @@ let recordingStartedAt = 0;
 let recordingGeneration = 0;
 let recordingEndMode: RecordingEndMode = 'finalize';
 let recordingStopRequested = false;
-let recordingMimeType = 'audio/webm';
+let recordingMimeType = '';
 let recordingCompletion: Promise<void> | null = null;
 let resolveRecordingCompletion: (() => void) | null = null;
 
@@ -378,12 +379,13 @@ function settleRecording(
 
   if (mode === 'finalize') {
     try {
-      const blob = new Blob(chunks, { type: candidate.mimeType || recordingMimeType });
+      const mime = candidate.mimeType || recordingMimeType || chunks.find((chunk) => chunk.type)?.type || '';
+      const blob = new Blob(chunks, { type: mime });
       const recordedUrl = URL.createObjectURL(blob);
       useAudioStore.setState({
         recordingStatus: 'ready',
         recordedUrl,
-        recordedFormat: 'webm',
+        recordedFormat: recordingFormatFromMime(mime),
         recordingElapsed: elapsed,
       });
     } catch {
@@ -556,7 +558,7 @@ interface AudioStore {
   inputLevel: LevelReading;
   outputLevel: LevelReading;
   activeEffectCount: number;
-  audioGlitchCount: number;
+  audioGlitchCount: number | null;
   pitch: PitchReading;
   isTunerActive: boolean;
   tuningPreset: TuningPresetId;
@@ -577,7 +579,7 @@ interface AudioStore {
   midiError: string | null;
   recordingSupported: boolean;
   recordingFormat: 'webm' | 'wav';
-  recordedFormat: 'webm' | 'wav';
+  recordedFormat: RecordingFileFormat;
   setRecordingFormat: (format: 'webm' | 'wav') => void;
   recordingStatus: RecordingStatus;
   recordedUrl: string | null;
@@ -630,7 +632,7 @@ function resetReadings() {
     inputLevel: silentLevel,
     outputLevel: silentLevel,
     activeEffectCount: 0,
-    audioGlitchCount: 0,
+    audioGlitchCount: null,
     pitch: emptyPitch,
     latency: emptyLatency,
     fileCurrentTime: 0,
@@ -666,7 +668,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   inputLevel: silentLevel,
   outputLevel: silentLevel,
   activeEffectCount: 0,
-  audioGlitchCount: 0,
+  audioGlitchCount: null,
   pitch: emptyPitch,
   isTunerActive: false,
   tuningPreset: 'standard',
@@ -1121,7 +1123,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       recordingStartedAt = recordingNow();
       recordingEndMode = 'finalize';
       recordingStopRequested = false;
-      recordingMimeType = mimeType ?? (candidate.mimeType || 'audio/webm');
+      recordingMimeType = mimeType ?? candidate.mimeType ?? '';
       recordingCompletion = new Promise((resolve) => {
         resolveRecordingCompletion = resolve;
       });
@@ -1209,6 +1211,14 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 if (initialOutputDevice && audioEngine.supportsOutputSelection) {
   void audioEngine.setOutputDevice(initialOutputDevice);
 }
+
+audioEngine.setInputEndedHandler(() => {
+  const state = useAudioStore.getState();
+  if (!state.isRunning || state.inputMode !== 'device' || state.isLoading) return;
+  void state.stop().finally(() => {
+    useAudioStore.setState({ error: '입력 장치 연결이 끊어져 오디오를 중지했습니다. 녹음 결과를 확인하고 장치를 다시 연결해 주세요.' });
+  });
+});
 
 // The audio worklet detects and mutes without depending on any mounted meter UI.
 audioEngine.setHowlProtection(initialIoSettings.howlProtectionEnabled);
