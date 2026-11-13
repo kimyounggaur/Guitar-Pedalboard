@@ -5,10 +5,18 @@ import { smoothParam } from '../utils/smoothing';
 
 export class CompressorEffect extends BaseEffect {
   private readonly compressor: DynamicsCompressorNode;
+  private readonly dryDelay: DelayNode;
 
   constructor(context: AudioContext, pedal: PedalState) {
     super(context, pedal);
     this.compressor = context.createDynamicsCompressor();
+    // DynamicsCompressorNode uses a 6 ms look-ahead. Match the parallel dry
+    // path to avoid phase cancellation when Mix is between 0 and 100 percent.
+    this.dryDelay = context.createDelay(0.01);
+    this.dryDelay.delayTime.value = 0.006;
+    this.effectGate.disconnect(this.dryGain);
+    this.effectGate.connect(this.dryDelay);
+    this.dryDelay.connect(this.dryGain);
 
     this.effectInput.connect(this.compressor);
     this.compressor.connect(this.effectOutput);
@@ -29,8 +37,14 @@ export class CompressorEffect extends BaseEffect {
     smoothParam(this.compressor.knee, params.knee, this.context);
   }
 
+  /** Actual gain reduction in dB, as reported by the Web Audio compressor. */
+  getGainReduction(): number {
+    return this.compressor.reduction;
+  }
+
   override dispose(): void {
     this.compressor.disconnect();
+    this.dryDelay.disconnect();
     super.dispose();
   }
 }

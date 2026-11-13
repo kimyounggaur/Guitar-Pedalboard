@@ -14,8 +14,8 @@ export interface TuningPresetDefinition {
   targets: readonly TuningTarget[];
 }
 
-function midiToFrequency(midi: number): number {
-  return 440 * Math.pow(2, (midi - 69) / 12);
+function midiToFrequency(midi: number, referenceHz = 440): number {
+  return referenceHz * Math.pow(2, (midi - 69) / 12);
 }
 
 function target(note: string, midi: number): TuningTarget {
@@ -23,6 +23,7 @@ function target(note: string, midi: number): TuningTarget {
 }
 
 export const TUNING_PRESETS: Record<TuningPresetId, TuningPresetDefinition> = {
+  chromatic: { id: 'chromatic', label: '크로매틱', targets: [] },
   standard: {
     id: 'standard',
     label: 'Standard',
@@ -74,26 +75,35 @@ export const TUNING_PRESETS: Record<TuningPresetId, TuningPresetDefinition> = {
 };
 
 export const TUNING_PRESET_OPTIONS = (
-  ['standard', 'drop-d', 'half-step-down', 'open-g'] as const
+  ['standard', 'drop-d', 'half-step-down', 'open-g', 'chromatic'] as const
 ).map((id) => TUNING_PRESETS[id]);
 
 export function getPitchReading(
   frequency: number | null,
   presetId: TuningPresetId,
+  referenceHz = 440,
 ): PitchReading {
   if (frequency === null || !Number.isFinite(frequency) || frequency <= 0) {
     return { frequency: null, note: null, cents: 0 };
   }
 
+  const reference = Number.isFinite(referenceHz) && referenceHz >= 400 && referenceHz <= 480 ? referenceHz : 440;
+  const midi = Math.round(69 + 12 * Math.log2(frequency / reference));
+  const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const note = `${names[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+  if (presetId === 'chromatic') {
+    return { frequency, note, cents: 1200 * Math.log2(frequency / midiToFrequency(midi, reference)) };
+  }
   const targets = TUNING_PRESETS[presetId].targets;
   let nearest = targets[0];
-  let nearestCents = getOctaveWrappedCents(frequency, nearest.frequency);
-  let nearestFrequencyDistance = Math.abs(frequency - nearest.frequency);
+  let nearestCents = getOctaveWrappedCents(frequency, nearest.frequency * reference / 440);
+  let nearestFrequencyDistance = Math.abs(frequency - nearest.frequency * reference / 440);
 
   for (let index = 1; index < targets.length; index += 1) {
     const candidate = targets[index];
-    const candidateCents = getOctaveWrappedCents(frequency, candidate.frequency);
-    const candidateFrequencyDistance = Math.abs(frequency - candidate.frequency);
+    const candidateFrequency = candidate.frequency * reference / 440;
+    const candidateCents = getOctaveWrappedCents(frequency, candidateFrequency);
+    const candidateFrequencyDistance = Math.abs(frequency - candidateFrequency);
     const centsDifference = Math.abs(candidateCents) - Math.abs(nearestCents);
 
     if (
@@ -109,8 +119,11 @@ export function getPitchReading(
 
   return {
     frequency,
-    note: nearest.note,
+    note,
     cents: nearestCents,
+    targetNote: nearest.note,
+    stringNumber: 6 - targets.indexOf(nearest),
+    octaveMismatch: Math.abs(1200 * Math.log2(frequency / (nearest.frequency * reference / 440)) - nearestCents) > 600,
   };
 }
 

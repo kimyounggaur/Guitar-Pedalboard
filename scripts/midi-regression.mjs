@@ -61,11 +61,10 @@ assert.match(pedalCardSource, /role="menuitem"/);
 assert.match(pedalCardSource, />\s*MIDI 학습\s*<\/button>/);
 assert.match(pedalCardSource, /className="midi-learn-button"/);
 assert.match(pedalCardSource, /aria-live="polite"/);
-assert.match(
-  pedalCardSource,
-  /\{midiSupported \? \([\s\S]*className="midi-bypass-control"[\s\S]*\) : \(\s*bypassToggle\s*\)\}/,
-  'Web MIDI 미지원 분기는 MIDI 컨트롤 없이 기존 Bypass 스위치만 렌더해야 합니다.',
-);
+assert.match(pedalCardSource, /<StompToggleSwitch label="효과" checked=\{pedal.enabled && !pedal.bypassed\}/);
+assert.match(pedalCardSource, /aria-haspopup="menu"/);
+assert.doesNotMatch(pedalCardSource, /label="Bypass"/);
+
 assert.match(appShellSource, /connectSavedMidi\(\)/);
 
 const midiBundle = await build({
@@ -248,7 +247,8 @@ Object.defineProperty(globalThis, 'navigator', {
 const runtimeBundle = await build({
   stdin: {
     contents: `
-      export { useAudioStore } from './src/store/audioStore.ts';
+      export { useAudioStore, registerMidiAdvancedHandler } from './src/store/audioStore.ts';
+      export { validateMidiAdvanced, parseAdvancedMessage, dispatchAdvancedMessage } from './src/audio/midiAdvanced.ts';
       export { usePedalStore } from './src/store/pedalStore.ts';
       export { AudioEngine } from './src/audio/AudioEngine.ts';
     `,
@@ -263,7 +263,7 @@ const runtimeBundle = await build({
   write: false,
 });
 const runtimeUrl = `data:text/javascript;base64,${Buffer.from(runtimeBundle.outputFiles[0].text).toString('base64')}`;
-const { AudioEngine, useAudioStore, usePedalStore } = await import(runtimeUrl);
+const { AudioEngine, useAudioStore, usePedalStore, registerMidiAdvancedHandler, validateMidiAdvanced, parseAdvancedMessage, dispatchAdvancedMessage } = await import(runtimeUrl);
 
 assert.equal(requestCount, 0, '명시적 Learn 전에 MIDI 권한을 요청했습니다.');
 assert.equal(useAudioStore.getState().midiSupported, true);
@@ -338,6 +338,28 @@ inputOne.emit([0x9f, 60, 100]);
 assert.deepEqual(bypassCalls.at(-1), ['compressor', true]);
 assert.equal(JSON.parse(storage.get('guitar-pedalboard:midi')).compressor.mode, 'toggle');
 
+
+const advanced = validateMidiAdvanced({ channel: 2, volumeCc: 20, wahCc: 11, programs: { '8': 'preset-1', '128': 'invalid' } });
+assert.deepEqual(advanced, { channel: 2, volumeCc: 20, wahCc: 11, programs: { '8': 'preset-1' } });
+assert.equal(validateMidiAdvanced({ volumeCc: 7, wahCc: 7 }).wahCc, null);
+assert.deepEqual(parseAdvancedMessage([0xc1, 8], advanced), { type: 'program', value: 8 });
+assert.equal(parseAdvancedMessage([0xc0, 8], advanced), null);
+assert.equal(parseAdvancedMessage([0xc1, 9], advanced), null);
+const advancedActions = [];
+const advancedHandlers = { program: (id) => advancedActions.push(['program', id]), volume: (value) => advancedActions.push(['volume', value]), wah: (value) => advancedActions.push(['wah', value]) };
+registerMidiAdvancedHandler((data) => dispatchAdvancedMessage(data, advanced, advancedHandlers), (data) => Boolean(parseAdvancedMessage(data, advanced)));
+const beforeAdvanced = bypassCalls.length;
+inputOne.emit([0xc1, 8]);
+inputOne.emit([0xb1, 20, 127]);
+inputOne.emit([0xb1, 11, 0]);
+assert.deepEqual(advancedActions, [['program', 'preset-1'], ['volume', 1], ['wah', 0]]);
+assert.equal(bypassCalls.length, beforeAdvanced, '익스프레션 CC가 페달 스위치에도 적용되었습니다.');
+await useAudioStore.getState().startMidiLearn('drive');
+inputOne.emit([0xb1, 20, 64]);
+assert.equal(useAudioStore.getState().midiLearningPedalId, 'drive');
+assert.match(useAudioStore.getState().midiError, /이미 사용 중/);
+useAudioStore.getState().cancelMidiLearn();
+registerMidiAdvancedHandler(null, null);
 
 const inputTwo = new MockMidiInput('input-2', 'Backup Controller');
 access.inputs.set(inputTwo.id, inputTwo);

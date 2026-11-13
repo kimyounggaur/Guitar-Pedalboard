@@ -27,7 +27,6 @@ import { AudioEngine } from '../audio/AudioEngine';
 import { formatMidiMapping } from '../audio/midi';
 import { useAudioStore } from '../store/audioStore';
 import { usePedalStore } from '../store/pedalStore';
-import { ToggleSwitch } from './ToggleSwitch';
 import { SliderControl } from './SliderControl';
 import { StompToggleSwitch } from './StompToggleSwitch';
 import { NoiseGatePedal } from './effects/NoiseGatePedal';
@@ -76,7 +75,6 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
   const midiMenuItemRef = useRef<HTMLButtonElement>(null);
   const setActivePedal = usePedalStore((state) => state.setActivePedal);
   const setPedalBypass = usePedalStore((state) => state.setPedalBypass);
-  const togglePedal = usePedalStore((state) => state.togglePedal);
   const updatePedalParam = usePedalStore((state) => state.updatePedalParam);
   const midiSupported = useAudioStore((state) => state.midiSupported);
   const midiLearningPedalId = useAudioStore((state) => state.midiLearningPedalId);
@@ -111,15 +109,6 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
     event.stopPropagation();
   };
 
-  const toggleEnabled = () => {
-    togglePedal(pedal.id);
-    const updatedPedal = usePedalStore
-      .getState()
-      .pedals.find((candidate) => candidate.id === pedal.id);
-    if (updatedPedal) {
-      AudioEngine.getInstance().setPedalEnabled(pedal.id, updatedPedal.enabled);
-    }
-  };
 
   const commitParam = (key: string, value: number | string | boolean) => {
     if ((key === 'bypass' || key === 'bypassed') && typeof value === 'boolean') {
@@ -132,7 +121,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
     AudioEngine.getInstance().setPedalParam(pedal.id, key, value);
   };
 
-  const openMidiMenu = (event: ReactMouseEvent<HTMLLabelElement>) => {
+  const openMidiMenu = (event: ReactMouseEvent<HTMLElement>) => {
     if (!midiSupported) return;
     event.preventDefault();
     event.stopPropagation();
@@ -149,14 +138,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
     : midiMapping
       ? `매핑됨 · ${formatMidiMapping(midiMapping)}`
       : 'MIDI 미매핑';
-  const bypassToggle = (
-    <ToggleSwitch
-      label="Bypass"
-      checked={pedal.bypassed}
-      onChange={(checked) => commitParam('bypassed', checked)}
-      onContextMenu={midiSupported ? openMidiMenu : undefined}
-    />
-  );
+
 
   return (
     <article
@@ -187,7 +169,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
           ::
         </button>
         <div>
-          <p className="pedal-kicker">{pedal.type}</p>
+          <p className="pedal-kicker">이펙터</p>
           <h2>{pedal.name}</h2>
         </div>
       </header>
@@ -230,6 +212,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         )}
         {pedal.type === 'compressor' && (
           <CompressorPedal
+            pedalId={pedal.id}
             params={pedal.params as CompressorParams}
             onChange={(key, value) => commitParam(String(key), value)}
           />
@@ -272,6 +255,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         )}
         {pedal.type === 'cab' && (
           <CabPedal
+            pedalId={pedal.id}
             params={pedal.params as CabParams}
             onChange={(key, value) => commitParam(String(key), value)}
           />
@@ -323,10 +307,12 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         onTouchStart={stopControlEvent}
         onKeyDown={stopControlEvent}
       >
-        <StompToggleSwitch label="On/Off" checked={pedal.enabled} onChange={toggleEnabled} />
+        <StompToggleSwitch label="효과" checked={pedal.enabled && !pedal.bypassed} onChange={(checked) => commitParam('bypassed', !checked)} />
         {midiSupported ? (
           <div className="midi-bypass-control">
-            {bypassToggle}
+            <button type="button" className="midi-learn-button" aria-haspopup="menu" aria-expanded={isMidiMenuOpen} onClick={() => setIsMidiMenuOpen((open) => !open)} onContextMenu={openMidiMenu}>
+              MIDI 설정
+            </button>
               <button
                 className="midi-learn-button"
                 type="button"
@@ -353,7 +339,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
                   ref={midiMenuRef}
                   className="midi-learn-menu"
                   role="menu"
-                  aria-label={`${pedal.name} Bypass MIDI 메뉴`}
+                  aria-label={`${pedal.name} MIDI 메뉴`}
                 >
                   <button
                     ref={midiMenuItemRef}
@@ -378,9 +364,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
                 </div>
               ) : null}
           </div>
-        ) : (
-          bypassToggle
-        )}
+        ) : null}
       </footer>
     </article>
   );

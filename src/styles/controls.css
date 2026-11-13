@@ -270,7 +270,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: rgba(8, 13, 20, 0.76);
   color: #f4f8ff;
   font: inherit;
-  font-size: 0.65rem;
+  font-size: 0.6875rem;
   font-weight: 900;
   letter-spacing: 0.05em;
   touch-action: manipulation;
@@ -289,10 +289,10 @@ input[type="range"]::-webkit-slider-thumb {
 .midi-mapping-status {
   max-width: 138px;
   color: currentColor;
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
   font-weight: 800;
   line-height: 1.25;
-  opacity: 0.72;
+  opacity: 1;
   text-align: right;
 }
 

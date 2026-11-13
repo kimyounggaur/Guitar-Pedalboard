@@ -106,7 +106,7 @@ export function PedalBoard({ inputPanel }: PedalBoardProps) {
         aria-atomic="true"
         tabIndex={0}
       >
-        <span className="chain-endpoint">Guitar Input</span>
+        <span className="chain-endpoint">기타 입력</span>
         {pedals.map((pedal) => (
           <span className="signal-chain-hop" key={pedal.id}>
             <span className="chain-arrow" aria-hidden="true">
@@ -122,7 +122,7 @@ export function PedalBoard({ inputPanel }: PedalBoardProps) {
           <span className="chain-arrow" aria-hidden="true">
             -&gt;
           </span>
-          <span className="chain-endpoint">Output</span>
+          <span className="chain-endpoint">출력</span>
         </span>
       </div>
 

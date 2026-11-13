@@ -20,6 +20,7 @@ export class TunerNode {
   readonly input: AudioWorkletNode;
   private frequency: number | null = null;
   private preset: TuningPresetId;
+  private referenceHz = 440;
   private sessionId = 0;
   private active = false;
   private disposed = false;
@@ -47,7 +48,7 @@ export class TunerNode {
       this.frequency =
         message.frequency === null ||
         !Number.isFinite(message.frequency) ||
-        message.frequency < 70 ||
+        message.frequency < 55 ||
         message.frequency > 1400
           ? null
           : message.frequency;
@@ -70,9 +71,13 @@ export class TunerNode {
     this.preset = preset;
   }
 
+  setReferenceHz(referenceHz: number): void {
+    this.referenceHz = referenceHz;
+  }
+
   readPitch(): PitchReading {
     if (!this.active || this.frequency === null) return EMPTY_PITCH;
-    return getPitchReading(this.frequency, this.preset);
+    return getPitchReading(this.frequency, this.preset, this.referenceHz);
   }
 
   dispose(): void {

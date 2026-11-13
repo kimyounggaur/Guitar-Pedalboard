@@ -482,14 +482,15 @@ select,
 }
 
 .tuner-toolbar {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 14px;
   align-items: end;
 }
 
 .tuner-preset-control {
   display: grid;
+  flex: 1 1 100px;
   gap: 5px;
   min-width: 0;
   color: var(--ink-muted);

@@ -1,0 +1,33 @@
+/* Keep parameter names and values readable at the default browser text size. */
+:is(.compressor-knob, .compressor-knob output, .fuzz-knob, .reverb-knob,
+    .reverb-knob output, .graphic-eq-fader output, .vertical-fader-label,
+    .vertical-fader output, .tap-tempo-button kbd, .tap-tempo-status,
+    .cab-mic-legend, .graphic-eq7-utility-controls label,
+    .chorus-ui .knob-control-head, .flanger-ui .knob-control-head,
+    .phaser-ui .knob-control-head, .tremolo-ui .knob-control-head,
+    .auto-wah-ui .knob-control-head, .preset-tabs em, .preset-tool-title,
+    .sidebar .preset-load-button span, .preset-library-list small,
+    .preset-library-list em, .preset-search span) {
+  font-size: max(0.6875rem, 11px);
+  line-height: 1.2;
+}
+
+/* The separate min/max row repeats the range information already exposed by the controls. */
+.compressor-minmax-row {
+  display: none;
+}
+
+.compressor-knob output, .graphic-eq-fader output, .vertical-fader output {
+  overflow: visible;
+  max-width: none;
+  text-overflow: clip;
+}
+
+.pedal-card-drive .knob-control-head output,
+.pedal-card-noise-gate .knob-control-head output,
+.pedal-card-eq .knob-control-head output,
+.pedal-card-crunch .knob-control-head output,
+.pedal-card-fuzz .knob-control-head output,
+.pedal-card-delay .knob-control-head output {
+  color: #101820;
+}

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
+import { setTimeout as delay } from 'node:timers/promises';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
@@ -259,6 +260,17 @@ try {
 } finally {
   globalThis.window.localStorage.setItem = originalSetItem;
 }
+
+// Frequent knob changes are coalesced while the most recent value stays in memory.
+usePedalStore.getState().savePedalsToStorage();
+const pedalWriteCount = () => storageWrites.filter(({ key }) => key === 'guitar-pedalboard:pedals').length;
+const writesBeforeKnob = pedalWriteCount();
+usePedalStore.getState().updatePedalParam('delay', 'bpm', 135);
+usePedalStore.getState().updatePedalParam('delay', 'bpm', 136);
+assert.equal(pedalWriteCount(), writesBeforeKnob);
+assert.equal(usePedalStore.getState().pedals.find((pedal) => pedal.id === 'delay').params.bpm, 136);
+await delay(400);
+assert.equal(pedalWriteCount(), writesBeforeKnob + 1);
 
 console.log(
   'Preset A/B regression passed: isolated snapshots, overwrite/empty guards, active slot, single guarded keyboard listener, session-only export/storage and tempo-aware rebuild.',

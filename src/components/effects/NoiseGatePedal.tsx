@@ -86,7 +86,7 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
             onChange={(value) => onChange('releaseMs', value)}
           />
           <NoiseGateKnob
-            label="Mode"
+            label="간격"
             value={params.hysteresisDb}
             min={0}
             max={10}

@@ -121,7 +121,7 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
           onChange={(value) => onChange('bias', value)}
         />
         <SliderControl
-          label="Gate"
+          label="출력 감쇠"
           value={params.gate}
           min={0}
           max={100}

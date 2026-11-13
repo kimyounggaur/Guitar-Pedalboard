@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react';
+import { AudioEngine } from '../../audio/AudioEngine';
 import type { CabParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 
 interface CabPedalProps {
+  pedalId: string;
   params: CabParams;
   onChange: (key: keyof CabParams, value: PedalParamValue) => void;
 }
@@ -15,7 +18,16 @@ const cabModels: Array<{ value: CabParams['model']; label: string }> = [
   { value: 'off', label: 'IR 끄기' },
 ];
 
-export function CabPedal({ params, onChange }: CabPedalProps) {
+export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
+  const [irName, setIrName] = useState(() => AudioEngine.getInstance().getCabinetIrName(pedalId));
+  const [irError, setIrError] = useState('');
+  const [irLoading, setIrLoading] = useState(false);
+  useEffect(() => {
+    const refresh = () => setIrName(AudioEngine.getInstance().getCabinetIrName(pedalId));
+    window.addEventListener('cab-ir-change', refresh);
+    refresh();
+    return () => window.removeEventListener('cab-ir-change', refresh);
+  }, [pedalId]);
   return (
     <div className="cab-sim-ui" role="group" aria-label="캐비닛 시뮬레이터 컨트롤">
       <div className="cab-grille" aria-hidden="true">
@@ -37,6 +49,26 @@ export function CabPedal({ params, onChange }: CabPedalProps) {
           ))}
         </select>
       </label>
+
+      <div className="cab-custom-ir">
+        <label>
+          사용자 IR 불러오기 (WAV)
+          <input type="file" accept=".wav,audio/wav" disabled={irLoading} onChange={async (event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            if (!file) return;
+            setIrError(''); setIrLoading(true);
+            try { await AudioEngine.getInstance().loadCabinetIr(pedalId, file); }
+            catch (error) { setIrError(error instanceof Error ? error.message : 'IR을 불러오지 못했습니다.'); }
+            finally { setIrLoading(false); }
+          }} />
+        </label>
+        <p>{irName ? `사용 중: ${irName}` : '기본 캐비닛 IR 사용 중'}</p>
+        {irName && <small>마이크 위치와 거리 조절은 기본 IR에만 적용됩니다.</small>}
+        {irName && <button type="button" onClick={() => AudioEngine.getInstance().clearCabinetIr(pedalId)}>기본 IR로 돌아가기</button>}
+        <small>모노·스테레오 PCM 또는 32비트 float WAV, 최대 2초·4 MB. 오디오 종료 또는 새로고침 시 삭제되며 프리셋에는 저장되지 않습니다.</small>
+        {irError && <p role="alert">{irError}</p>}
+      </div>
 
       <div className="cab-knob-grid">
         <SliderControl

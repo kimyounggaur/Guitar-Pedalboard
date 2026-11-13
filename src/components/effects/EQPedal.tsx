@@ -63,7 +63,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
         <div className="graphic-eq-led" aria-hidden="true" />
         <div className="graphic-eq-fader-bank">
           <EQFader
-            label="100"
+            label="Low Cut"
             value={params.lowCut}
             min={40}
             max={160}
@@ -72,7 +72,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
             onChange={(value) => onChange('lowCut', value)}
           />
           <EQFader
-            label="200"
+            label="Bass"
             value={params.bassGain}
             min={-12}
             max={12}
@@ -81,7 +81,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
             onChange={(value) => onChange('bassGain', value)}
           />
           <EQFader
-            label="400"
+            label="Mid"
             value={params.midGain}
             min={-12}
             max={12}
@@ -90,7 +90,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
             onChange={(value) => onChange('midGain', value)}
           />
           <EQFader
-            label="800"
+            label="Mid Hz"
             value={params.midFreq}
             min={250}
             max={1500}
@@ -99,7 +99,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
             onChange={(value) => onChange('midFreq', value)}
           />
           <EQFader
-            label="1.6k"
+            label="Mid Q"
             value={params.midQ}
             min={0.3}
             max={4}
@@ -108,7 +108,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
             onChange={(value) => onChange('midQ', value)}
           />
           <EQFader
-            label="3.2k"
+            label="Treble"
             value={params.trebleGain}
             min={-12}
             max={12}
@@ -117,7 +117,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
             onChange={(value) => onChange('trebleGain', value)}
           />
           <EQFader
-            label="6.4k"
+            label="Presence"
             value={params.presenceGain}
             min={-12}
             max={12}

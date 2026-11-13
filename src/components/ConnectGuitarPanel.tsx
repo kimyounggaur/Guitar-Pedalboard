@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAudioStore } from '../store/audioStore';
 import { DeviceSelector } from './DeviceSelector';
+import { MidiAdvancedControls } from './MidiAdvancedControls';
 import { ToggleSwitch } from './ToggleSwitch';
 
 const MOBILE_AUDIO_NOTICE_KEY = 'guitar-pedalboard:mobile-audio-notice-dismissed';
@@ -74,6 +75,11 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
 
   useEffect(() => {
     void loadDevices();
+    const mediaDevices = navigator.mediaDevices;
+    if (!mediaDevices?.addEventListener) return;
+    const handleDeviceChange = () => { void loadDevices(); };
+    mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    return () => mediaDevices.removeEventListener('devicechange', handleDeviceChange);
   }, [loadDevices]);
 
   const dismissMobileNotice = () => {
@@ -110,6 +116,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
       </div>
 
       <DeviceSelector />
+      <MidiAdvancedControls />
       <label className="io-slider-control">
         <span>입력 채널</span>
         <select value={inputChannelMode} onChange={(event) => setInputChannelMode(event.currentTarget.value as '1' | '2' | 'stereo')}>
@@ -178,6 +185,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
               value={Math.min(fileCurrentTime, fileDuration || 0)}
               disabled={fileControlsDisabled || !fileDuration}
               aria-label="음원 재생 위치"
+              aria-valuetext={`${formatPlaybackTime(fileCurrentTime)} / ${formatPlaybackTime(fileDuration)}`}
               onChange={(event) => seekFile(Number(event.currentTarget.value) - fileCurrentTime)} />
           </label>
           <div className="file-transport-controls">

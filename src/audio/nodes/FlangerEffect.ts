@@ -59,37 +59,18 @@ export function getFlangerModulationDepth(manualSeconds: number, depth: number):
 }
 
 export class FlangerEffect extends BaseEffect {
-  private readonly delay: DelayNode;
-  private readonly feedback: GainNode;
-  private readonly wetMakeup: GainNode;
-  private readonly oscillator: OscillatorNode;
-  private readonly modulationDepth: GainNode;
+  private readonly processor: AudioWorkletNode;
   private disposed = false;
 
   constructor(context: AudioContext, pedal: PedalState) {
     super(context, normalizeFlangerPedal(pedal));
-
-    this.delay = new DelayNode(context, {
-      maxDelayTime: MAX_MANUAL_SECONDS,
-      delayTime: DEFAULT_PARAMS.manual / 1000,
+    this.processor = new AudioWorkletNode(context, 'flanger-processor', {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      outputChannelCount: [2],
     });
-    this.feedback = new GainNode(context, { gain: 0 });
-    this.wetMakeup = new GainNode(context, { gain: 1 });
-    this.oscillator = new OscillatorNode(context, {
-      type: 'sine',
-      frequency: DEFAULT_PARAMS.rate,
-    });
-    this.modulationDepth = new GainNode(context, { gain: 0 });
-
-    this.effectInput.connect(this.delay);
-    this.delay.connect(this.wetMakeup);
-    this.wetMakeup.connect(this.effectOutput);
-    this.delay.connect(this.feedback);
-    this.feedback.connect(this.delay);
-    this.oscillator.connect(this.modulationDepth);
-    this.modulationDepth.connect(this.delay.delayTime);
-
-    this.oscillator.start();
+    this.effectInput.connect(this.processor);
+    this.processor.connect(this.effectOutput);
     this.update(pedal);
   }
 
@@ -97,31 +78,23 @@ export class FlangerEffect extends BaseEffect {
     const safePedal = normalizeFlangerPedal(pedal);
     const params = safePedal.params as FlangerParams;
     const manualSeconds = clamp(params.manual / 1000, MIN_MANUAL_SECONDS, MAX_MANUAL_SECONDS);
-    const feedback = clamp(params.feedback / 100, -FLANGER_MAX_FEEDBACK, FLANGER_MAX_FEEDBACK);
-    const wetMakeup = Math.max(0.05, 1 - Math.abs(feedback));
-
     super.update(safePedal);
-    smoothParam(this.delay.delayTime, manualSeconds, this.context);
-    smoothParam(this.oscillator.frequency, params.rate, this.context);
-    smoothParam(
-      this.modulationDepth.gain,
-      getFlangerModulationDepth(manualSeconds, params.depth),
-      this.context,
-    );
-    smoothParam(this.feedback.gain, feedback, this.context);
-    smoothParam(this.wetMakeup.gain, wetMakeup, this.context);
+    this.setProcessorParam('manual', manualSeconds);
+    this.setProcessorParam('depth', getFlangerModulationDepth(manualSeconds, params.depth));
+    this.setProcessorParam('rate', params.rate);
+    this.setProcessorParam('feedback', params.feedback / 100);
+  }
+
+  private setProcessorParam(name: string, value: number): void {
+    const param = this.processor.parameters.get(name);
+    if (param) smoothParam(param, value, this.context);
   }
 
   override dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-
-    this.oscillator.stop();
-    this.oscillator.disconnect();
-    this.modulationDepth.disconnect();
-    this.feedback.disconnect();
-    this.wetMakeup.disconnect();
-    this.delay.disconnect();
+    this.processor.port.postMessage({ type: 'dispose' });
+    this.processor.disconnect();
     super.dispose();
   }
 }

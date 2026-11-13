@@ -27,12 +27,15 @@ import type {
   TuningPresetId,
 } from './types';
 import { clamp, dbToGain } from './utils/db';
+import { MAX_CAB_IR_BYTES, validateCabinetWav, validateDecodedCabinetIr } from './utils/cabinetIr';
 import { ImpulseCache } from './utils/impulseCache';
 import { rampParam } from './utils/smoothing';
 import { noiseGateProcessorSource } from './worklets/noise-gate-processor';
 import { envelopeFollowerProcessorSource } from './worklets/envelope-follower-processor';
 import { tunerProcessorSource } from './worklets/tuner-processor';
 import { howlGuardProcessorSource } from './worklets/howl-guard-processor';
+import { flangerProcessorSource } from './worklets/flanger-processor';
+import { phaserProcessorSource } from './worklets/phaser-processor';
 
 type EffectNode = EffectNodeWrapper;
 
@@ -49,6 +52,7 @@ export class AudioEngine {
   private static instance: AudioEngine | null = null;
 
   private context: AudioContext | null = null;
+  private outputDeviceId = '';
   private stream: MediaStream | null = null;
   private source: MediaStreamAudioSourceNode | MediaElementAudioSourceNode | null = null;
   private audioElement: HTMLAudioElement | null = null;
@@ -69,7 +73,10 @@ export class AudioEngine {
   private tunerActive = false;
   private tunerConnected = false;
   private tuningPreset: TuningPresetId = 'standard';
+  private tuningReferenceHz = 440;
   private effects = new Map<string, EffectNode>();
+  private cabImpulses = new Map<string, { name: string; buffer: AudioBuffer }>();
+  private cabIrRequests = new Map<string, number>();
   private chainConnections = new Map<string, ChainConnection>();
   private reverbImpulseCache: ImpulseCache | null = null;
   private getPedals: () => PedalState[] = () => [];
@@ -113,6 +120,32 @@ export class AudioEngine {
     this.playbackEndedHandler = handler;
   }
 
+  get supportsOutputSelection(): boolean {
+    return typeof AudioContext !== 'undefined' && typeof (AudioContext.prototype as AudioContext & { setSinkId?: unknown }).setSinkId === 'function';
+  }
+
+  async listOutputDevices(): Promise<MediaDeviceInfo[]> {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+    return (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === 'audiooutput');
+  }
+
+  async setOutputDevice(deviceId: string): Promise<void> {
+    if (!this.supportsOutputSelection) throw new Error('이 브라우저는 출력 장치 선택을 지원하지 않습니다.');
+    if (this.context) {
+      const context = this.context as AudioContext & { setSinkId: (id: string) => Promise<void> };
+      await context.setSinkId(deviceId);
+    }
+    this.outputDeviceId = deviceId;
+  }
+
+  private async applyOutputDevice(context: AudioContext): Promise<void> {
+    if (!this.outputDeviceId) return;
+    const sinkContext = context as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+    if (!sinkContext.setSinkId) throw new Error('이 브라우저는 출력 장치 선택을 지원하지 않습니다.');
+    try { await sinkContext.setSinkId(this.outputDeviceId); }
+    catch { throw new Error('선택한 출력 장치에 연결할 수 없습니다. 출력 장치를 다시 선택해 주세요.'); }
+  }
+
   async listInputDevices(): Promise<MediaDeviceInfo[]> {
     if (!navigator.mediaDevices?.enumerateDevices) {
       return [];
@@ -134,6 +167,8 @@ export class AudioEngine {
     this.context = context;
 
     try {
+      await this.applyOutputDevice(context);
+      this.assertCurrentSession(context, generation);
       await this.loadWorklets();
       this.assertCurrentSession(context, generation);
 
@@ -177,6 +212,8 @@ export class AudioEngine {
     this.context = context;
 
     try {
+      await this.applyOutputDevice(context);
+      this.assertCurrentSession(context, generation);
       await this.loadWorklets();
       this.assertCurrentSession(context, generation);
 
@@ -271,8 +308,12 @@ export class AudioEngine {
         return new GraphicEQEffect(this.context, pedal);
       case 'eq':
         return new EQEffect(this.context, pedal);
-      case 'cab':
-        return new CabEffect(this.context, pedal);
+      case 'cab': {
+        const effect = new CabEffect(this.context, pedal);
+        const custom = this.cabImpulses.get(pedal.id);
+        if (custom) effect.setCustomImpulse(custom.buffer);
+        return effect;
+      }
       case 'chorus':
         return new ChorusEffect(this.context, pedal);
       case 'flanger':
@@ -304,7 +345,47 @@ export class AudioEngine {
   ): void {
     const pedal = this.getPedals().find((candidate) => candidate.id === pedalId);
     if (!pedal) return;
+    if (pedal.type === 'cab' && _paramName === 'model') this.clearCabinetIr(pedalId);
     this.effects.get(pedalId)?.update(pedal);
+  }
+
+  getCabinetIrName(pedalId: string): string | null {
+    return this.cabImpulses.get(pedalId)?.name ?? null;
+  }
+
+  async loadCabinetIr(pedalId: string, file: File): Promise<void> {
+    const context = this.context;
+    const generation = this.sessionGeneration;
+    if (!context || context.state === 'closed') throw new Error('먼저 오디오를 시작해 주세요.');
+    if (!/\.wav$/i.test(file.name) || file.size > MAX_CAB_IR_BYTES) {
+      throw new Error('IR 파일은 4 MB 이하의 WAV 파일이어야 합니다.');
+    }
+    const requestId = (this.cabIrRequests.get(pedalId) ?? 0) + 1;
+    this.cabIrRequests.set(pedalId, requestId);
+    const bytes = await file.arrayBuffer();
+    validateCabinetWav(bytes);
+    let buffer: AudioBuffer;
+    try { buffer = await context.decodeAudioData(bytes); }
+    catch { throw new Error('WAV IR 파일을 읽지 못했습니다.'); }
+    validateDecodedCabinetIr(buffer);
+    this.assertCurrentSession(context, generation);
+    if (this.cabIrRequests.get(pedalId) !== requestId) throw new Error('IR 적용이 취소되었습니다.');
+    const effect = this.effects.get(pedalId);
+    if (!(effect instanceof CabEffect)) throw new Error('캐비닛 페달을 찾을 수 없습니다.');
+    effect.setCustomImpulse(buffer);
+    this.cabImpulses.set(pedalId, { name: file.name, buffer });
+    // A queued chain rebuild may already have captured the old IR.
+    this.rebuildChain();
+    window.dispatchEvent(new Event('cab-ir-change'));
+  }
+
+  clearCabinetIr(pedalId: string): void {
+    this.cabIrRequests.set(pedalId, (this.cabIrRequests.get(pedalId) ?? 0) + 1);
+    if (!this.cabImpulses.delete(pedalId)) return;
+    const effect = this.effects.get(pedalId);
+    if (effect instanceof CabEffect) effect.setCustomImpulse(null);
+    this.rebuildChain();
+    window.dispatchEvent(new Event('cab-ir-change'));
   }
 
   setPedalBypass(pedalId: string, _bypassed: boolean): void {
@@ -315,6 +396,11 @@ export class AudioEngine {
 
   setPedalEnabled(pedalId: string, enabled: boolean): void {
     this.effects.get(pedalId)?.setEnabled(enabled);
+  }
+
+  getCompressorReduction(pedalId: string): number | null {
+    const effect = this.effects.get(pedalId);
+    return effect instanceof CompressorEffect ? effect.getGainReduction() : null;
   }
 
   setInputGain(db: number): void {
@@ -366,6 +452,12 @@ export class AudioEngine {
   setTuningPreset(preset: TuningPresetId): void {
     this.tuningPreset = preset;
     this.tuner?.setTuningPreset(preset);
+  }
+
+  setTuningReferenceHz(referenceHz: number): void {
+    if (!Number.isFinite(referenceHz)) return;
+    this.tuningReferenceHz = Math.min(480, Math.max(400, referenceHz));
+    this.tuner?.setReferenceHz(this.tuningReferenceHz);
   }
 
   estimateChainGain(): number {
@@ -437,6 +529,9 @@ export class AudioEngine {
     this.outputMeter = null;
     this.tuner = null;
     this.effects.clear();
+    this.cabImpulses.clear();
+    this.cabIrRequests.clear();
+    window.dispatchEvent(new Event('cab-ir-change'));
     this.workletsLoaded = false;
     this.workletUrls.forEach((url) => URL.revokeObjectURL(url));
     this.workletUrls = [];
@@ -530,6 +625,8 @@ export class AudioEngine {
       this.createWorkletUrl(envelopeFollowerProcessorSource),
       this.createWorkletUrl(tunerProcessorSource),
       this.createWorkletUrl(howlGuardProcessorSource),
+      this.createWorkletUrl(flangerProcessorSource),
+      this.createWorkletUrl(phaserProcessorSource),
     ];
 
     await Promise.all(moduleUrls.map((url) => context.audioWorklet.addModule(url)));
@@ -601,6 +698,7 @@ export class AudioEngine {
     this.inputMeter = new MeterNode(this.context);
     this.outputMeter = new MeterNode(this.context);
     this.tuner = new TunerNode(this.context, this.tuningPreset);
+    this.tuner.setReferenceHz(this.tuningReferenceHz);
     this.tunerConnected = false;
 
     rampParam(this.inputGain.gain, dbToGain(this.inputGainDb), this.context, 0.02);

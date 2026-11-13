@@ -64,11 +64,11 @@ export function ReverbPedal({ params, onChange }: ReverbPedalProps) {
           />
           <ReverbKnob
             label="Decay"
-            value={params.decay}
+            value={Math.min(params.decay, 6)}
             min={0.2}
-            max={10}
+            max={6}
             step={0.1}
-            displayValue={`${params.decay.toFixed(1)}s`}
+            displayValue={`${Math.min(params.decay, 6).toFixed(1)}s`}
             onChange={(value) => onChange('decay', value)}
           />
           <ReverbKnob

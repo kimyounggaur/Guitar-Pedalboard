@@ -1,3 +1,5 @@
+import { useHistoryStore } from '../store/historyStore';
+import { HistoryControls } from './HistoryControls';
 import { useEffect, useState, type KeyboardEvent } from 'react';
 import { ChainText } from './ChainText';
 import { ConnectGuitarPanel } from './ConnectGuitarPanel';
@@ -37,6 +39,7 @@ export function AppShell() {
 
   useEffect(() => {
     loadPedalsFromStorage();
+    useHistoryStore.getState().clear();
     adoptTempoFromPedals();
   }, [adoptTempoFromPedals, loadPedalsFromStorage]);
 
@@ -86,6 +89,7 @@ export function AppShell() {
   return (
     <main className={`app-shell${mobileDockOpen && isMobileLayout ? ' mobile-dock-open' : ''}`}>
       <GlobalKeyboardShortcuts />
+      <HistoryControls />
       {!isOnline ? (
         <div className="offline-notice" role="status" aria-live="polite">
           <strong>오프라인 상태입니다.</strong>

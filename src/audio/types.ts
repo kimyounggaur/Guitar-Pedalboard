@@ -231,9 +231,12 @@ export interface PitchReading {
   frequency: number | null;
   note: string | null;
   cents: number;
+  targetNote?: string;
+  stringNumber?: number;
+  octaveMismatch?: boolean;
 }
 
-export type TuningPresetId = 'standard' | 'drop-d' | 'half-step-down' | 'open-g';
+export type TuningPresetId = 'standard' | 'drop-d' | 'half-step-down' | 'open-g' | 'chromatic';
 
 export interface Preset {
   id: string;

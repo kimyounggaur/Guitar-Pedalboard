@@ -86,14 +86,14 @@ export function PresetPanel() {
     const favoriteCount = presets.filter((preset) => favoriteSet.has(preset.id)).length;
 
     return [
-      { id: 'all', name: 'All Presets', description: '모든 팩토리/사용자 프리셋', count: presets.length },
+      { id: 'all', name: '전체 프리셋', description: '모든 팩토리/사용자 프리셋', count: presets.length },
       ...presetLibraries.map((library) => ({
         ...library,
         count: presets.filter((preset) => preset.libraryId === library.id).length,
       })),
-      { id: 'user', name: 'My Presets', description: '직접 저장한 사용자 프리셋', count: userCount },
-      { id: 'recent', name: 'Recent', description: '최근 불러온 프리셋', count: recentCount },
-      { id: 'favorites', name: 'Favorites', description: '별표로 표시한 프리셋', count: favoriteCount },
+      { id: 'user', name: '내 프리셋', description: '직접 저장한 사용자 프리셋', count: userCount },
+      { id: 'recent', name: '최근 사용', description: '최근 불러온 프리셋', count: recentCount },
+      { id: 'favorites', name: '즐겨찾기', description: '별표로 표시한 프리셋', count: favoriteCount },
     ];
   }, [favoriteSet, presets, recentSet]);
 
@@ -273,9 +273,8 @@ export function PresetPanel() {
       <div className="preset-library-column">
         <div className="preset-tabs" role="group" aria-label="프리셋 라이브러리 탭">
           <button type="button" className="is-active">
-            Library
+            라이브러리
           </button>
-          <button type="button">Store</button>
           <em>{presets.length}</em>
         </div>
 
@@ -297,20 +296,21 @@ export function PresetPanel() {
         </ul>
 
         <div className="preset-tools">
-          <div className="preset-tool-title">Preset Tools</div>
+          <div className="preset-tool-title">프리셋 관리</div>
           <div className="preset-form">
             <input
               value={name}
               onChange={(event) => setName(event.currentTarget.value)}
-              placeholder="Preset name"
+              placeholder="프리셋 이름"
+              aria-label="프리셋 이름"
             />
             <button type="button" className="secondary-button" onClick={saveCurrentPreset}>
-              Save
+              저장
             </button>
           </div>
           <div className="preset-actions">
             <button type="button" className="secondary-button" onClick={exportJson}>
-              Export
+              내보내기
             </button>
             <button type="button" className="secondary-button" onClick={() => importInputRef.current?.click()}>
               파일 가져오기
@@ -331,7 +331,8 @@ export function PresetPanel() {
           <textarea
             value={presetJson}
             onChange={(event) => setPresetJson(event.currentTarget.value)}
-            placeholder="Preset JSON"
+            placeholder="프리셋 JSON 붙여넣기"
+            aria-label="가져올 프리셋 JSON"
             rows={4}
           />
         </div>
@@ -342,15 +343,15 @@ export function PresetPanel() {
       <div className="preset-browser-main">
         <div className="preset-browser-heading">
           <div>
-            <p className="eyebrow">Presets</p>
+            <p className="eyebrow">프리셋</p>
             <h2>{activeLibrary.name}</h2>
           </div>
-          <strong className="preset-sound-count">{visiblePresets.length} Sounds</strong>
+          <strong className="preset-sound-count">{visiblePresets.length}개</strong>
         </div>
 
         <div className="preset-active-library">
           <strong>{activeLibrary.name}</strong>
-          <span>{visiblePresets.length} Sounds</span>
+          <span>{visiblePresets.length}개</span>
         </div>
 
         <div className="preset-browser-toolbar">
@@ -358,7 +359,8 @@ export function PresetPanel() {
             <input
               value={query}
               onChange={(event) => setQuery(event.currentTarget.value)}
-              placeholder="Search presets"
+              placeholder="프리셋 검색"
+              aria-label="프리셋 검색"
             />
           </label>
         </div>
@@ -383,7 +385,7 @@ export function PresetPanel() {
           <p className="empty-copy preset-empty">조건에 맞는 프리셋이 없습니다.</p>
         )}
         <button type="button" className="text-button preset-reset-button" onClick={reset}>
-          Default Chain
+          기본 페달 설정
         </button>
       </div>
     </section>
@@ -413,7 +415,7 @@ const PresetItem = memo(function PresetItem({
         <strong>{preset.name}</strong>
         <span>
           {(preset.tags?.[0] ?? preset.libraryName ?? 'preset').toUpperCase()} /{' '}
-          {preset.isFactory ? 'FACTORY' : 'USER'}
+          {preset.isFactory ? '기본' : '사용자'}
         </span>
       </button>
       <div className="preset-item-actions">

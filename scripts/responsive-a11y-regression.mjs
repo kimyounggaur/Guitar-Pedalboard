@@ -96,7 +96,9 @@ assert.equal(
   2,
   '비활성 모바일 미터가 render/sync 양쪽에서 rAF를 중지해야 합니다.',
 );
-assert.match(meterSource, /\}, \[active, isRunning, refreshMeters\]\);/);
+assert.match(meterSource, /\}, \[active, isRunning\]\);/);
+assert.match(meterSource, /window\.setInterval\(update, STORE_REFRESH_INTERVAL_MS\)/);
+assert.match(meterSource, /\}, \[isRunning, refreshMeters\]\);/);
 assert.match(meterSource, /tunerStatus === 'in-tune'[\s\S]*'정확함'/);
 assert.match(meterSource, /roundedCents > 0 \? '높음' : '낮음'/);
 assert.match(meterSource, /const boundedCents = Math\.round\(Math\.min\(50, Math\.max\(-50, hasPitch \? pitch\.cents : 0\)\)\);/);

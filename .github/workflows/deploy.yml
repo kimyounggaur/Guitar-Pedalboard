@@ -31,6 +31,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check and test
+        run: |
+          npm run lint
+          npm test
+          npm run test:responsive-a11y
+
       - name: Build
         run: npm run build
 

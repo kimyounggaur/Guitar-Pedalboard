@@ -41,12 +41,12 @@
 }
 
 .pedal-card.is-bypassed {
-  opacity: 0.72;
+  opacity: 1;
 }
 
 .pedal-card.is-disabled {
   filter: grayscale(0.8);
-  opacity: 0.48;
+  opacity: 1;
 }
 
 .pedal-card.is-dragging {
@@ -3483,13 +3483,13 @@
 }
 
 .stomp-toggle-label output {
-  color: var(--pedal-color, var(--accent));
-  font-size: 0.58rem;
+  color: currentColor;
+  font-size: 0.6875rem;
   font-weight: 950;
 }
 
 .stomp-toggle-switch.is-off .stomp-toggle-label output {
-  color: var(--ink-muted);
+  color: currentColor;
 }
 
 .pedal-card-drive .stomp-toggle-switch,
@@ -3674,6 +3674,24 @@
 
 .graphic-eq-fader-bank {
   gap: 4px;
+}
+
+/* The parametric EQ uses descriptive labels, so give each control enough room. */
+.pedal-card-eq .graphic-eq-fader-bank {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  row-gap: 16px;
+}
+
+.pedal-card-eq .graphic-eq-fader > span:first-child {
+  overflow: visible;
+  font-size: 11px;
+  white-space: normal;
+  text-align: center;
+}
+
+.pedal-card-eq .graphic-eq-fader output {
+  max-width: 100%;
+  font-size: 11px;
 }
 
 .graphic-eq-fader {
@@ -4249,3 +4267,21 @@
   gap: 6px;
   padding: 7px;
 }
+
+.cab-custom-ir, .cab-custom-ir label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.cab-custom-ir {
+  padding: 10px;
+  border: 1px solid rgba(246, 229, 202, 0.24);
+  border-radius: 7px;
+  font-size: 0.76rem;
+}
+
+.cab-custom-ir input[type='file'] { max-width: 100%; min-width: 0; }
+.cab-custom-ir p { margin: 0; overflow-wrap: anywhere; }
+.cab-custom-ir small { line-height: 1.5; }
+.cab-custom-ir [role='alert'] { color: #ffd0bf; }
