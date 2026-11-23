@@ -15,7 +15,7 @@ export class FuzzEffect extends BaseEffect {
   private lastFuzz = -1;
   private lastBias = -1;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, pedal);
 
     this.preGain = context.createGain();

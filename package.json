@@ -36,7 +36,9 @@
     "test:knob": "node scripts/knob-regression.mjs",
     "test:latency": "node scripts/latency-regression.mjs",
     "test:peak-limiter": "node scripts/peak-limiter-regression.mjs",
-    "test:cabinet-response": "node scripts/cabinet-response-analysis.mjs"
+    "test:cabinet-response": "node scripts/cabinet-response-analysis.mjs",
+    "test:probe": "node scripts/audio-render-probe.mjs",
+    "probe": "node scripts/audio-render-probe.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

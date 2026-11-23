@@ -7,3 +7,6 @@ assets/
 .env
 .env.*
 !.env.example
+
+dist-probe/
+/e2e/fixtures/*.wav

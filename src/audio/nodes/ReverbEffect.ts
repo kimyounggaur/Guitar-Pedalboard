@@ -29,7 +29,7 @@ export class ReverbEffect extends BaseEffect {
   private pendingSwap: PendingSwap | null = null;
 
   constructor(
-    context: AudioContext,
+    context: BaseAudioContext,
     pedal: PedalState,
     private readonly impulseCache: ImpulseCache,
   ) {

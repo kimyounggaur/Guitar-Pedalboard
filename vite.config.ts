@@ -7,12 +7,14 @@ export default defineConfig(({ mode }) => {
   // serves it from the domain root. Vercel exposes the VERCEL environment
   // variable for every deployment build.
   const baseUrl = loadEnv(mode, '.', '').VERCEL ? '/' : '/Guitar-Pedalboard/';
+  // `vite build --mode test` 는 오디오 렌더 프로브(probe.html)만 빌드한다. 배포용 앱·PWA 와는 관계가 없다.
+  const isProbeBuild = mode === 'test';
 
   return {
-  base: baseUrl,
+  base: isProbeBuild ? '/' : baseUrl,
   plugins: [
     react(),
-    VitePWA({
+    ...(isProbeBuild ? [] : [VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['logo.webp', 'favicon.ico', 'apple-touch-icon.png'],
       manifest: {
@@ -65,13 +67,14 @@ export default defineConfig(({ mode }) => {
           },
         ],
       },
-    }),
+    })]),
   ],
   build: {
     emptyOutDir: true,
     minify: 'esbuild',
     sourcemap: true,
     rollupOptions: {
+      ...(isProbeBuild ? { input: { probe: 'probe.html' } } : {}),
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) return 'vendor';

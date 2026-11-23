@@ -12,7 +12,7 @@ export class DriveEffect extends BaseEffect {
   private lastDrive = -1;
   private lastBias = 99;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, pedal);
     this.shaper = context.createWaveShaper();
     this.shaper.oversample = '2x';

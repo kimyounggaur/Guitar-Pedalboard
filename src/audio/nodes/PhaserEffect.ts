@@ -89,7 +89,7 @@ export class PhaserEffect extends BaseEffect {
   private readonly processor: AudioWorkletNode;
   private disposed = false;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     const safePedal = normalizePhaserPedal(pedal);
     super(context, safePedal);
     const params = safePedal.params as PhaserParams;

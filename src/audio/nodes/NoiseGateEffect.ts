@@ -14,7 +14,7 @@ export class NoiseGateEffect extends BaseEffect {
   private glitchCount = 0;
   private missedFrames = 0;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, pedal);
     const params = pedal.params as NoiseGateParams;
 

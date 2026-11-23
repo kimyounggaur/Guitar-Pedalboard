@@ -63,7 +63,7 @@ export class GraphicEQEffect extends BaseEffect {
   private readonly filters: BiquadFilterNode[];
   private disposed = false;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     const safePedal = normalizeGraphicEQPedal(pedal);
     super(context, safePedal);
 

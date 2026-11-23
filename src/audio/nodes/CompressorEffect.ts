@@ -12,7 +12,7 @@ export class CompressorEffect extends BaseEffect {
   private reduction = 0;
   private disposed = false;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, pedal);
     this.compressor = new AudioWorkletNode(context, 'compressor-processor', {
       numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2],

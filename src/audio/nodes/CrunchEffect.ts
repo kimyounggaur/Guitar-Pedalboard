@@ -15,7 +15,7 @@ export class CrunchEffect extends BaseEffect {
   private readonly volumeGain: GainNode;
   private lastGain = -1;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, pedal);
 
     this.preGain = context.createGain();

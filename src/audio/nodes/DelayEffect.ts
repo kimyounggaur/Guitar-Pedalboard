@@ -27,7 +27,7 @@ export class DelayEffect extends BaseEffect {
   private readonly pingPongLeftFeedback: GainNode;
   private readonly pingPongRightFeedback: GainNode;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, pedal);
     this.delay = context.createDelay(2);
     this.feedback = context.createGain();

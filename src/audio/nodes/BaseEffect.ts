@@ -11,7 +11,7 @@ export class BaseEffect {
   readonly input: GainNode;
   readonly output: GainNode;
 
-  protected readonly context: AudioContext;
+  protected readonly context: BaseAudioContext;
   protected readonly effectInput: GainNode;
   protected readonly effectOutput: GainNode;
   protected readonly effectGate: GainNode;
@@ -29,7 +29,7 @@ export class BaseEffect {
   private bypassed = false;
   private trails = false;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     this.context = context;
     this.id = pedal.id;
     this.type = pedal.type;

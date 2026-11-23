@@ -21,7 +21,7 @@ export class CabEffect extends BaseEffect {
   private lastMicPosition = Number.NaN;
   private lastDistance = Number.NaN;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, pedal);
     this.currentPedal = pedal;
 
