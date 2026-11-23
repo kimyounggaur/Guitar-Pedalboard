@@ -271,26 +271,77 @@ const p05: ProbeDefinition = {
 // ---------------------------------------------------------------------------------------------
 // P-06 — 한쪽 채널 입력
 // ---------------------------------------------------------------------------------------------
+/** 신호가 시작하고 이만큼 지나면 자동 판정(300 ms + 측정 간격)과 20 ms 전환이 모두 끝나 있다. 판정 뒤 구간만 잰다. */
+const P06_SETTLED_SECONDS = 1;
+/** 판정이 나기 전 구간(판정은 신호가 300 ms 쌓여야 나온다). 이때는 양쪽을 0.5 씩 합쳐 쓴다. */
+const P06_PENDING_SECONDS = 0.25;
+
+interface ChannelCaseOptions {
+  /** 자동 판정이면 기대하는 판정. 수동 모드는 판정을 보지 않는다. */
+  expectedDecision?: 'sum' | 'ch1' | 'ch2';
+}
+
+async function measureChannelCase(
+  ctx: ProbeContext,
+  name: string,
+  input: Float32Array[],
+  mode: InputChannelMode,
+  reference: { settledDb: number; pendingDb: number },
+  values: Record<string, MetricValue>,
+  options: ChannelCaseOptions = {},
+): Promise<void> {
+  const captured: { decidedAtSeconds: number | null; decision: string } = { decidedAtSeconds: null, decision: 'pending' };
+  const render = await ctx.render({
+    input,
+    pedals: [],
+    inputChannelMode: mode,
+    onBuilt(handle) {
+      // 판정은 렌더를 멈춘 시각(context.currentTime)에 난다. 신호가 시작한 뒤 몇 초 만인지 기록한다.
+      handle.inputStage.onDecision(() => {
+        captured.decidedAtSeconds = handle.context.currentTime;
+      });
+    },
+    afterRender(handle) {
+      captured.decision = handle.inputStage.decision;
+    },
+  });
+  const from = seconds(render, P06_SETTLED_SECONDS);
+  const to = render.leadFrames + render.signalFrames;
+  const left = m.rmsDb(render.output[0], from, to);
+  const right = m.rmsDb(render.output[1], from, to);
+  values[`${name}.leftDb`] = left;
+  values[`${name}.rightDb`] = right;
+  values[`${name}.lrDiffDb`] = Math.abs(left - right);
+  values[`${name}.lossDb`] = reference.settledDb - bodyLevelDb(render, P06_SETTLED_SECONDS);
+  if (options.expectedDecision === undefined) return;
+  values[`${name}.decision`] = captured.decision;
+  values[`${name}.decisionOk`] = captured.decision === options.expectedDecision ? 1 : 0;
+  values[`${name}.decisionSeconds`] =
+    captured.decidedAtSeconds === null ? null : captured.decidedAtSeconds - render.leadFrames / render.sampleRate;
+  values[`${name}.pendingLossDb`] = reference.pendingDb - bodyLevelDb(render, 0, P06_PENDING_SECONDS);
+}
+
 const p06: ProbeDefinition = {
   id: 'P-06',
   title: '한쪽 채널 입력',
   describe:
-    '이펙트 없이(빈 체인) REF-PC 를 왼쪽에만 넣고 장치 입력의 채널 선택 모드(1·2·stereo)마다 좌우 레벨과, 모노 기준 출력 대비 손실을 잰다.',
+    '이펙트 없이(빈 체인) REF-PC 를 2채널 입력의 왼쪽만·오른쪽만·양쪽 같은 소리로 넣고, 자동 판정이 끝난 뒤(신호 시작 1초 이후)의 좌우 레벨 차와 모노 입력 기준 출력 대비 손실을 잰다. 판정 결과와 걸린 시간, 판정 전 구간의 손실도 같이 남긴다. 수동 모드(1번·2번·스테레오)는 왼쪽만 넣은 신호로 참고용으로 잰다.',
   steps: 'S1.3',
   async run(ctx) {
     const pc = signals.refPc(ctx.sampleRate);
-    const reference = await ctx.render({ input: [pc], pedals: [], inputChannelMode: 'stereo' });
-    const referenceDb = bodyLevelDb(reference);
-    const values: Record<string, MetricValue> = { referenceDb };
-    const modes: InputChannelMode[] = ['1', '2', 'stereo'];
-    for (const mode of modes) {
-      const render = await ctx.render({ input: signals.leftOnly(pc), pedals: [], inputChannelMode: mode });
-      const left = m.rmsDb(render.output[0], render.leadFrames, render.leadFrames + render.signalFrames);
-      const right = m.rmsDb(render.output[1], render.leadFrames, render.leadFrames + render.signalFrames);
-      values[`mode${mode}.leftDb`] = left;
-      values[`mode${mode}.rightDb`] = right;
-      values[`mode${mode}.lrDiffDb`] = Math.abs(left - right);
-      values[`mode${mode}.lossDb`] = referenceDb - bodyLevelDb(render);
+    // 모노 입력은 채널 선택 없이 그대로 지나간다. 이 출력이 "손실 없음"의 기준이다.
+    const monoReference = await ctx.render({ input: [pc], pedals: [] });
+    const reference = {
+      settledDb: bodyLevelDb(monoReference, P06_SETTLED_SECONDS),
+      pendingDb: bodyLevelDb(monoReference, 0, P06_PENDING_SECONDS),
+    };
+    const values: Record<string, MetricValue> = { referenceDb: reference.settledDb };
+    await measureChannelCase(ctx, 'auto.left', signals.leftOnly(pc), 'auto', reference, values, { expectedDecision: 'ch1' });
+    await measureChannelCase(ctx, 'auto.right', signals.rightOnly(pc), 'auto', reference, values, { expectedDecision: 'ch2' });
+    await measureChannelCase(ctx, 'auto.both', [pc, pc.slice()], 'auto', reference, values, { expectedDecision: 'sum' });
+    const manualModes: InputChannelMode[] = ['ch1', 'ch2', 'stereo'];
+    for (const mode of manualModes) {
+      await measureChannelCase(ctx, `manual.${mode}`, signals.leftOnly(pc), mode, reference, values);
     }
     return { metrics: metrics(values) };
   },

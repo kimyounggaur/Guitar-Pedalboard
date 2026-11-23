@@ -1,3 +1,5 @@
+import { describeDecision } from '../audio/engine/channelDecision';
+import { isInputChannelMode } from '../audio/engine/InputStage';
 import { useAudioStore } from '../store/audioStore';
 
 export function DeviceSelector() {
@@ -11,7 +13,13 @@ export function DeviceSelector() {
   const setSelectedDevice = useAudioStore((state) => state.setSelectedDevice);
   const loadDevices = useAudioStore((state) => state.loadDevices);
   const isLoading = useAudioStore((state) => state.isLoading);
+  const inputChannelMode = useAudioStore((state) => state.inputChannelMode);
+  const inputChannelDecision = useAudioStore((state) => state.inputChannelDecision);
+  const inputChannelSelectable = useAudioStore((state) => state.inputChannelSelectable);
+  const setInputChannelMode = useAudioStore((state) => state.setInputChannelMode);
   const isFilePlaying = inputMode === 'file';
+  // 채널이 하나뿐인 장치와 파일 재생에서는 고를 것이 없다. 연결 전(null)에는 미리 고를 수 있게 보인다.
+  const showChannelMenu = !isFilePlaying && inputChannelSelectable !== false;
   const mediaDevices = typeof navigator !== 'undefined' ? navigator.mediaDevices as MediaDevices & {
     selectAudioOutput?: () => Promise<MediaDeviceInfo>;
   } : undefined;
@@ -53,6 +61,29 @@ export function DeviceSelector() {
           새로고침
         </button>
       </div>
+      {showChannelMenu ? (
+        <>
+          <label htmlFor="input-channel">입력 채널</label>
+          <select
+            id="input-channel"
+            value={inputChannelMode}
+            onChange={(event) => {
+              const mode = event.currentTarget.value;
+              if (isInputChannelMode(mode)) setInputChannelMode(mode);
+            }}
+          >
+            <option value="auto">자동</option>
+            <option value="ch1">1번 입력</option>
+            <option value="ch2">2번 입력</option>
+            <option value="stereo">스테레오</option>
+          </select>
+          {inputChannelMode === 'auto' ? (
+            <p className="input-channel-note" role="status" aria-live="polite">
+              {describeDecision(inputChannelDecision)}
+            </p>
+          ) : null}
+        </>
+      ) : null}
       <label htmlFor="audio-output">출력 장치</label>
       {outputSelectionSupported ? (
         <select id="audio-output" value={selectedOutputDeviceId} disabled={isLoading}

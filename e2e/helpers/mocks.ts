@@ -318,6 +318,110 @@ export async function readAudioTracking(page: Page): Promise<AudioTracking> {
 }
 
 // ---------------------------------------------------------------------------------------------
+// 입력 채널 수 · 출력 좌우 레벨
+// ---------------------------------------------------------------------------------------------
+/**
+ * 입력 장치가 채널 수를 `channelCount` 로 알리는 것처럼 보이게 한다(E-02: 채널이 하나뿐인 장치에서는 선택 메뉴가 없다).
+ * 가짜 마이크는 `channelCount` 제약을 무시하고 늘 2채널을 주므로 트랙의 `getSettings()` 값만 바꾼다. 소리 자체는 그대로다.
+ */
+export async function mockInputChannelCount(page: Page, channelCount: number): Promise<void> {
+  await page.addInitScript((count: number) => {
+    const devices = navigator.mediaDevices;
+    if (!devices || typeof devices.getUserMedia !== 'function') return;
+    const nativeGetUserMedia = devices.getUserMedia.bind(devices);
+    Object.defineProperty(devices, 'getUserMedia', {
+      configurable: true,
+      value: async (constraints?: MediaStreamConstraints) => {
+        const stream = await nativeGetUserMedia(constraints);
+        for (const track of stream.getAudioTracks()) {
+          const nativeSettings = track.getSettings.bind(track);
+          track.getSettings = () => ({ ...nativeSettings(), channelCount: count });
+        }
+        return stream;
+      },
+    });
+  }, channelCount);
+}
+
+export interface OutputLevels {
+  /** 왼쪽 채널 RMS(dBFS). 완전한 무음이면 −200 */
+  leftDb: number;
+  /** 오른쪽 채널 RMS(dBFS) */
+  rightDb: number;
+}
+
+/**
+ * 앱이 `context.destination` 에 연결하는 노드마다 좌우를 따로 재는 분석 노드를 붙인다(소리는 바뀌지 않는다).
+ * 앱 코드를 건드리지 않고 '실제로 스피커로 나가는 소리'의 좌우 균형을 보기 위한 것이다. page.goto 전에 부른다.
+ */
+export async function tapOutput(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    interface Tap {
+      source: AudioNode;
+      left: AnalyserNode;
+      right: AnalyserNode;
+    }
+    const taps: Tap[] = [];
+    const nativeConnect = AudioNode.prototype.connect as unknown as (this: AudioNode, ...args: unknown[]) => unknown;
+    const patched = function connect(this: AudioNode, ...args: unknown[]): unknown {
+      const result = nativeConnect.apply(this, args);
+      if (args[0] instanceof AudioDestinationNode && !taps.some((tap) => tap.source === this)) {
+        const splitter = this.context.createChannelSplitter(2);
+        const left = this.context.createAnalyser();
+        const right = this.context.createAnalyser();
+        nativeConnect.call(this, splitter);
+        nativeConnect.call(splitter, left, 0);
+        nativeConnect.call(splitter, right, 1);
+        taps.push({ source: this, left, right });
+      }
+      return result;
+    };
+    AudioNode.prototype.connect = patched as unknown as typeof AudioNode.prototype.connect;
+    Object.defineProperty(window, '__outputLevels', {
+      configurable: true,
+      value: async (durationMs: number): Promise<OutputLevels | null> => {
+        const live = taps.filter((tap) => tap.source.context.state === 'running');
+        const sums = live.map(() => ({ left: 0, right: 0, samples: 0 }));
+        const buffer = new Float32Array(2048);
+        const energy = (analyser: AnalyserNode): number => {
+          analyser.getFloatTimeDomainData(buffer);
+          let sum = 0;
+          for (let i = 0; i < buffer.length; i += 1) sum += buffer[i] * buffer[i];
+          return sum;
+        };
+        const started = performance.now();
+        do {
+          live.forEach((tap, index) => {
+            sums[index].left += energy(tap.left);
+            sums[index].right += energy(tap.right);
+            sums[index].samples += buffer.length;
+          });
+          await new Promise((resolve) => setTimeout(resolve, 40));
+        } while (performance.now() - started < durationMs);
+        const toDb = (sum: number, samples: number): number => (sum <= 0 ? -200 : Math.max(-200, 10 * Math.log10(sum / samples)));
+        // 소리가 가장 큰 연결을 앱의 최종 출력으로 본다(녹음 도우미의 무음 연결이 함께 잡힐 수 있다).
+        let best: OutputLevels | null = null;
+        for (const sum of sums) {
+          const levels = { leftDb: toDb(sum.left, sum.samples), rightDb: toDb(sum.right, sum.samples) };
+          if (best === null || Math.max(levels.leftDb, levels.rightDb) > Math.max(best.leftDb, best.rightDb)) best = levels;
+        }
+        return best;
+      },
+    });
+  });
+}
+
+/** `tapOutput` 을 심은 페이지에서 지금부터 durationMs 동안의 출력 좌우 RMS(dBFS)를 잰다. 연결된 상태에서 부른다. */
+export async function readOutputLevels(page: Page, durationMs = 1000): Promise<OutputLevels> {
+  const levels = await page.evaluate(
+    (milliseconds) => (window as unknown as { __outputLevels: (ms: number) => Promise<OutputLevels | null> }).__outputLevels(milliseconds),
+    durationMs,
+  );
+  if (!levels) throw new Error('출력 노드를 찾지 못했습니다. tapOutput 을 먼저 부르고, 앱이 연결된(재생 중인) 상태에서 읽어야 합니다.');
+  return levels;
+}
+
+// ---------------------------------------------------------------------------------------------
 // 하울링 차단 모의 · 사용자 동작 시각
 // ---------------------------------------------------------------------------------------------
 /**

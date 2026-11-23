@@ -37,7 +37,7 @@ const HEADLINES = {
   'P-03': ['peakWithLimiterDb', 'peakWithoutLimiterDb'],
   'P-04': ['defaultDiffDb', 'maxAbsDiffDb'],
   'P-05': ['minDb', 'maxDb', 'medianDb', 'spreadDb'],
-  'P-06': ['mode1.lrDiffDb', 'mode2.lrDiffDb', 'modestereo.lrDiffDb', 'modestereo.lossDb'],
+  'P-06': ['auto.left.decision', 'auto.left.lrDiffDb', 'auto.left.lossDb', 'auto.left.decisionSeconds', 'auto.right.lrDiffDb', 'auto.both.lossDb'],
   'P-08': ['mix75.rippleDb', 'mix45.rippleDb'],
   'P-09': ['maxAbsLrDiffDb'],
   'P-10': ['minHz', 'maxHz', 'deviationPercent'],

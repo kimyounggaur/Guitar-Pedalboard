@@ -1,14 +1,15 @@
 // 실제 이펙트 클래스와 워클릿으로 신호 체인을 OfflineAudioContext 에서 렌더한다.
 // 그래프 모양은 AudioEngine 과 같다:
-//   입력 → (장치 입력이면 채널 선택) → inputGain → 이펙트 체인(페달 순서) → masterGain → howlGuard → limiter → 출력
+//   입력 → InputStage(장치 입력이면 채널 선택·자동 판정) → inputGain → 이펙트 체인(페달 순서) → masterGain → howlGuard → limiter → 출력
 // 오디오 프로브(src/audio/testing)가 쓰고, 나중에 '음량 맞추기'(프리셋 trim 계산)도 같은 코드를 쓴다.
 import type { EffectNodeWrapper, PedalParamValue, PedalState } from '../types';
+import { InputStage, MONITOR_INTERVAL_MS, type InputChannelMode } from '../engine/InputStage';
 import { dbToGain } from '../utils/db';
 import { ImpulseCache } from '../utils/impulseCache';
 import { createOfflineEffect } from './effectFactory';
 import { registerWorklets } from './workletModules';
 
-export type InputChannelMode = '1' | '2' | 'stereo';
+export type { InputChannelMode };
 
 export interface PedalPatch {
   enabled?: boolean;
@@ -19,6 +20,8 @@ export interface PedalPatch {
 export interface ChainHandle {
   context: OfflineAudioContext;
   effects: ReadonlyMap<string, EffectNodeWrapper>;
+  /** 입력 처리기. 판정 결과(`decision`)를 렌더 뒤에 읽을 수 있다. */
+  inputStage: InputStage;
   /** 렌더 중에 페달 상태를 바꾼다(AudioEngine.setPedalParam 과 같은 경로: effect.update). */
   patchPedal(id: string, patch: PedalPatch): void;
 }
@@ -44,7 +47,7 @@ export interface RenderChainOptions {
   masterVolume?: number;
   /** 'device' 는 마이크 입력(채널 선택 적용), 'file' 은 파일 재생(그대로 통과). 기본 'device'. */
   source?: 'device' | 'file';
-  /** 장치 입력의 채널 선택. 엔진 기본값은 '1'(왼쪽 채널을 양쪽으로). */
+  /** 장치 입력의 채널 선택. 엔진 기본값과 같은 'auto'(2채널이면 신호를 보고 판정한다). */
   inputChannelMode?: InputChannelMode;
   /** 마지막 리미터를 넣을지. 기본 true(엔진과 같다). */
   limiter?: boolean;
@@ -90,7 +93,7 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
     inputGainDb = 0,
     masterVolume = 0.9,
     source = 'device',
-    inputChannelMode = '1',
+    inputChannelMode = 'auto',
     limiter = true,
     events = [],
   } = options;
@@ -126,14 +129,12 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
     ? new AudioWorkletNode(context, 'peak-limiter-processor', { outputChannelCount: [2] })
     : null;
 
-  // AudioEngine.connectInput 과 같은 입력 연결.
-  if (source === 'file' || inputChannelMode === 'stereo') {
-    sourceNode.connect(inputGain);
-  } else {
-    const splitter = context.createChannelSplitter(2);
-    sourceNode.connect(splitter);
-    splitter.connect(inputGain, inputChannelMode === '1' ? 0 : 1);
-  }
+  // AudioEngine.createInputStage 와 같은 입력 처리. 판정에 쓰는 레벨 측정은 아래에서 렌더 도중 일정 간격으로 부른다.
+  const inputStage = new InputStage(context, sourceNode, paddedInput.length, {
+    mode: inputChannelMode,
+    passthrough: source === 'file',
+  });
+  inputStage.output.connect(inputGain);
   inputGain.connect(chainInput);
 
   const ownsImpulseCache = options.impulseCache === undefined;
@@ -176,6 +177,7 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
     const handle: ChainHandle = {
       context,
       effects,
+      inputStage,
       patchPedal(id, patch) {
         const pedal = livePedals.find((candidate) => candidate.id === id);
         const effect = effects.get(id);
@@ -191,17 +193,24 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
 
     // suspend 는 렌더 퀀텀(128샘플) 경계에서만 되고, 같은 시각에 두 번 걸 수 없다.
     const usedFrames = new Set<number>();
-    for (const event of [...events].sort((a, b) => a.atSeconds - b.atSeconds)) {
-      let frame = Math.max(
-        RENDER_QUANTUM,
-        Math.round((leadFrames + event.atSeconds * sampleRate) / RENDER_QUANTUM) * RENDER_QUANTUM,
-      );
+    const scheduleSuspend = (requestedFrame: number, run: () => void): void => {
+      let frame = Math.max(RENDER_QUANTUM, Math.round(requestedFrame / RENDER_QUANTUM) * RENDER_QUANTUM);
       while (usedFrames.has(frame)) frame += RENDER_QUANTUM;
       usedFrames.add(frame);
       context.suspend(frame / sampleRate).then(() => {
-        event.run(handle);
+        run();
         return context.resume();
       }, () => undefined);
+    };
+    for (const event of [...events].sort((a, b) => a.atSeconds - b.atSeconds)) {
+      scheduleSuspend(leadFrames + event.atSeconds * sampleRate, () => event.run(handle));
+    }
+    // 2채널 장치 입력은 실시간처럼 일정 간격으로 채널별 레벨을 재서 자동 판정을 진행한다.
+    if (inputStage.selectable) {
+      const stepFrames = Math.round((sampleRate * MONITOR_INTERVAL_MS) / 1000);
+      for (let frame = stepFrames; frame < totalFrames; frame += stepFrames) {
+        scheduleSuspend(frame, () => inputStage.measure());
+      }
     }
 
     sourceNode.start(0);
@@ -221,6 +230,7 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
       setupMilliseconds,
     };
   } finally {
+    inputStage.dispose();
     effects.forEach((effect) => effect.dispose());
     if (ownsImpulseCache) impulseCache.dispose();
   }
