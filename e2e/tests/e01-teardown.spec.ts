@@ -4,7 +4,7 @@
 // 녹음 중에 멈춰도 파일이 남는지, 대화상자가 열린 상태의 Esc 는 대화상자만 닫는지,
 // 정지→연결을 10번 되풀이해도 AudioContext 가 동시에 둘 이상 열리지 않는지 확인한다.
 import { readFileSync } from 'node:fs';
-import { activate, connectButton, connectGuitar, disconnectButton, openApp, panicButton } from '../helpers/app';
+import { connectButton, connectGuitar, disconnectButton, openApp, panicButton } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { markTriggers, mockHowlGuard, readAudioTracking, trackAudioContexts, triggerHowl } from '../helpers/mocks';
 import { waitForTeardown } from '../helpers/teardown';
@@ -35,7 +35,7 @@ function recordElapsed(label: string, elapsedMs: number): void {
 test.describe('E-01 정지 정리', () => {
   test('E-01 Panic 버튼: 500 ms 안에 입력 트랙 종료·컨텍스트 닫힘·연결 안 됨 화면', async ({ page }) => {
     await openConnected(page);
-    await activate(page, panicButton(page));
+    await panicButton(page).click();
     const { elapsedMs } = await waitForTeardown(page, LIMIT_MS);
     recordElapsed('Panic 버튼', elapsedMs);
     await expect(page.locator('.toast', { hasText: '긴급 정지했습니다. 마이크와 오디오를 모두 껐습니다.' })).toBeVisible();
@@ -97,7 +97,7 @@ test.describe('E-01 정지 정리', () => {
   test('E-01 Esc: MIDI 메뉴가 열려 있으면 메뉴만 닫고, 이어지는 Esc 가 긴급 정지', async ({ page }) => {
     await openConnected(page);
     const trigger = page.locator('.pedal-board .pedal-card button.midi-learn-button[aria-haspopup="menu"]').first();
-    await activate(page, trigger);
+    await trigger.click();
     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByRole('menu')).toBeVisible();
     await page.keyboard.press('Escape');
@@ -120,7 +120,7 @@ test.describe('E-01 정지 정리', () => {
 
   test('E-01 연결 해제 버튼: 같은 정리, 안내 없음', async ({ page }) => {
     await openConnected(page);
-    await activate(page, disconnectButton(page));
+    await disconnectButton(page).click();
     const { elapsedMs } = await waitForTeardown(page, LIMIT_MS);
     recordElapsed('연결 해제', elapsedMs);
     await expect(page.locator('.toast')).toHaveCount(0);
@@ -140,12 +140,12 @@ test.describe('E-01 정지 정리', () => {
 
   test('E-01 녹음 중 Panic: 파일이 남고 길이 = 녹음 시간 ±0.5초', async ({ page }) => {
     await openConnected(page);
-    await activate(page, page.getByRole('button', { name: '녹음', exact: true }));
+    await page.getByRole('button', { name: '녹음', exact: true }).click();
     await expect(page.getByText(/녹음 중/)).toBeVisible();
     const recordStartedAt = await page.evaluate(() => (window as unknown as { __lastTrigger: number }).__lastTrigger);
     await page.waitForTimeout(3000);
 
-    await activate(page, panicButton(page));
+    await panicButton(page).click();
     const panicAt = await page.evaluate(() => (window as unknown as { __lastTrigger: number }).__lastTrigger);
     const { elapsedMs } = await waitForTeardown(page, LIMIT_MS);
     recordElapsed('녹음 중 Panic', elapsedMs);
@@ -154,7 +154,7 @@ test.describe('E-01 정지 정리', () => {
     // 정지한 뒤에도 '다운로드' 가 켜져 있고, 받은 파일의 재생 길이가 녹음한 시간과 같다.
     const downloadButton = page.getByRole('button', { name: '다운로드' });
     await expect(downloadButton).toBeEnabled({ timeout: 5000 });
-    const [download] = await Promise.all([page.waitForEvent('download'), activate(page, downloadButton)]);
+    const [download] = await Promise.all([page.waitForEvent('download'), downloadButton.click()]);
     expect(download.suggestedFilename()).toMatch(/\.(webm|m4a|mp4|ogg|wav)$/);
     const bytes = Array.from(readFileSync(await download.path()));
     expect(bytes.length).toBeGreaterThan(1000);
@@ -201,8 +201,8 @@ test.describe('E-01 정지 정리', () => {
         .poll(async () => (await readAudioTracking(page)).contexts.filter((context) => context.state === 'running').length, { message: `${cycle + 1}번째 연결` })
         .toBe(1);
       const how = stoppers[cycle % stoppers.length];
-      if (how === '연결 해제 버튼') await activate(page, disconnectButton(page));
-      else if (how === 'Panic 버튼') await activate(page, panicButton(page));
+      if (how === '연결 해제 버튼') await disconnectButton(page).click();
+      else if (how === 'Panic 버튼') await panicButton(page).click();
       else {
         await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await page.keyboard.press('Escape');

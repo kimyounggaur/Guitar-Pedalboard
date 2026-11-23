@@ -579,6 +579,8 @@ export interface GuardObservation {
   cutReceivedAt: number | null;
   /** 차단 메시지를 메인 스레드가 받은 때의 `document.visibilityState`. 차단이 없었으면 null. */
   visibilityAtCut: string | null;
+  /** 차단 메시지를 받은 때 휴대폰 하단 도크에서 선택되어 있던 탭의 id(예: 'mobile-tab-pedals'). 차단이 없었거나 탭이 없는 배치(데스크톱)면 null. */
+  selectedTabAtCut: string | null;
   /** 판정 진행 중(`howl-suspect`) 메시지 수 */
   suspectMessages: number;
 }
@@ -601,6 +603,7 @@ export async function observeGuard(page: Page): Promise<void> {
       cutFreqHz: null as number | null,
       cutReceivedAt: null as number | null,
       visibilityAtCut: null as string | null,
+      selectedTabAtCut: null as string | null,
       suspectMessages: 0,
     };
     const Native = window.AudioWorkletNode;
@@ -628,6 +631,7 @@ export async function observeGuard(page: Page): Promise<void> {
             state.cutFreqHz = typeof data.freqHz === 'number' ? data.freqHz : null;
             state.cutReceivedAt = performance.now();
             state.visibilityAtCut = document.visibilityState;
+            state.selectedTabAtCut = document.querySelector('.mobile-bottom-tabs [role="tab"][aria-selected="true"]')?.id ?? null;
             (window as unknown as { __lastTrigger: number }).__lastTrigger = state.cutReceivedAt;
           }
         });
@@ -649,6 +653,7 @@ export async function observeGuard(page: Page): Promise<void> {
         cutFreqHz: state.cutFreqHz,
         cutReceivedAt: state.cutReceivedAt,
         visibilityAtCut: state.visibilityAtCut,
+        selectedTabAtCut: state.selectedTabAtCut,
         suspectMessages: state.suspectMessages,
       }),
     });

@@ -4,7 +4,7 @@
 // 스피커로 나가는 소리·화면의 출력 미터·녹음 파일이 모두 같은 지점(리미터 뒤)에서 갈라져야 같은 피크 제한을 지난다.
 // 리미터의 소리 자체(천장 −1 dBFS)는 오디오 렌더 프로브 P-03 이, 오프라인에서도 불러와지는지는 E-23 이 본다.
 // 가드가 실제로 하울링을 잘라내는 시간(1.5초 이내)은 E-03(e03-howl.spec.ts)이 본다.
-import { activate, connectGuitar, disconnectButton, openApp } from '../helpers/app';
+import { connectGuitar, disconnectButton, openApp } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { readAudioEdges, trackAudioGraph, type GraphEdge } from '../helpers/mocks';
 
@@ -47,14 +47,14 @@ test.describe('S1.4a·S1.5 출력 단계', () => {
     expect(sourcesInto(edges, 'MediaStreamAudioDestinationNode'), '녹음을 시작하기 전에는 녹음 단자가 없다').toEqual([]);
 
     // 녹음을 시작하면 녹음 단자가 생기고, 그것도 같은 출력 레벨 미터를 받는다.
-    await activate(page, page.locator('.recording-start-button'));
+    await page.locator('.recording-start-button').click();
     await expect(page.locator('.recording-stop-button')).toBeEnabled();
     edges = await readAudioEdges(page);
     expect(sourcesInto(edges, 'MediaStreamAudioDestinationNode'), '녹음 파일도 리미터를 지난 같은 소리다').toEqual([METER]);
 
-    await activate(page, page.locator('.recording-stop-button'));
+    await page.locator('.recording-stop-button').click();
     await expect(page.locator('.recording-stop-button')).toBeDisabled();
-    await activate(page, disconnectButton(page));
+    await disconnectButton(page).click();
   });
 
   test('다시 연결해도 새 연결마다 같은 모양이다(옛 그래프가 남지 않음)', async ({ launchWithMic }) => {
@@ -62,7 +62,7 @@ test.describe('S1.4a·S1.5 출력 단계', () => {
     await trackAudioGraph(page);
     await openApp(page);
     await connectGuitar(page);
-    await activate(page, disconnectButton(page));
+    await disconnectButton(page).click();
     await expect(page.getByRole('button', { name: '기타 연결하기' })).toBeVisible();
     await connectGuitar(page);
 
@@ -73,6 +73,6 @@ test.describe('S1.4a·S1.5 출력 단계', () => {
     // 가드도 연결마다 하나씩 새로 만들어져 프로그램 입력(0)과 분석 입력(1)을 각각 두 번씩 받는다.
     expect(edges.filter((edge) => edge.to === GUARD && edge.input === 0).length).toBe(2);
     expect(edges.filter((edge) => edge.to === GUARD && edge.input === 1).length).toBe(2);
-    await activate(page, disconnectButton(page));
+    await disconnectButton(page).click();
   });
 });

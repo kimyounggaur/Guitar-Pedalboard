@@ -3403,7 +3403,9 @@
   display: grid;
   justify-items: center;
   gap: 6px;
+  /* 터치 영역 ≥ 44×44 px(설계서 4.10). 지금 상자는 이보다 훨씬 크지만, 안쪽 배치가 바뀌어도 이 아래로는 줄지 않게 못박는다. */
   min-width: 84px;
+  min-height: 44px;
   padding: 0;
   border: 0;
   border-radius: 8px;

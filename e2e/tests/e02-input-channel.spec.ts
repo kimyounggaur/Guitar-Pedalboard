@@ -7,7 +7,7 @@
 //   · 채널이 하나뿐인 장치에서는 선택 메뉴를 숨기는지 확인한다.
 // 가짜 마이크는 `ref-pc-left-only.wav`·`ref-pc-right-only.wav`·`ref-pc.wav`(양쪽 같은 소리)를 늘 2채널로 준다
 // (Chrome 은 channelCount 제약을 무시하고 WAV 의 채널을 그대로 전달한다).
-import { connectGuitar, disconnectButton, openApp, activate } from '../helpers/app';
+import { connectGuitar, disconnectButton, openApp } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { mockInputChannelCount, readOutputLevels, tapOutput, trackAudioContexts, type OutputLevels } from '../helpers/mocks';
 import { recordScreenshot } from '../helpers/record';
@@ -157,7 +157,7 @@ test.describe('E-02 입력 채널', () => {
     await connectGuitar(page);
     await expect(channelSelect(page)).toHaveCount(0);
     await expect(decisionNote(page)).toHaveCount(0);
-    await activate(page, disconnectButton(page));
+    await disconnectButton(page).click();
     await expect(channelSelect(page)).toBeVisible();
   });
 });

@@ -25,6 +25,7 @@ const [
   responsiveCss,
   indexSource,
   shortcutsSource,
+  dockHeightSource,
 ] = await Promise.all([
   readFile(new URL('../src/components/AppShell.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/PedalBoard.tsx', import.meta.url), 'utf8'),
@@ -43,21 +44,49 @@ const [
   readFile(new URL('../src/styles/responsive.css', import.meta.url), 'utf8'),
   readFile(new URL('../index.html', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/GlobalKeyboardShortcuts.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/hooks/useDockHeight.ts', import.meta.url), 'utf8'),
 ]);
 
 assert.match(appShellSource, /MOBILE_LAYOUT_QUERY = '\(max-width: 767px\)'/);
 assert.match(appShellSource, /role="tablist"/);
 assert.match(appShellSource, /role="tab"/);
-for (const [id, label] of [
+// S1.6: 탭 맨 앞에 '페달'(기본 선택)이 있고, 나머지 셋은 각자 패널을 가진다.
+const mobileTabOrder = [
+  ['pedals', '페달'],
   ['input', '입력'],
   ['meter', '미터'],
   ['preset', '프리셋'],
-]) {
+];
+for (const [id, label] of mobileTabOrder) {
   assert.match(appShellSource, new RegExp(`\\{ id: '${id}', label: '${label}' \\}`));
-  assert.ok(appShellSource.includes(`aria-controls={\`mobile-panel-\${tab.id}\`}`));
+}
+assert.ok(
+  appShellSource.indexOf("{ id: 'pedals'") < appShellSource.indexOf("{ id: 'input'") &&
+    appShellSource.indexOf("{ id: 'input'") < appShellSource.indexOf("{ id: 'meter'") &&
+    appShellSource.indexOf("{ id: 'meter'") < appShellSource.indexOf("{ id: 'preset'"),
+  '탭 순서는 페달 → 입력 → 미터 → 프리셋 이어야 합니다.',
+);
+assert.match(appShellSource, /useState<MobileTabId>\('pedals'\)/, "기본 선택 탭은 '페달' 이어야 합니다.");
+assert.ok(
+  appShellSource.includes("aria-controls={tab.id === 'pedals' ? PEDAL_BOARD_SECTION_ID : `mobile-panel-${tab.id}`}"),
+  "'페달' 탭은 페달보드 영역을, 나머지는 자기 패널을 가리켜야 합니다.",
+);
+assert.match(appShellSource, /PEDAL_BOARD_SECTION_ID = 'pedal-board-section'/);
+assert.match(pedalBoardSource, /<section id="pedal-board-section" className="board-section"/);
+for (const id of ['input', 'meter', 'preset']) {
   assert.ok(appShellSource.includes(`id="mobile-panel-${id}"`));
   assert.ok(appShellSource.includes(`aria-labelledby="mobile-tab-${id}"`));
 }
+// 도크가 열렸는지는 따로 저장하지 않고 선택된 탭에서 정한다. 같은 탭을 다시 누르면 '페달' 로 돌아가 접힌다. 토글 버튼은 없다.
+assert.match(appShellSource, /const mobileDockOpen = isMobileLayout && activeMobileTab !== 'pedals'/);
+assert.match(appShellSource, /setActiveMobileTab\(\(current\) => \(current === tabId \? 'pedals' : tabId\)\)/);
+assert.doesNotMatch(appShellSource, /setMobileDockOpen|mobile-dock-toggle/, '도크 토글/별도 열림 상태가 되살아났습니다.');
+assert.match(appShellSource, /useDockHeight\(dockElement\)/);
+assert.match(appShellSource, /<section ref=\{setDockElement\} className="mobile-control-dock"/);
+assert.match(dockHeightSource, /DOCK_HEIGHT_VAR = '--dock-h'/);
+assert.match(dockHeightSource, /new ResizeObserver\(publish\)/);
+assert.match(dockHeightSource, /observer\.disconnect\(\)/);
+assert.match(dockHeightSource, /removeProperty\(DOCK_HEIGHT_VAR\)/);
 assert.match(appShellSource, /aria-selected=\{isActive\}/);
 assert.match(appShellSource, /tabIndex=\{isActive \? 0 : -1\}/);
 assert.equal([...appShellSource.matchAll(/tabIndex=\{0\}/g)].length, 3);
@@ -152,9 +181,14 @@ assert.ok(namedGenericCount >= 20, `예상보다 적은 named generic 요소를 
 assert.match(indexSource, /viewport-fit=cover/);
 assert.match(responsiveCss, /@media \(min-width: 768px\) and \(max-width: 1279px\)/);
 assert.match(pedalsCss, /grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 300px\), 1fr\)\)/);
-assert.match(appShellSource, /useState\(false\)/);
-assert.match(appShellSource, /aria-expanded=\{mobileDockOpen\}/);
 assert.match(responsiveCss, /\.mobile-control-panels\[hidden\]/);
+// S1.6: 도크는 최대 50dvh, 본문 아래 여백은 --dock-h 를 따른다(66dvh·고정 140px 여백은 없다).
+assert.match(responsiveCss, /\.mobile-control-dock \{[^}]*max-height: 50dvh;/);
+assert.match(responsiveCss, /\.mobile-control-panel \{[^}]*max-height: calc\(50dvh - var\(--dock-tabs-h\)\);/);
+assert.match(responsiveCss, /padding: 12px [^;]*calc\(var\(--dock-h, 0px\) \+ env\(safe-area-inset-bottom\) \+ 16px\)/);
+assert.match(responsiveCss, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
+assert.doesNotMatch(responsiveCss, /66dvh|min\(66dvh|mobile-dock-toggle/);
+assert.match(pedalsCss, /\.stomp-toggle-switch \{[^}]*min-height: 44px;/, '스톰프 스위치 터치 영역은 44×44 px 아래로 줄지 않아야 합니다.');
 assert.match(responsiveCss, /@media \(max-width: 767px\)/);
 assert.match(responsiveCss, /grid-auto-flow: column/);
 assert.match(responsiveCss, /scroll-snap-type: x mandatory/);
@@ -283,20 +317,37 @@ async function verifyMobileBrowserLayout() {
     });
     await cdp.send('Page.navigate', { url: appUrl });
 
-    const collapsed = await waitForBrowserLayout(cdp);
+    const clickTab = (id) =>
+      cdp.send('Runtime.evaluate', { expression: `document.getElementById('mobile-tab-${id}').click()`, returnByValue: true });
+    // --dock-h 는 ResizeObserver 가 비동기로 갱신하므로 도크의 실제 높이와 같아질 때까지 기다린다.
+    const dockVarMatches = (layout) => layout.dockVar === `${Math.ceil(layout.dockHeight)}px`;
+
+    const collapsed = await waitForBrowserLayout(cdp, dockVarMatches);
     assert.deepEqual(collapsed.visiblePanelIds, [], '모바일 패널은 기본 접힘 상태여야 합니다.');
-    await cdp.send('Runtime.evaluate', {
-      expression: "document.querySelector('.mobile-dock-toggle').click()",
-      returnByValue: true,
-    });
-    return await waitForBrowserLayout(cdp);
+    assert.deepEqual(collapsed.tabIds, ['pedals', 'input', 'meter', 'preset']);
+    assert.equal(collapsed.selectedTabId, 'pedals', "기본 선택 탭은 '페달' 이어야 합니다.");
+    assert.ok(collapsed.dockHeight >= 50 && collapsed.dockHeight <= 64, `접힌 도크는 탭 줄(약 56px)만 남아야 합니다: ${collapsed.dockHeight}px`);
+
+    await clickTab('input');
+    const expanded = await waitForBrowserLayout(cdp, (layout) => layout.selectedTabId === 'input' && dockVarMatches(layout));
+    assert.deepEqual(expanded.visiblePanelIds, ['mobile-panel-input']);
+    assert.ok(expanded.dockHeight > collapsed.dockHeight, '탭을 누르면 도크가 펼쳐져야 합니다.');
+    assert.ok(expanded.dockHeight <= expanded.viewportHeight * 0.5 + 1, `펼친 도크는 화면 높이의 50% 이하여야 합니다: ${expanded.dockHeight}/${expanded.viewportHeight}`);
+
+    await clickTab('input');
+    const retapped = await waitForBrowserLayout(cdp, (layout) => layout.selectedTabId === 'pedals' && dockVarMatches(layout));
+    assert.deepEqual(retapped.visiblePanelIds, [], '펼쳐진 탭을 다시 누르면 접혀야 합니다.');
+    assert.equal(retapped.dockHeight, collapsed.dockHeight, '다시 접으면 처음 높이로 돌아와야 합니다.');
+
+    await clickTab('input');
+    return await waitForBrowserLayout(cdp, (layout) => layout.selectedTabId === 'input' && dockVarMatches(layout));
   } finally {
     await browser?.close();
     await stopChild(viteProcess);
   }
 }
 
-async function waitForBrowserLayout(cdp) {
+async function waitForBrowserLayout(cdp, ready = () => true) {
   const expression = `(() => {
     const panels = [...document.querySelectorAll('.mobile-control-panel')];
     const board = document.querySelector('.pedal-board');
@@ -327,7 +378,14 @@ async function waitForBrowserLayout(cdp) {
         height: Math.round(rect.height * 100) / 100,
       }];
     });
+    const dock = document.querySelector('.mobile-control-dock');
+    const tabs = [...document.querySelectorAll('.mobile-bottom-tabs [role="tab"]')];
     return {
+      tabIds: tabs.map((tab) => tab.id.replace('mobile-tab-', '')),
+      selectedTabId: (tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')?.id ?? '').replace('mobile-tab-', ''),
+      dockHeight: dock ? dock.getBoundingClientRect().height : 0,
+      dockVar: document.documentElement.style.getPropertyValue('--dock-h'),
+      viewportHeight: window.innerHeight,
       rootScrollWidth: document.documentElement.scrollWidth,
       rootClientWidth: document.documentElement.clientWidth,
       visiblePanelIds: panels.filter((panel) => !panel.hidden && panel.getBoundingClientRect().width > 0).map((panel) => panel.id),
@@ -352,7 +410,8 @@ async function waitForBrowserLayout(cdp) {
       expression,
       returnByValue: true,
     });
-    if (result.result?.value) return result.result.value;
+    const layout = result.result?.value;
+    if (layout && ready(layout)) return layout;
     await delay(50);
   }
   throw new Error('Timed out waiting for the responsive app layout.');
