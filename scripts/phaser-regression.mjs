@@ -4,6 +4,7 @@ import console from 'node:console';
 import vm from 'node:vm';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
 const effectBundle = await build({
   entryPoints: [fileURLToPath(new URL('../src/audio/nodes/PhaserEffect.ts', import.meta.url))],
@@ -167,6 +168,7 @@ for (let block = 0; block < 400; block++) {
 }
 
 const migrationBundle = await build({
+  plugins: [workerUrlStub],
   entryPoints: [
     fileURLToPath(new URL('../src/store/__migration_check.ts', import.meta.url)),
   ],

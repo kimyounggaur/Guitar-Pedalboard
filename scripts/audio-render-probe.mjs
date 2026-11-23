@@ -34,7 +34,7 @@ const PROBE_TIMEOUT_MS = Number(process.env.PROBE_TIMEOUT_MS ?? 420_000);
 const HEADLINES = {
   'P-01': ['noiseOutDb', 'playedOutDb', 'differenceDb'],
   'P-02': ['inputDropDb', 'outputDropDb'],
-  'P-03': ['peakWithLimiterDb', 'peakWithoutLimiterDb'],
+  'P-03': ['peakWithLimiterDb', 'peakWithoutLimiterDb', 'defaultCabOffPeakDb', 'defaultCabOffPeakWithoutLimiterDb'],
   'P-04': ['defaultDiffDb', 'maxAbsDiffDb'],
   'P-05': ['minDb', 'maxDb', 'medianDb', 'spreadDb'],
   'P-06': ['auto.left.decision', 'auto.left.lrDiffDb', 'auto.left.lossDb', 'auto.left.decisionSeconds', 'auto.right.lrDiffDb', 'auto.both.lossDb'],

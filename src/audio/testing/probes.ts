@@ -179,7 +179,7 @@ const p03: ProbeDefinition = {
   id: 'P-03',
   title: '최악 조합 출력 피크',
   describe:
-    'REF-PC 를 15개 페달을 모두 켜고 Level 200%, Graphic EQ 전 밴드 +12 dB 로 통과시킨 출력의 샘플 피크. 마지막 리미터가 있을 때와 없을 때를 모두 잰다.',
+    'REF-PC 를 15개 페달을 모두 켜고 Level 200%, Graphic EQ 전 밴드 +12 dB 로 통과시킨 출력의 샘플 피크, 그리고 앱 기본 구성에서 Cab 만 끈 출력의 샘플 피크. 마지막 리미터가 있을 때와 없을 때를 모두 잰다.',
   steps: 'S1.4a',
   async run(ctx) {
     const build = () =>
@@ -191,6 +191,11 @@ const p03: ProbeDefinition = {
     const input = signals.refPc(ctx.sampleRate);
     const limited = await ctx.render({ input: [input], pedals: build() });
     const raw = await ctx.render({ input: [input], pedals: build(), limiter: false });
+    // 앱 기본 구성(initialPedals)에서 Cab 만 끈 경우. Cab 을 끄면 소리가 커져(R1-5) 리미터가 없을 때 깨졌다.
+    const defaultCabOff = (): PedalState[] =>
+      clonePedals(initialPedals).map((pedalState) => (pedalState.id === 'cab' ? { ...pedalState, bypassed: true } : pedalState));
+    const cabOffLimited = await ctx.render({ input: [input], pedals: defaultCabOff() });
+    const cabOffRaw = await ctx.render({ input: [input], pedals: defaultCabOff(), limiter: false });
     const peak = (render: OfflineRender) => Math.max(m.peakDb(render.output[0]), m.peakDb(render.output[1]));
     return {
       metrics: metrics({
@@ -198,6 +203,8 @@ const p03: ProbeDefinition = {
         peakWithLimiterDb: peak(limited),
         peakWithoutLimiterDb: peak(raw),
         rmsWithLimiterDb: bodyLevelDb(limited),
+        defaultCabOffPeakDb: peak(cabOffLimited),
+        defaultCabOffPeakWithoutLimiterDb: peak(cabOffRaw),
       }),
     };
   },
@@ -640,7 +647,7 @@ const p16: ProbeDefinition = {
   id: 'P-16',
   title: '처리 지연',
   describe:
-    '구성마다 REF-NOISE(−20 dBFS) 입력과 왼쪽 출력의 상호상관 최댓값 위치를 지연(ms)으로 읽는다(동적 처리는 단일 임펄스에 반응하지 않아 임펄스 대신 잡음을 쓴다). 기본 구성은 REF-IMPULSE 의 첫 반응 시각(최대 피크의 10% 이상)도 잰다.',
+    '구성마다 REF-NOISE(−20 dBFS) 입력과 왼쪽 출력의 상호상관 최댓값 위치를 지연(ms)으로 읽는다(동적 처리는 단일 임펄스에 반응하지 않아 임펄스 대신 잡음을 쓴다). 기본 구성은 REF-IMPULSE 의 첫 반응 시각(최대 피크의 10% 이상)도 잰다. 마스터 리미터의 룩어헤드 1 ms 가 모든 값에 더해진다(S1.4a 부터).',
   steps: 'S3.6, S3.7',
   async run(ctx) {
     const rate = ctx.sampleRate;
@@ -660,7 +667,12 @@ const p16: ProbeDefinition = {
     ];
     const values: Record<string, MetricValue> = {};
     for (const [name, pedals] of configurations) {
-      const render = await ctx.render({ input: [noise], pedals: pedals.map((candidate) => ({ ...candidate })) });
+      // 앱이 실제로 내는 지연을 재므로 리미터의 고정 지연(1 ms)을 걷어 내지 않는다.
+      const render = await ctx.render({
+        input: [noise],
+        pedals: pedals.map((candidate) => ({ ...candidate })),
+        alignOutput: false,
+      });
       const { lagSamples, coefficient } = m.crossCorrelationLag(
         render.input[0],
         render.output[0],
@@ -675,6 +687,7 @@ const p16: ProbeDefinition = {
     const impulse = await ctx.render({
       input: [signals.refImpulse(rate, 1, position)],
       pedals: clonePedals(initialPedals).filter((candidate) => candidate.enabled && !candidate.bypassed),
+      alignOutput: false,
     });
     const channel = impulse.output[0];
     const impulseAt = impulse.leadFrames + position;

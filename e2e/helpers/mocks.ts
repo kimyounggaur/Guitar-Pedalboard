@@ -318,6 +318,94 @@ export async function readAudioTracking(page: Page): Promise<AudioTracking> {
 }
 
 // ---------------------------------------------------------------------------------------------
+// 워클릿 모듈 로드 추적
+// ---------------------------------------------------------------------------------------------
+export interface WorkletModuleLoad {
+  /** addModule 에 넘긴 주소. 문자열 워클릿은 `blob:` 주소, 별도 파일 워클릿은 `/assets/…` 주소다. */
+  url: string;
+  status: 'pending' | 'loaded' | 'failed';
+  message?: string;
+}
+
+/** `AudioWorklet.addModule` 호출과 결과를 기록한다. 오프라인 새로고침 뒤에도 워클릿이 다 로드되는지(E-23) 확인하는 데 쓴다. */
+export async function trackWorkletModules(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const loads: Array<{ url: string; status: 'pending' | 'loaded' | 'failed'; message?: string }> = [];
+    if (typeof AudioWorklet === 'function') {
+      const nativeAddModule = AudioWorklet.prototype.addModule;
+      AudioWorklet.prototype.addModule = function addModule(this: AudioWorklet, moduleURL: string | URL, options?: WorkletOptions): Promise<void> {
+        const entry: { url: string; status: 'pending' | 'loaded' | 'failed'; message?: string } = { url: String(moduleURL), status: 'pending' };
+        loads.push(entry);
+        return nativeAddModule.call(this, moduleURL, options).then(
+          () => {
+            entry.status = 'loaded';
+          },
+          (error: unknown) => {
+            entry.status = 'failed';
+            entry.message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+            throw error;
+          },
+        );
+      };
+    }
+    Object.defineProperty(window, '__workletModules', {
+      configurable: true,
+      value: () => loads.map((load) => ({ ...load })),
+    });
+  });
+}
+
+export async function readWorkletModules(page: Page): Promise<WorkletModuleLoad[]> {
+  return page.evaluate(() => (window as unknown as { __workletModules: () => WorkletModuleLoad[] }).__workletModules());
+}
+
+// ---------------------------------------------------------------------------------------------
+// 오디오 그래프 연결 추적
+// ---------------------------------------------------------------------------------------------
+export interface GraphEdge {
+  /** 연결을 시작한 노드. 워클릿은 `worklet:<처리기 이름>`, 나머지는 생성자 이름(예: GainNode). */
+  from: string;
+  /** 연결된 노드. 이름 규칙은 같다. */
+  to: string;
+}
+
+/**
+ * `AudioNode.connect` 호출과 워클릿 처리기 이름을 기록해 실제로 만들어진 그래프의 연결 모양을 볼 수 있게 한다.
+ * (스피커·미터·녹음이 같은 리미터 출력에서 갈라지는지처럼, 소리 레벨만으로는 알 수 없는 연결을 확인하는 데 쓴다.)
+ * 앱 코드보다 먼저 심어야 하므로 page.goto 전에 부른다.
+ */
+export async function trackAudioGraph(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const names = new WeakMap<object, string>();
+    const edges: Array<{ from: string; to: string }> = [];
+    const NativeWorkletNode = window.AudioWorkletNode;
+    if (typeof NativeWorkletNode === 'function') {
+      window.AudioWorkletNode = class extends NativeWorkletNode {
+        constructor(context: BaseAudioContext, name: string, options?: AudioWorkletNodeOptions) {
+          super(context, name, options);
+          names.set(this, `worklet:${name}`);
+        }
+      } as typeof AudioWorkletNode;
+    }
+    const label = (node: object): string => names.get(node) ?? node.constructor.name;
+    const nativeConnect = AudioNode.prototype.connect as (this: AudioNode, ...args: unknown[]) => unknown;
+    AudioNode.prototype.connect = function connect(this: AudioNode, destination: unknown, ...rest: unknown[]): unknown {
+      // AudioParam 으로 가는 연결은 건너뛰고 노드끼리의 연결만 센다.
+      if (destination instanceof AudioNode) edges.push({ from: label(this), to: label(destination) });
+      return nativeConnect.call(this, destination, ...rest);
+    } as typeof AudioNode.prototype.connect;
+    Object.defineProperty(window, '__audioEdges', {
+      configurable: true,
+      value: () => edges.map((edge) => ({ ...edge })),
+    });
+  });
+}
+
+export async function readAudioEdges(page: Page): Promise<GraphEdge[]> {
+  return page.evaluate(() => (window as unknown as { __audioEdges: () => GraphEdge[] }).__audioEdges());
+}
+
+// ---------------------------------------------------------------------------------------------
 // 입력 채널 수 · 출력 좌우 레벨
 // ---------------------------------------------------------------------------------------------
 /**

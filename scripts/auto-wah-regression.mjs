@@ -6,6 +6,7 @@ import { fileURLToPath, URL } from 'node:url';
 import { setTimeout as wait } from 'node:timers/promises';
 import vm from 'node:vm';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
 const effectSource = await readFile(
   new URL('../src/audio/nodes/AutoWahEffect.ts', import.meta.url),
@@ -499,6 +500,7 @@ await wait(70);
 assert.equal(fallbackEffect.follower.port.closeCount, 1, 'dispose fallback이 port를 닫지 않았습니다.');
 
 const migrationBundle = await build({
+  plugins: [workerUrlStub],
   entryPoints: [
     fileURLToPath(new URL('../src/store/__migration_check.ts', import.meta.url)),
   ],

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import console from 'node:console';
 import { Buffer } from 'node:buffer';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 
@@ -13,6 +14,7 @@ class MockAudioContext {
 }
 globalThis.AudioContext = MockAudioContext;
 const result = await build({
+  plugins: [workerUrlStub],
   entryPoints: [fileURLToPath(new URL('../src/audio/AudioEngine.ts', import.meta.url))],
   bundle: true, format: 'esm', platform: 'node', target: 'node20', write: false,
 });

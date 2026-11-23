@@ -4,6 +4,7 @@ import console from 'node:console';
 import vm from 'node:vm';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
 const effectBundle = await build({
   entryPoints: [fileURLToPath(new URL('../src/audio/nodes/FlangerEffect.ts', import.meta.url))],
@@ -73,6 +74,7 @@ for (const manual of [0.0006, 0.00525, 0.0099]) {
 }
 
 const migrationBundle = await build({
+  plugins: [workerUrlStub],
   entryPoints: [
     fileURLToPath(new URL('../src/store/__migration_check.ts', import.meta.url)),
   ],

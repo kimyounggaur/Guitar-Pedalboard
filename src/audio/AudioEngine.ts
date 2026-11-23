@@ -28,6 +28,7 @@ import type {
 } from './types';
 import type { ChannelDecision } from './engine/channelDecision';
 import { InputStage, type InputChannelMode } from './engine/InputStage';
+import { OutputStage } from './engine/OutputStage';
 import { clamp, dbToGain } from './utils/db';
 import { MAX_CAB_IR_BYTES, validateCabinetWav, validateDecodedCabinetIr } from './utils/cabinetIr';
 import { ImpulseCache } from './utils/impulseCache';
@@ -39,7 +40,7 @@ import { howlGuardProcessorSource } from './worklets/howl-guard-processor';
 import { flangerProcessorSource } from './worklets/flanger-processor';
 import { phaserProcessorSource } from './worklets/phaser-processor';
 import { compressorProcessorSource } from './worklets/compressor-processor';
-import { peakLimiterProcessorSource } from './worklets/peak-limiter-processor';
+import { limiterWorkletUrl } from './worklets/urls';
 
 type EffectNode = EffectNodeWrapper;
 
@@ -69,8 +70,8 @@ export class AudioEngine {
   private audioFileUrl: string | null = null;
   private inputGain: GainNode | null = null;
   private chainInput: GainNode | null = null;
-  private masterGain: GainNode | null = null;
-  private limiter: AudioWorkletNode | null = null;
+  /** 마스터 게인 → (하울링 가드) → 리미터. 스피커·출력 미터·녹음은 리미터 출력에서 갈라진다. */
+  private outputStage: OutputStage | null = null;
   private howlGuard: AudioWorkletNode | null = null;
   private inputStage: InputStage | null = null;
   private inputChannelMode: InputChannelMode = 'auto';
@@ -101,6 +102,11 @@ export class AudioEngine {
   private workletUrls: string[] = [];
   private playbackEndedHandler: (() => void) | null = null;
   private closePending: Promise<void> = Promise.resolve();
+
+  /** 출력 단계의 입력(마스터 게인). 체인 끝이 여기로 들어온다. */
+  private get masterGain(): GainNode | null {
+    return this.outputStage?.input ?? null;
+  }
 
   static getInstance(): AudioEngine {
     if (!AudioEngine.instance) {
@@ -495,7 +501,8 @@ export class AudioEngine {
 
     if (!this.recorderDestination) {
       this.recorderDestination = this.context.createMediaStreamDestination();
-      this.limiter?.connect(this.recorderDestination);
+      // 녹음도 스피커와 같은 리미터 출력을 받는다(화면의 소리·들리는 소리·파일이 같은 피크 제한을 지난다).
+      this.outputStage?.output.connect(this.recorderDestination);
     }
 
     return this.recorderDestination.stream;
@@ -507,7 +514,7 @@ export class AudioEngine {
     this.recorderDestination = null;
 
     try {
-      this.limiter?.disconnect(destination);
+      this.outputStage?.output.disconnect(destination);
     } catch {
       // The master may already have been disconnected by panic cleanup.
     }
@@ -612,8 +619,7 @@ export class AudioEngine {
     this.source = null;
     this.inputGain = null;
     this.chainInput = null;
-    this.masterGain = null;
-    this.limiter = null;
+    this.outputStage = null;
     this.howlGuard = null;
     this.inputStage = null;
     this.recorderDestination = null;
@@ -752,7 +758,8 @@ export class AudioEngine {
       this.createWorkletUrl(flangerProcessorSource),
       this.createWorkletUrl(phaserProcessorSource),
       this.createWorkletUrl(compressorProcessorSource),
-      this.createWorkletUrl(peakLimiterProcessorSource),
+      // 리미터는 별도 .worklet.ts 파일이다(설계서 4.1절 규칙 6). 빌드 때 해시 이름의 파일로 나가 서비스 워커가 프리캐시한다.
+      limiterWorkletUrl,
     ];
 
     await Promise.all(moduleUrls.map((url) => context.audioWorklet.addModule(url)));
@@ -806,13 +813,12 @@ export class AudioEngine {
 
     this.inputGain = this.context.createGain();
     this.chainInput = this.context.createGain();
-    this.masterGain = this.context.createGain();
-    this.limiter = new AudioWorkletNode(this.context, 'peak-limiter-processor', { outputChannelCount: [2] });
     this.howlGuard = new AudioWorkletNode(this.context, 'howl-guard', { outputChannelCount: [2] });
     this.howlGuard.port.onmessage = (event) => {
       if (event.data?.type === 'howl') this.howlHandler?.();
     };
     this.howlGuard.port.postMessage({ enabled: this.howlProtectionEnabled && !!this.stream });
+    this.outputStage = new OutputStage(this.context, { guard: this.howlGuard });
     this.inputMeter = new MeterNode(this.context);
     this.outputMeter = new MeterNode(this.context);
     this.tuner = new TunerNode(this.context, this.tuningPreset);
@@ -820,16 +826,15 @@ export class AudioEngine {
     this.tunerConnected = false;
 
     rampParam(this.inputGain.gain, dbToGain(this.inputGainDb), this.context, 0.02);
-    this.masterGain.gain.value = 0;
+    this.outputStage.input.gain.value = 0;
 
     this.inputStage = this.createInputStage(source);
     this.inputStage.output.connect(this.inputGain);
     this.inputGain.connect(this.inputMeter.input);
     this.inputGain.connect(this.chainInput);
-    this.masterGain.connect(this.howlGuard);
-    this.howlGuard.connect(this.limiter);
-    this.limiter.connect(this.outputMeter.input);
-    this.limiter.connect(this.context.destination);
+    // 마스터 게인 → 하울링 가드 → 리미터 는 OutputStage 가 이어 두었다. 스피커와 출력 미터는 리미터 출력을 받는다.
+    this.outputStage.output.connect(this.outputMeter.input);
+    this.outputStage.output.connect(this.context.destination);
     this.syncTunerConnection();
   }
 
@@ -1031,10 +1036,9 @@ export class AudioEngine {
     this.inputStage?.dispose();
     this.inputStage = null;
     this.howlGuard?.disconnect();
-    this.limiter?.disconnect();
     this.inputGain?.disconnect();
     this.chainInput?.disconnect();
-    this.masterGain?.disconnect();
+    this.outputStage?.dispose();
     this.disposeRecorderStream();
     this.inputMeter?.disconnect();
     this.outputMeter?.disconnect();

@@ -4,8 +4,10 @@ import console from 'node:console';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
 const routingBundle = await build({
+  plugins: [workerUrlStub],
   entryPoints: [
     fileURLToPath(new URL('../src/components/keyboardShortcuts.ts', import.meta.url)),
   ],
@@ -150,6 +152,7 @@ globalThis.window = {
 };
 
 const harnessBundle = await build({
+  plugins: [workerUrlStub],
   stdin: {
     contents: [
       "export { AudioEngine } from './audio/AudioEngine.ts';",

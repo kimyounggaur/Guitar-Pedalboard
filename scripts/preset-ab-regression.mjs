@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
 const [presetStoreSource, panelSource, keyboardSource, shortcutRoutingSource] = await Promise.all([
   readFile(new URL('../src/store/presetStore.ts', import.meta.url), 'utf8'),
@@ -80,6 +81,7 @@ globalThis.window = {
 };
 
 const harnessBundle = await build({
+  plugins: [workerUrlStub],
   stdin: {
     contents: [
       "export { AudioEngine } from './audio/AudioEngine.ts';",

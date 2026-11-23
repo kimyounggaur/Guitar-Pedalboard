@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { clearTimeout, setTimeout } from 'node:timers';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
 const midiSource = await readFile(new URL('../src/audio/midi.ts', import.meta.url), 'utf8');
 const audioStoreSource = await readFile(
@@ -68,6 +69,7 @@ assert.doesNotMatch(pedalCardSource, /label="Bypass"/);
 assert.match(appShellSource, /connectSavedMidi\(\)/);
 
 const midiBundle = await build({
+  plugins: [workerUrlStub],
   entryPoints: [fileURLToPath(new URL('../src/audio/midi.ts', import.meta.url))],
   bundle: true,
   format: 'esm',
@@ -245,6 +247,7 @@ Object.defineProperty(globalThis, 'navigator', {
 });
 
 const runtimeBundle = await build({
+  plugins: [workerUrlStub],
   stdin: {
     contents: `
       export { useAudioStore, registerMidiAdvancedHandler } from './src/store/audioStore.ts';

@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 
 const result = await build({
+  plugins: [workerUrlStub],
   stdin: { contents: "export { knobDragValue } from './src/hooks/useKnobDrag.ts'; export { usePedalStore, initialPedals } from './src/store/pedalStore.ts'; export { knobDefault } from './src/components/knobDefaults.ts'; export { DelayPedal } from './src/components/effects/DelayPedal.tsx'; export { createElement } from 'react'; export { renderToStaticMarkup } from 'react-dom/server';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' },
   bundle: true, platform: 'node', format: 'esm', jsx: 'automatic', write: false,
   banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(process.cwd() + '/package.json');" },
