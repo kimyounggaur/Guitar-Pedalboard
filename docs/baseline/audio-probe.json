@@ -1,0 +1,715 @@
+{
+  "schema": 1,
+  "results": {
+    "44100": {
+      "P-01": {
+        "title": "Crunch 무연주 잡음 대 연주음",
+        "metrics": {
+          "noiseInDb": -90,
+          "noiseOutDb": -80.785,
+          "noiseGainDb": 9.215,
+          "playedOutDb": -18.49,
+          "differenceDb": 62.295
+        }
+      },
+      "P-02": {
+        "title": "Crunch 감쇠 추종",
+        "metrics": {
+          "inputDropDb": 51.562,
+          "outputDropDb": 42.274,
+          "followRatio": 0.82
+        }
+      },
+      "P-03": {
+        "title": "최악 조합 출력 피크",
+        "metrics": {
+          "inputPeakDb": -12,
+          "peakWithLimiterDb": -1.012,
+          "peakWithoutLimiterDb": 68.432,
+          "rmsWithLimiterDb": -3.16
+        }
+      },
+      "P-04": {
+        "title": "Cab 켬/끔 음량 차",
+        "metrics": {
+          "offDb": -27.069,
+          "diffDb.v30-4x12.0": -0.047,
+          "diffDb.v30-4x12.55": -0.159,
+          "diffDb.v30-4x12.100": -1.582,
+          "diffDb.greenback-4x12.0": 0.576,
+          "diffDb.greenback-4x12.55": 0.53,
+          "diffDb.greenback-4x12.100": 0.436,
+          "diffDb.blue-1x12.0": 0.529,
+          "diffDb.blue-1x12.55": 0.444,
+          "diffDb.blue-1x12.100": -1.015,
+          "diffDb.jensen-1x12.0": 0.723,
+          "diffDb.jensen-1x12.55": 0.617,
+          "diffDb.jensen-1x12.100": 0.473,
+          "diffDb.tweed-1x10.0": -0.09,
+          "diffDb.tweed-1x10.55": -0.177,
+          "diffDb.tweed-1x10.100": -0.256,
+          "maxAbsDiffDb": 1.582,
+          "defaultDiffDb": -0.159
+        }
+      },
+      "P-05": {
+        "title": "프리셋 출력 RMS",
+        "metrics": {
+          "preset.factory-clean-practice": -23.392,
+          "preset.factory-studio-clean": -25.019,
+          "preset.factory-warm-jazz-clean": -23.983,
+          "preset.factory-bright-pop-clean": -26.197,
+          "preset.factory-funk-comp": -33.606,
+          "preset.factory-country-twang": -29.171,
+          "preset.factory-edge-breakup": -12.862,
+          "preset.factory-acoustic-room": -27.289,
+          "preset.factory-blues-lead": -14.206,
+          "preset.factory-texas-push": -13.955,
+          "preset.factory-chicago-blues": -12.191,
+          "preset.factory-delta-slap": -12.31,
+          "preset.factory-soulful-neck": -14.001,
+          "preset.factory-classic-rock": -12.344,
+          "preset.factory-british-crunch": -13.322,
+          "preset.factory-plexi-lead": -13.675,
+          "preset.factory-arena-solo": -13.157,
+          "preset.factory-punk-rhythm": -12.723,
+          "preset.factory-indie-jangle": -19.503,
+          "preset.factory-tight-modern-metal": -13.13,
+          "preset.factory-thrash-rhythm": -14.228,
+          "preset.factory-djent-gate": -13.506,
+          "preset.factory-liquid-metal-lead": -12.586,
+          "preset.factory-doom-wall": -12.36,
+          "preset.factory-ambient-delay": -27.43,
+          "preset.factory-tape-swell": -32.371,
+          "preset.factory-post-rock-wash": -13.894,
+          "preset.factory-dotted-eighth": -20.985,
+          "preset.factory-dream-clean": -27.849,
+          "preset.factory-fuzz-experiment": -21.005,
+          "preset.factory-vintage-fuzz": -13.6,
+          "preset.factory-gated-velcro": -18.093,
+          "preset.factory-broken-speaker": -18.392,
+          "preset.factory-stoner-fuzz": -12.118,
+          "preset.factory-direct-clean": -26.836,
+          "preset.factory-headphone-safe-start": -30.065,
+          "preset.factory-low-noise-gate": -26.506,
+          "preset.factory-solo-boost": -13.595,
+          "preset.factory-dark-room": -25.173,
+          "preset.factory-bright-cut": -24.197,
+          "bypassNullDb": -200,
+          "bypassTransparent": true,
+          "count": 40,
+          "minDb": -33.606,
+          "maxDb": -12.118,
+          "medianDb": -16.161,
+          "spreadDb": 21.488
+        }
+      },
+      "P-06": {
+        "title": "한쪽 채널 입력",
+        "metrics": {
+          "referenceDb": -27.227,
+          "mode1.leftDb": -27.227,
+          "mode1.rightDb": -27.227,
+          "mode1.lrDiffDb": 0,
+          "mode1.lossDb": 0,
+          "mode2.leftDb": -200,
+          "mode2.rightDb": -200,
+          "mode2.lrDiffDb": 0,
+          "mode2.lossDb": 172.773,
+          "modestereo.leftDb": -27.227,
+          "modestereo.rightDb": -200,
+          "modestereo.lrDiffDb": 172.773,
+          "modestereo.lossDb": 3.01
+        }
+      },
+      "P-08": {
+        "title": "Compressor Mix 리플",
+        "metrics": {
+          "mix75.rippleDb": 0.006,
+          "mix75.minDb": -0.969,
+          "mix75.maxDb": -0.957,
+          "mix45.rippleDb": 0.004,
+          "mix45.minDb": -0.948,
+          "mix45.maxDb": -0.94
+        }
+      },
+      "P-09": {
+        "title": "Cab 좌우 음량 차",
+        "metrics": {
+          "lrDiffDb.80": 0,
+          "lrDiffDb.101": 0,
+          "lrDiffDb.127": 0,
+          "lrDiffDb.160": 0,
+          "lrDiffDb.202": 0,
+          "lrDiffDb.254": 0,
+          "lrDiffDb.320": 0,
+          "lrDiffDb.403": 0,
+          "lrDiffDb.508": 0,
+          "lrDiffDb.640": 0,
+          "lrDiffDb.806": 0,
+          "lrDiffDb.1016": 0,
+          "lrDiffDb.1280": 0,
+          "lrDiffDb.1613": 0,
+          "lrDiffDb.2032": 0,
+          "lrDiffDb.2560": 0,
+          "lrDiffDb.3225": 0,
+          "lrDiffDb.4064": 0,
+          "maxAbsLrDiffDb": 0
+        }
+      },
+      "P-10": {
+        "title": "Tape 음정 흔들림",
+        "metrics": {
+          "cycles": 598,
+          "minHz": 994.61,
+          "maxHz": 1005.46,
+          "deviationPercent": 0.546
+        }
+      },
+      "P-11": {
+        "title": "Flanger 노치",
+        "metrics": {
+          "static.comb.firstNotchHz": 247.632,
+          "static.comb.notchSpacingHz": 500.647,
+          "static.comb.impliedDelayMs": 2.019,
+          "static.comb.notchCount": 4,
+          "static.default.firstNotchHz": 247.632,
+          "static.default.notchSpacingHz": 500.647,
+          "static.default.impliedDelayMs": 2.019,
+          "static.default.notchCount": 4,
+          "sweep.frames": 20,
+          "sweep.minHz": 150.732,
+          "sweep.maxHz": 452.197
+        }
+      },
+      "P-12": {
+        "title": "Phaser 리플",
+        "metrics": {
+          "combRippleDb": 17.074,
+          "highBandRippleDb": 16.269,
+          "maxDb": 5.473,
+          "minDb": -11.411,
+          "notchCount": 6
+        }
+      },
+      "P-13": {
+        "title": "Drive Distortion THD-노브 곡선",
+        "metrics": {
+          "distortion.0": 0,
+          "overdrive.0": 0.218,
+          "distortion.10": 0,
+          "overdrive.10": 8.183,
+          "distortion.20": 0,
+          "overdrive.20": 18.216,
+          "distortion.30": 22.205,
+          "overdrive.30": 25.481,
+          "distortion.40": 33.731,
+          "overdrive.40": 30.463,
+          "distortion.50": 40.364,
+          "overdrive.50": 33.997,
+          "distortion.60": 43.999,
+          "overdrive.60": 36.611,
+          "distortion.70": 45.785,
+          "overdrive.70": 38.567,
+          "distortion.80": 46.64,
+          "overdrive.80": 40.063,
+          "distortion.90": 47.05,
+          "overdrive.90": 41.229,
+          "distortion.100": 47.249,
+          "overdrive.100": 42.151,
+          "distortion.monotonic": true,
+          "distortion.at30MinusOverdriveAt30": -3.276
+        }
+      },
+      "P-14": {
+        "title": "Crunch THD-노브 곡선",
+        "metrics": {
+          "gain.0": 0.88,
+          "gain.10": 2.352,
+          "gain.20": 5.225,
+          "gain.30": 9.372,
+          "gain.40": 15.203,
+          "gain.50": 21.051,
+          "gain.60": 25.68,
+          "gain.70": 29.404,
+          "gain.80": 32.381,
+          "gain.90": 34.73,
+          "gain.100": 36.571,
+          "smallestStepPercent": 1.472
+        }
+      },
+      "P-15": {
+        "title": "Delay·Reverb 원음 레벨",
+        "metrics": {
+          "delay.dryChangeDb": 0,
+          "reverb.dryChangeDb": 0,
+          "delay.pcDryChangeDb": 0
+        }
+      },
+      "P-16": {
+        "title": "처리 지연",
+        "metrics": {
+          "latencyMs.empty": 0,
+          "correlation.empty": 1,
+          "latencyMs.noiseGate": 0,
+          "correlation.noiseGate": 1,
+          "latencyMs.compressor": 0,
+          "correlation.compressor": 1,
+          "latencyMs.drive": 2.941,
+          "correlation.drive": 0.604,
+          "latencyMs.crunch": 2.94,
+          "correlation.crunch": 0.6,
+          "latencyMs.fuzz": 2.946,
+          "correlation.fuzz": 0.549,
+          "latencyMs.graphicEq": 0,
+          "correlation.graphicEq": 1,
+          "latencyMs.eq": 0,
+          "correlation.eq": 0.989,
+          "latencyMs.cab": 0.089,
+          "correlation.cab": 0.49,
+          "latencyMs.default": 3.022,
+          "correlation.default": 0.386,
+          "impulseOnsetMs.default": 2.948
+        }
+      },
+      "P-17": {
+        "title": "렌더 시간(CPU 대용 지표)",
+        "metrics": {
+          "time.emptyMs": 33,
+          "cpuShare.empty": 0.005,
+          "time.allOffMs": 861.1,
+          "cpuShare.allOff": 0.132,
+          "time.allOnMs": 1363.5,
+          "cpuShare.allOn": 0.21,
+          "time.phaserOffMs": 161,
+          "cpuShare.phaserOff": 0.025,
+          "time.phaserOnMs": 148.7,
+          "cpuShare.phaserOn": 0.023,
+          "ratio.allOffOverAllOn": 0.632,
+          "ratio.phaserOffContribution": 0.094,
+          "ratio.phaserOnContribution": 0.085
+        }
+      },
+      "P-18": {
+        "title": "꺼진 페달을 켰을 때의 변화",
+        "metrics": {
+          "presets": 40,
+          "tested": 368,
+          "distinctRendered": 14,
+          "unchangedCount": 40
+        }
+      },
+      "P-20": {
+        "title": "Reverb Decay 변환",
+        "metrics": {
+          "nullDb.factory-ambient-delay": -200,
+          "storedDecay.factory-ambient-delay": 6.2,
+          "nullDb.factory-tape-swell": -200,
+          "storedDecay.factory-tape-swell": 7.5,
+          "maxStoredDecay": 7.5
+        }
+      },
+      "P-21": {
+        "title": "Compressor GR 표시",
+        "metrics": {
+          "displayedSilenceDb": 0,
+          "displayedToneDb": -16.557,
+          "toneLevelChangeDb": -5.51
+        }
+      },
+      "P-22": {
+        "title": "튜너 정확도",
+        "metrics": {
+          "detectedHz.E2": 82.41,
+          "cents.E2": 0,
+          "detectedHz.A2": 110,
+          "cents.A2": 0.001,
+          "detectedHz.D3": 146.83,
+          "cents.D3": 0.006,
+          "detectedHz.G3": 196,
+          "cents.G3": 0.001,
+          "detectedHz.B3": 246.944,
+          "cents.B3": 0.029,
+          "detectedHz.E4": 329.624,
+          "cents.E4": -0.032,
+          "detectedHz.B1": 61.74,
+          "cents.B1": 0.001,
+          "detectedHz.C2": 65.41,
+          "cents.C2": 0,
+          "maxAbsCentsOpenStrings": 0.032
+        }
+      },
+      "P-23": {
+        "title": "바이패스 클릭·노드 생성",
+        "metrics": {
+          "clickRatioDb.1.drive": -4.773,
+          "nodesCreated.1.drive": 0,
+          "clickRatioDb.2.drive": 3.476,
+          "nodesCreated.2.drive": 0,
+          "clickRatioDb.3.compressor": -4.017,
+          "nodesCreated.3.compressor": 0,
+          "maxClickRatioDb": 3.476,
+          "totalNodesCreated": 0
+        }
+      }
+    },
+    "48000": {
+      "P-01": {
+        "title": "Crunch 무연주 잡음 대 연주음",
+        "metrics": {
+          "noiseInDb": -90,
+          "noiseOutDb": -81.102,
+          "noiseGainDb": 8.898,
+          "playedOutDb": -18.466,
+          "differenceDb": 62.636
+        }
+      },
+      "P-02": {
+        "title": "Crunch 감쇠 추종",
+        "metrics": {
+          "inputDropDb": 51.562,
+          "outputDropDb": 42.283,
+          "followRatio": 0.82
+        }
+      },
+      "P-03": {
+        "title": "최악 조합 출력 피크",
+        "metrics": {
+          "inputPeakDb": -12,
+          "peakWithLimiterDb": -1.012,
+          "peakWithoutLimiterDb": 67.947,
+          "rmsWithLimiterDb": -3.11
+        }
+      },
+      "P-04": {
+        "title": "Cab 켬/끔 음량 차",
+        "metrics": {
+          "offDb": -27.075,
+          "diffDb.v30-4x12.0": -0.046,
+          "diffDb.v30-4x12.55": -0.164,
+          "diffDb.v30-4x12.100": -1.733,
+          "diffDb.greenback-4x12.0": 0.575,
+          "diffDb.greenback-4x12.55": 0.539,
+          "diffDb.greenback-4x12.100": 0.432,
+          "diffDb.blue-1x12.0": 0.523,
+          "diffDb.blue-1x12.55": 0.448,
+          "diffDb.blue-1x12.100": -1.149,
+          "diffDb.jensen-1x12.0": 0.713,
+          "diffDb.jensen-1x12.55": 0.611,
+          "diffDb.jensen-1x12.100": 0.461,
+          "diffDb.tweed-1x10.0": -0.078,
+          "diffDb.tweed-1x10.55": -0.197,
+          "diffDb.tweed-1x10.100": -0.267,
+          "maxAbsDiffDb": 1.733,
+          "defaultDiffDb": -0.164
+        }
+      },
+      "P-05": {
+        "title": "프리셋 출력 RMS",
+        "metrics": {
+          "preset.factory-clean-practice": -23.375,
+          "preset.factory-studio-clean": -25.239,
+          "preset.factory-warm-jazz-clean": -24.679,
+          "preset.factory-bright-pop-clean": -26.362,
+          "preset.factory-funk-comp": -33.695,
+          "preset.factory-country-twang": -29.195,
+          "preset.factory-edge-breakup": -12.755,
+          "preset.factory-acoustic-room": -26.968,
+          "preset.factory-blues-lead": -14.219,
+          "preset.factory-texas-push": -13.821,
+          "preset.factory-chicago-blues": -12.203,
+          "preset.factory-delta-slap": -12.256,
+          "preset.factory-soulful-neck": -14.192,
+          "preset.factory-classic-rock": -12.384,
+          "preset.factory-british-crunch": -13.458,
+          "preset.factory-plexi-lead": -13.386,
+          "preset.factory-arena-solo": -13.101,
+          "preset.factory-punk-rhythm": -12.774,
+          "preset.factory-indie-jangle": -19.408,
+          "preset.factory-tight-modern-metal": -13.196,
+          "preset.factory-thrash-rhythm": -14.226,
+          "preset.factory-djent-gate": -13.521,
+          "preset.factory-liquid-metal-lead": -13.163,
+          "preset.factory-doom-wall": -12.541,
+          "preset.factory-ambient-delay": -26.275,
+          "preset.factory-tape-swell": -30.129,
+          "preset.factory-post-rock-wash": -14.802,
+          "preset.factory-dotted-eighth": -20.484,
+          "preset.factory-dream-clean": -28.244,
+          "preset.factory-fuzz-experiment": -21.686,
+          "preset.factory-vintage-fuzz": -13.277,
+          "preset.factory-gated-velcro": -18.081,
+          "preset.factory-broken-speaker": -18.377,
+          "preset.factory-stoner-fuzz": -12.088,
+          "preset.factory-direct-clean": -26.842,
+          "preset.factory-headphone-safe-start": -30.174,
+          "preset.factory-low-noise-gate": -26.515,
+          "preset.factory-solo-boost": -13.223,
+          "preset.factory-dark-room": -25.336,
+          "preset.factory-bright-cut": -24.385,
+          "bypassNullDb": -200,
+          "bypassTransparent": true,
+          "count": 40,
+          "minDb": -33.695,
+          "maxDb": -12.088,
+          "medianDb": -16.441,
+          "spreadDb": 21.608
+        }
+      },
+      "P-06": {
+        "title": "한쪽 채널 입력",
+        "metrics": {
+          "referenceDb": -27.234,
+          "mode1.leftDb": -27.234,
+          "mode1.rightDb": -27.234,
+          "mode1.lrDiffDb": 0,
+          "mode1.lossDb": 0,
+          "mode2.leftDb": -200,
+          "mode2.rightDb": -200,
+          "mode2.lrDiffDb": 0,
+          "mode2.lossDb": 172.766,
+          "modestereo.leftDb": -27.234,
+          "modestereo.rightDb": -200,
+          "modestereo.lrDiffDb": 172.766,
+          "modestereo.lossDb": 3.01
+        }
+      },
+      "P-08": {
+        "title": "Compressor Mix 리플",
+        "metrics": {
+          "mix75.rippleDb": 0.007,
+          "mix75.minDb": -0.97,
+          "mix75.maxDb": -0.956,
+          "mix45.rippleDb": 0.004,
+          "mix45.minDb": -0.948,
+          "mix45.maxDb": -0.94
+        }
+      },
+      "P-09": {
+        "title": "Cab 좌우 음량 차",
+        "metrics": {
+          "lrDiffDb.80": 0,
+          "lrDiffDb.101": 0,
+          "lrDiffDb.127": 0,
+          "lrDiffDb.160": 0,
+          "lrDiffDb.202": 0,
+          "lrDiffDb.254": 0,
+          "lrDiffDb.320": 0,
+          "lrDiffDb.403": 0,
+          "lrDiffDb.508": 0,
+          "lrDiffDb.640": 0,
+          "lrDiffDb.806": 0,
+          "lrDiffDb.1016": 0,
+          "lrDiffDb.1280": 0,
+          "lrDiffDb.1613": 0,
+          "lrDiffDb.2032": 0,
+          "lrDiffDb.2560": 0,
+          "lrDiffDb.3225": 0,
+          "lrDiffDb.4064": 0,
+          "maxAbsLrDiffDb": 0
+        }
+      },
+      "P-10": {
+        "title": "Tape 음정 흔들림",
+        "metrics": {
+          "cycles": 598,
+          "minHz": 994.497,
+          "maxHz": 1005.479,
+          "deviationPercent": 0.55
+        }
+      },
+      "P-11": {
+        "title": "Flanger 노치",
+        "metrics": {
+          "static.comb.firstNotchHz": 251.953,
+          "static.comb.notchSpacingHz": 498.047,
+          "static.comb.impliedDelayMs": 1.984,
+          "static.comb.notchCount": 4,
+          "static.default.firstNotchHz": 246.094,
+          "static.default.notchSpacingHz": 500.977,
+          "static.default.impliedDelayMs": 2.032,
+          "static.default.notchCount": 4,
+          "sweep.frames": 20,
+          "sweep.minHz": 175.781,
+          "sweep.maxHz": 421.875
+        }
+      },
+      "P-12": {
+        "title": "Phaser 리플",
+        "metrics": {
+          "combRippleDb": 16.56,
+          "highBandRippleDb": 15.96,
+          "maxDb": 5.454,
+          "minDb": -11.044,
+          "notchCount": 6
+        }
+      },
+      "P-13": {
+        "title": "Drive Distortion THD-노브 곡선",
+        "metrics": {
+          "distortion.0": 0,
+          "overdrive.0": 0.218,
+          "distortion.10": 0,
+          "overdrive.10": 8.183,
+          "distortion.20": 0,
+          "overdrive.20": 18.216,
+          "distortion.30": 22.206,
+          "overdrive.30": 25.482,
+          "distortion.40": 33.734,
+          "overdrive.40": 30.465,
+          "distortion.50": 40.369,
+          "overdrive.50": 34,
+          "distortion.60": 44.007,
+          "overdrive.60": 36.615,
+          "distortion.70": 45.794,
+          "overdrive.70": 38.572,
+          "distortion.80": 46.65,
+          "overdrive.80": 40.069,
+          "distortion.90": 47.06,
+          "overdrive.90": 41.235,
+          "distortion.100": 47.259,
+          "overdrive.100": 42.158,
+          "distortion.monotonic": true,
+          "distortion.at30MinusOverdriveAt30": -3.277
+        }
+      },
+      "P-14": {
+        "title": "Crunch THD-노브 곡선",
+        "metrics": {
+          "gain.0": 0.88,
+          "gain.10": 2.352,
+          "gain.20": 5.226,
+          "gain.30": 9.373,
+          "gain.40": 15.205,
+          "gain.50": 21.054,
+          "gain.60": 25.684,
+          "gain.70": 29.41,
+          "gain.80": 32.388,
+          "gain.90": 34.739,
+          "gain.100": 36.58,
+          "smallestStepPercent": 1.472
+        }
+      },
+      "P-15": {
+        "title": "Delay·Reverb 원음 레벨",
+        "metrics": {
+          "delay.dryChangeDb": 0,
+          "reverb.dryChangeDb": 0,
+          "delay.pcDryChangeDb": 0
+        }
+      },
+      "P-16": {
+        "title": "처리 지연",
+        "metrics": {
+          "latencyMs.empty": 0,
+          "correlation.empty": 1,
+          "latencyMs.noiseGate": 0,
+          "correlation.noiseGate": 1,
+          "latencyMs.compressor": 0,
+          "correlation.compressor": 1,
+          "latencyMs.drive": 2.705,
+          "correlation.drive": 0.602,
+          "latencyMs.crunch": 2.704,
+          "correlation.crunch": 0.602,
+          "latencyMs.fuzz": 2.709,
+          "correlation.fuzz": 0.534,
+          "latencyMs.graphicEq": 0,
+          "correlation.graphicEq": 1,
+          "latencyMs.eq": 0,
+          "correlation.eq": 0.99,
+          "latencyMs.cab": 0.089,
+          "correlation.cab": 0.467,
+          "latencyMs.default": 2.787,
+          "correlation.default": 0.378,
+          "impulseOnsetMs.default": 2.708
+        }
+      },
+      "P-17": {
+        "title": "렌더 시간(CPU 대용 지표)",
+        "metrics": {
+          "time.emptyMs": 35,
+          "cpuShare.empty": 0.005,
+          "time.allOffMs": 1019.3,
+          "cpuShare.allOff": 0.157,
+          "time.allOnMs": 1714.2,
+          "cpuShare.allOn": 0.264,
+          "time.phaserOffMs": 173.9,
+          "cpuShare.phaserOff": 0.027,
+          "time.phaserOnMs": 171.3,
+          "cpuShare.phaserOn": 0.026,
+          "ratio.allOffOverAllOn": 0.595,
+          "ratio.phaserOffContribution": 0.081,
+          "ratio.phaserOnContribution": 0.08
+        }
+      },
+      "P-18": {
+        "title": "꺼진 페달을 켰을 때의 변화",
+        "metrics": {
+          "presets": 40,
+          "tested": 368,
+          "distinctRendered": 14,
+          "unchangedCount": 40
+        }
+      },
+      "P-20": {
+        "title": "Reverb Decay 변환",
+        "metrics": {
+          "nullDb.factory-ambient-delay": -200,
+          "storedDecay.factory-ambient-delay": 6.2,
+          "nullDb.factory-tape-swell": -200,
+          "storedDecay.factory-tape-swell": 7.5,
+          "maxStoredDecay": 7.5
+        }
+      },
+      "P-21": {
+        "title": "Compressor GR 표시",
+        "metrics": {
+          "displayedSilenceDb": 0,
+          "displayedToneDb": -16.472,
+          "toneLevelChangeDb": -5.51
+        }
+      },
+      "P-22": {
+        "title": "튜너 정확도",
+        "metrics": {
+          "detectedHz.E2": 82.41,
+          "cents.E2": 0.001,
+          "detectedHz.A2": 110,
+          "cents.A2": 0.002,
+          "detectedHz.D3": 146.83,
+          "cents.D3": 0.002,
+          "detectedHz.G3": 196.001,
+          "cents.G3": 0.006,
+          "detectedHz.B3": 246.943,
+          "cents.B3": 0.02,
+          "detectedHz.E4": 329.622,
+          "cents.E4": -0.041,
+          "detectedHz.B1": 61.74,
+          "cents.B1": 0,
+          "detectedHz.C2": 65.41,
+          "cents.C2": -0.001,
+          "maxAbsCentsOpenStrings": 0.041
+        }
+      },
+      "P-23": {
+        "title": "바이패스 클릭·노드 생성",
+        "metrics": {
+          "clickRatioDb.1.drive": -9.868,
+          "nodesCreated.1.drive": 0,
+          "clickRatioDb.2.drive": 4.128,
+          "nodesCreated.2.drive": 0,
+          "clickRatioDb.3.compressor": -2.974,
+          "nodesCreated.3.compressor": 0,
+          "maxClickRatioDb": 4.128,
+          "totalNodesCreated": 0
+        }
+      }
+    }
+  },
+  "description": "오디오 렌더 프로브 기준선. npm run probe -- --update 로만 갱신하고 커밋 메시지는 `baseline: {Step ID} {이유}` 로 적는다.",
+  "generatedWith": {
+    "chrome": "Chrome/153.0.8010.12",
+    "node": "v22.23.5",
+    "script": "scripts/audio-render-probe.mjs"
+  }
+}
