@@ -7,7 +7,7 @@ export class MeterNode {
   private consecutiveClipFrames = 0;
   private clipHoldUntil = 0;
 
-  constructor(context: AudioContext) {
+  constructor(context: BaseAudioContext) {
     this.input = context.createAnalyser();
     this.input.fftSize = 1024;
     this.input.smoothingTimeConstant = 0.72;

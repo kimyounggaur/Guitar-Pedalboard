@@ -74,7 +74,7 @@ function normalizeChorusPedal(pedal: PedalState): PedalState {
   };
 }
 
-function createPhaseShiftedSine(context: AudioContext, phase: number): PeriodicWave {
+function createPhaseShiftedSine(context: BaseAudioContext, phase: number): PeriodicWave {
   const real = new Float32Array(2);
   const imaginary = new Float32Array(2);
   real[1] = Math.sin(phase);
@@ -106,7 +106,7 @@ export class ChorusEffect extends BaseEffect {
   private readonly tone: BiquadFilterNode;
   private disposed = false;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, normalizeChorusPedal(pedal));
 
     this.voiceSum = new GainNode(context, { gain: 1 });

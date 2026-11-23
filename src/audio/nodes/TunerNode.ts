@@ -25,7 +25,7 @@ export class TunerNode {
   private active = false;
   private disposed = false;
 
-  constructor(context: AudioContext, preset: TuningPresetId) {
+  constructor(context: BaseAudioContext, preset: TuningPresetId) {
     this.preset = preset;
     this.input = new AudioWorkletNode(context, 'tuner-processor', {
       numberOfInputs: 1,

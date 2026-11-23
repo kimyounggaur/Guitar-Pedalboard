@@ -106,7 +106,7 @@ export class TremoloEffect extends BaseEffect {
   private readonly lfoBanks: TremoloLfoBank[] = [];
   private disposed = false;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, normalizeTremoloPedal(pedal));
 
     this.amplitude = new GainNode(context, { gain: 1 });

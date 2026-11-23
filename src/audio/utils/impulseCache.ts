@@ -34,7 +34,7 @@ export class ImpulseCache {
   private requestCounter = 0;
   private disposed = false;
 
-  constructor(private readonly context: AudioContext) {
+  constructor(private readonly context: BaseAudioContext) {
     try {
       if (typeof Worker !== 'undefined') {
         this.worker = new Worker(new URL('../workers/impulse.worker.ts', import.meta.url), {

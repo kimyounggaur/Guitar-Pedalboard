@@ -1,4 +1,4 @@
-export function createDcBlocker(context: AudioContext): BiquadFilterNode {
+export function createDcBlocker(context: BaseAudioContext): BiquadFilterNode {
   const filter = context.createBiquadFilter();
   filter.type = 'highpass';
   filter.frequency.value = 22;

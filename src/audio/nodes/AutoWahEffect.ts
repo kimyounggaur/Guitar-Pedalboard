@@ -87,7 +87,7 @@ export class AutoWahEffect extends BaseEffect {
   private disposePortTimer: number | null = null;
   private disposePortClosed = false;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     const safePedal = normalizeAutoWahPedal(pedal);
     const params = safePedal.params as AutoWahParams;
     super(context, safePedal);

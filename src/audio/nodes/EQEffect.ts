@@ -9,7 +9,7 @@ export class EQEffect extends BaseEffect {
   private readonly treble: BiquadFilterNode;
   private readonly presence: BiquadFilterNode;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, pedal);
     this.lowCut = context.createBiquadFilter();
     this.bass = context.createBiquadFilter();
