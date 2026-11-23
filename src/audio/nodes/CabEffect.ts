@@ -1,6 +1,6 @@
 import { BaseEffect } from './BaseEffect';
 import type { CabParams, PedalState } from '../types';
-import { createCabinetImpulse } from '../utils/cabinet';
+import { createCabinet } from '../utils/cabinet';
 import { clamp } from '../utils/db';
 import { smoothParam } from '../utils/smoothing';
 
@@ -20,6 +20,8 @@ export class CabEffect extends BaseEffect {
   private currentPedal: PedalState;
   private lastMicPosition = Number.NaN;
   private lastDistance = Number.NaN;
+  /** 만든 IR 의 켬/끔 음량 보정(선형 배율, S1.4b). 사용자 IR 에는 쓰지 않는다. */
+  private cabinetMakeup = 1;
 
   constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, pedal);
@@ -90,18 +92,15 @@ export class CabEffect extends BaseEffect {
       distance !== this.lastDistance
     ) {
       this.convolver.normalize = false;
-      this.convolver.buffer = createCabinetImpulse(
-        this.context,
-        params.model,
-        micPosition,
-        distance,
-      );
+      const cabinet = createCabinet(this.context, params.model, micPosition, distance);
+      this.convolver.buffer = cabinet.impulse;
+      this.cabinetMakeup = 10 ** (cabinet.makeupDb / 20);
       this.lastModel = params.model;
       this.lastMicPosition = micPosition;
       this.lastDistance = distance;
     }
 
-    smoothParam(this.convolvedGain.gain, 1, this.context);
+    smoothParam(this.convolvedGain.gain, this.cabinetMakeup, this.context);
     smoothParam(this.bypassGain.gain, 0, this.context);
   }
 
