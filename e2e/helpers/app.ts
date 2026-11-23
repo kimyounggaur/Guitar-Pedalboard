@@ -55,3 +55,17 @@ export async function connectGuitar(page: Page): Promise<void> {
   await page.keyboard.press('Enter');
   await expect(page.getByRole('button', { name: '연결 해제' })).toBeVisible({ timeout: 15_000 });
 }
+
+export const connectButton = (page: Page): Locator => page.getByRole('button', { name: '기타 연결하기' });
+export const disconnectButton = (page: Page): Locator => page.getByRole('button', { name: '연결 해제' });
+/** 연결되어 있을 때만 그려지는 긴급 정지 버튼 */
+export const panicButton = (page: Page): Locator => page.locator('.panic-button');
+
+/**
+ * 버튼을 키보드(포커스 + Enter)로 누른다. 마우스 클릭을 쓰지 않는 이유는 connectGuitar 의 설명과 같다
+ * (그래픽 EQ 숫자 입력이 화면을 덮는 문제 F-1). 키보드 입력도 신뢰할 수 있는 사용자 동작이다.
+ */
+export async function activate(page: Page, button: Locator): Promise<void> {
+  await button.focus();
+  await page.keyboard.press('Enter');
+}

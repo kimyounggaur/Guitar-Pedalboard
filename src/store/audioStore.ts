@@ -1,6 +1,12 @@
 import { notifyStorageFailure } from './storageNotice';
 import { create } from 'zustand';
 import { AudioEngine } from '../audio/AudioEngine';
+import {
+  AudioSession,
+  type StopDetail,
+  type StopReason,
+  type StopResult,
+} from '../audio/engine/AudioSession';
 import type {
   CrunchParams,
   DelayParams,
@@ -29,6 +35,7 @@ import {
 } from '../audio/midi';
 import { recordingFormatFromMime, selectRecorderMimeType, WavRecorder, type RecordingFileFormat } from '../audio/recording';
 import { usePedalStore } from './pedalStore';
+import { showToast } from './toastStore';
 
 const IO_STORAGE_KEY = 'guitar-pedalboard:io';
 const OUTPUT_STORAGE_KEY = 'guitar-pedalboard:output-device';
@@ -474,6 +481,77 @@ function disposeRecordingRuntime(recordedUrl: string | null): void {
   });
 }
 
+/** 정리 절차 ③: 녹음 중이었으면 마감을 기다린다. 파일이 만들어졌으면 true, 녹음 중이 아니었으면 false. */
+async function finalizeRecordingForStop(): Promise<boolean> {
+  const wasRecording = activeRecorder !== null || activeWavRecorder !== null || wavCompletion !== null;
+  if (!wasRecording) return false;
+  await finishActiveRecording('finalize');
+  return useAudioStore.getState().recordingStatus === 'ready';
+}
+
+/** 정리 절차 ⑧: 정지 이유별 안내(설계서 4.2절). 오류 경계 화면은 S1.7, 시작 실패 문구는 store.error 가 맡는다. */
+function announceStop(result: StopResult, detail: StopDetail): void {
+  const savedNote = result.recordingSaved ? ' 녹음은 저장했습니다.' : '';
+  switch (result.reason) {
+    case 'user-disconnect':
+      if (result.recordingSaved) {
+        showToast({ kind: 'success', key: 'recording-saved', message: '녹음을 저장했습니다.' });
+      }
+      break;
+    case 'panic':
+      showToast({
+        kind: 'warning',
+        key: 'session-stop',
+        message: `긴급 정지했습니다. 마이크와 오디오를 모두 껐습니다.${savedNote}`,
+      });
+      break;
+    case 'howl': {
+      const frequency = detail.howlFrequencyHz;
+      const where = typeof frequency === 'number' && Number.isFinite(frequency) ? `(약 ${Math.round(frequency)} Hz)` : '';
+      showToast({
+        kind: 'warning',
+        key: 'session-stop',
+        message: `하울링${where}이 감지되어 정지했습니다. 스피커 음량을 줄이거나 헤드폰을 쓰세요.${savedNote}`,
+      });
+      break;
+    }
+    case 'device-lost':
+      showToast({
+        kind: 'warning',
+        key: 'session-stop',
+        message: `입력 장치 연결이 끊겼습니다. 장치를 다시 연결한 뒤 연결하기를 누르세요.${savedNote}`,
+      });
+      break;
+    case 'error':
+      break;
+  }
+  if (result.failedSteps.length > 0) {
+    showToast({
+      kind: 'error',
+      key: 'session-stop-failed',
+      message: '정지하는 중 일부 정리가 끝나지 않았습니다. 소리가 계속 나면 페이지를 새로고침해 주세요.',
+    });
+  }
+}
+
+/**
+ * 오디오 세션 하나. 시작과 모든 종류의 정지(연결 해제·Panic·Esc·하울링·장치 분리·파일 재생 끝·시작 실패)가
+ * 이 객체를 지난다. 정지 코드를 이유별로 따로 두지 않는다(설계서 S1.2, REFACTOR_LOG L-15).
+ */
+const audioSession = new AudioSession({
+  start: (source) =>
+    source.kind === 'file' ? audioEngine.startFile(source.file) : audioEngine.start(source.deviceId || undefined),
+  invalidatePendingStart: () => audioEngine.invalidatePendingStart(),
+  silenceOutput: () => audioEngine.silenceOutput(),
+  stopInput: () => audioEngine.stopInput(),
+  finalizeRecording: finalizeRecordingForStop,
+  pausePlayback: () => audioEngine.pausePlayback(),
+  releaseGraph: () => audioEngine.releaseGraph(),
+  closeContext: () => audioEngine.closeContext(),
+  advanceGeneration: () => audioEngine.advanceGeneration(),
+  notify: announceStop,
+});
+
 type InputMode = 'idle' | 'device' | 'file';
 
 type TempoPedalState = PedalState & {
@@ -641,14 +719,24 @@ function resetReadings() {
   };
 }
 
-async function connectWithDevice(deviceId: string) {
-  await AudioEngine.getInstance().start(deviceId || undefined);
-  return AudioEngine.getInstance().listInputDevices();
-}
-
-async function switchInputDevice(deviceId: string) {
-  await AudioEngine.getInstance().setInputDevice(deviceId);
-  return AudioEngine.getInstance().listInputDevices();
+/**
+ * 화면을 곧바로 '연결 안 됨'으로 돌린 뒤 하나뿐인 정리 절차를 지난다. 이미 아무것도 없으면 화면은 건드리지 않는다.
+ * isLoading 은 '연결 중'일 때만 쓴다: 정지 중에 눌린 '기타 연결하기'는 AudioSession.start 가 정지가 끝나기를 기다린다.
+ */
+function stopSession(reason: StopReason, detail: StopDetail = {}): Promise<StopResult> {
+  const active = audioSession.state !== 'idle' || useAudioStore.getState().isRunning;
+  if (active) {
+    resetHowlWatch();
+    useAudioStore.setState({
+      isRunning: false,
+      inputMode: 'idle',
+      uploadedFileName: null,
+      isLoading: false,
+      error: null,
+      ...resetReadings(),
+    });
+  }
+  return audioSession.stop(reason, detail);
 }
 
 export const useAudioStore = create<AudioStore>((set, get) => ({
@@ -785,8 +873,8 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       const state = get();
       const missing = Boolean(state.selectedDeviceId) && !devices.some((device) => device.deviceId === state.selectedDeviceId);
       if (missing && state.isRunning && state.inputMode === 'device') {
-        await state.stop();
-        set({ devices, selectedDeviceId: '', error: '선택한 입력 장치가 연결 해제되어 오디오를 중지했습니다. 장치를 다시 선택해 주세요.' });
+        await stopSession('device-lost');
+        set({ devices, selectedDeviceId: '' });
       } else {
         set({ devices, ...(missing ? { selectedDeviceId: '' } : {}) });
       }
@@ -816,7 +904,9 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
     try {
       await finishActiveRecording('finalize');
-      const devices = await switchInputDevice(deviceId);
+      const outcome = await audioSession.start({ kind: 'device', deviceId: deviceId || undefined });
+      if (outcome === 'cancelled') return;
+      const devices = await audioEngine.listInputDevices().catch(() => get().devices);
       set({
         devices,
         isRunning: true,
@@ -846,7 +936,9 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
     try {
       await finishActiveRecording('finalize');
-      const devices = await connectWithDevice(selectedDeviceId);
+      const outcome = await audioSession.start({ kind: 'device', deviceId: selectedDeviceId || undefined });
+      if (outcome === 'cancelled') return;
+      const devices = await audioEngine.listInputDevices().catch(() => get().devices);
       set({
         devices,
         isRunning: true,
@@ -874,24 +966,9 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
     try {
       await finishActiveRecording('finalize');
-      const engine = AudioEngine.getInstance();
-      engine.setPlaybackEndedHandler(() => {
-        void (async () => {
-          resetHowlWatch();
-          await finishActiveRecording('finalize');
-          await engine.stop();
-          set({
-            isRunning: false,
-            inputMode: 'idle',
-            uploadedFileName: null,
-            isLoading: false,
-            ...resetReadings(),
-          });
-        })();
-      });
-
-      await engine.startFile(file);
-      const playback = engine.readFilePlayback();
+      const outcome = await audioSession.start({ kind: 'file', file });
+      if (outcome === 'cancelled') return;
+      const playback = audioEngine.readFilePlayback();
       set({
         isRunning: true,
         inputMode: 'file',
@@ -903,7 +980,6 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         error: null,
       });
     } catch (error) {
-      await AudioEngine.getInstance().stop();
       set({
         error: toErrorMessage(error),
         isRunning: false,
@@ -963,30 +1039,11 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   },
 
   stop: async () => {
-    resetHowlWatch();
-    set({ isLoading: true, error: null });
-    await finishActiveRecording('finalize');
-    await AudioEngine.getInstance().stop();
-    set({
-      isRunning: false,
-      inputMode: 'idle',
-      uploadedFileName: null,
-      isLoading: false,
-      ...resetReadings(),
-    });
+    await stopSession('user-disconnect');
   },
 
   panic: () => {
-    resetHowlWatch();
-    audioEngine.panic();
-    set({
-      isRunning: false, inputMode: 'idle', uploadedFileName: null, isLoading: true,
-      error: '긴급 정지: 입력과 출력을 차단했습니다.', ...resetReadings(),
-    });
-    void finishActiveRecording('finalize').finally(() => {
-      audioEngine.dispose();
-      set({ isLoading: false });
-    });
+    void stopSession('panic');
   },
 
   tapTempoTap: () => {
@@ -1215,9 +1272,12 @@ if (initialOutputDevice && audioEngine.supportsOutputSelection) {
 audioEngine.setInputEndedHandler(() => {
   const state = useAudioStore.getState();
   if (!state.isRunning || state.inputMode !== 'device' || state.isLoading) return;
-  void state.stop().finally(() => {
-    useAudioStore.setState({ error: '입력 장치 연결이 끊어져 오디오를 중지했습니다. 녹음 결과를 확인하고 장치를 다시 연결해 주세요.' });
-  });
+  void stopSession('device-lost');
+});
+
+// 음원 파일 재생이 끝나면 연결 해제와 같은 정리 절차로 마친다.
+audioEngine.setPlaybackEndedHandler(() => {
+  void stopSession('user-disconnect');
 });
 
 // The audio worklet detects and mutes without depending on any mounted meter UI.
@@ -1225,6 +1285,5 @@ audioEngine.setHowlProtection(initialIoSettings.howlProtectionEnabled);
 audioEngine.setHowlHandler(() => {
   const state = useAudioStore.getState();
   if (!state.isRunning || state.inputMode !== 'device' || !state.howlProtectionEnabled) return;
-  state.panic();
-  useAudioStore.setState({ error: '지속적인 피드백이 감지되어 입력과 출력을 차단했습니다. 헤드폰을 사용하세요.' });
+  void stopSession('howl');
 });

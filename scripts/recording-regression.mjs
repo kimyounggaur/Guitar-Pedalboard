@@ -27,7 +27,12 @@ assert.match(storeSource, /selectRecorderMimeType/);
 assert.match(storeSource, /revokeRecordingUrl\(state\.recordedUrl\)/);
 assert.match(storeSource, /setSelectedDevice:[\s\S]*finishActiveRecording\('finalize'\)/);
 assert.match(storeSource, /startFile:[\s\S]*finishActiveRecording\('finalize'\)/);
-assert.match(storeSource, /panic:[\s\S]*audioEngine\.panic\(\)[\s\S]*finishActiveRecording\('finalize'\)/);
+// 정지 이유가 무엇이든 정리 절차는 하나다(S1.2): Panic 도 stopSession → AudioSession.stop 을 지나고,
+// 그 ③ 단계(finalizeRecording 포트)가 녹음을 마감한다.
+assert.match(storeSource, /panic:[\s\S]*stopSession\('panic'\)/);
+assert.match(storeSource, /async function finalizeRecordingForStop\(\)[\s\S]*finishActiveRecording\('finalize'\)/);
+assert.match(storeSource, /finalizeRecording: finalizeRecordingForStop/);
+assert.doesNotMatch(storeSource, /audioEngine\.panic\(|AudioEngine\.getInstance\(\)\.stop\(/);
 assert.match(storeSource, /audioEngine\.setHowlHandler/);
 assert.match(appShellSource, /useEffect\(\(\) => \(\) => disposeRecording\(\)/);
 for (const label of ['녹음', '정지', '다운로드']) {
@@ -221,6 +226,7 @@ const runtimeBundle = await build({
     contents: `
       export { AudioEngine } from './src/audio/AudioEngine.ts';
       export { useAudioStore } from './src/store/audioStore.ts';
+      export { useToastStore } from './src/store/toastStore.ts';
     `,
     resolveDir: fileURLToPath(new URL('..', import.meta.url)),
     sourcefile: 'recording-runtime-entry.ts',
@@ -233,7 +239,7 @@ const runtimeBundle = await build({
   write: false,
 });
 const runtimeUrl = `data:text/javascript;base64,${Buffer.from(runtimeBundle.outputFiles[0].text).toString('base64')}`;
-const { AudioEngine, useAudioStore } = await import(runtimeUrl);
+const { AudioEngine, useAudioStore, useToastStore } = await import(runtimeUrl);
 const engine = AudioEngine.getInstance();
 
 // A fresh module instance represents a page reload using the same browser storage.
@@ -293,45 +299,63 @@ assert.equal(engine.createRecorderStream(), recorderStream);
 assert.equal(engine.createRecorderStream(), recorderStream);
 assert.equal(destinationCreates, 1, 'recorder destination을 재사용하지 않았습니다.');
 assert.deepEqual(masterConnects, [destination]);
-engine.panic();
-assert.equal(inputStops, 1, 'Panic must stop microphone input immediately');
-assert.equal(recorderTrackStops, 0, 'Panic keeps recorder alive for finalization');
+engine.stopInput();
+assert.equal(inputStops, 1, '정지 절차는 마이크 입력 트랙을 바로 멈춰야 합니다');
+assert.equal(recorderTrackStops, 0, '녹음 마감을 기다리는 동안 recorder 트랙은 살아 있어야 합니다');
 engine.disposeRecorderStream();
 assert.equal(recorderTrackStops, 1);
 assert.equal(destinationDisconnects, 1);
 
 let streamRequests = 0;
-let enginePanics = 0;
-let engineStops = 0;
+let engineStops = 0; // 정리 절차가 AudioContext 를 닫은 횟수
 let engineStarts = 0;
 let engineFileStarts = 0;
-let switchedDevice = null;
-let playbackEndedHandler = null;
+let startedDevice = null;
 let recorderStreamDisposals = 0;
+const teardownOrder = [];
+const toastMessages = () => useToastStore.getState().toasts.map((toast) => toast.message);
+/** 화면은 정지 즉시 바뀌므로, 정리 절차가 AudioContext 를 닫을 때까지 기다린다. */
+async function settleStop(expectedStops) {
+  for (let attempt = 0; attempt < 200 && engineStops < expectedStops; attempt += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  await new Promise((resolve) => setImmediate(resolve)); // 닫은 뒤 ⑦·⑧ 단계
+}
 engine.createRecorderStream = () => {
   streamRequests += 1;
   return recorderStream;
 };
-engine.panic = () => {
-  enginePanics += 1;
+// 정리 절차(설계서 4.2절 ①~⑦)의 엔진 쪽 단계를 호출 기록으로 대신한다. ③ 녹음 마감은 스토어가 한다.
+engine.invalidatePendingStart = () => {
+  teardownOrder.push('invalidate-pending-start');
 };
-engine.dispose = () => {};
-engine.stop = async () => {
+engine.silenceOutput = async () => {
+  teardownOrder.push('silence-output');
+};
+engine.stopInput = () => {
+  teardownOrder.push('stop-input');
+};
+engine.pausePlayback = () => {
+  teardownOrder.push('pause-playback');
+};
+engine.releaseGraph = () => {
+  teardownOrder.push('release-graph');
+};
+engine.closeContext = async () => {
+  teardownOrder.push('close-context');
   engineStops += 1;
 };
-engine.start = async () => {
+engine.advanceGeneration = () => {
+  teardownOrder.push('advance-generation');
+};
+engine.start = async (deviceId) => {
   engineStarts += 1;
+  startedDevice = deviceId ?? null;
 };
 engine.startFile = async () => {
   engineFileStarts += 1;
 };
-engine.setInputDevice = async (deviceId) => {
-  switchedDevice = deviceId;
-};
 engine.listInputDevices = async () => [];
-engine.setPlaybackEndedHandler = (handler) => {
-  playbackEndedHandler = handler;
-};
 engine.readFilePlayback = () => ({ currentTime: 0, duration: 60, isPaused: false });
 engine.readLatency = () => ({ base: 1, output: 2, sampleRate: 48_000 });
 engine.readPitch = () => ({ frequency: null, note: null, cents: 0 });
@@ -368,50 +392,86 @@ assert.equal(useAudioStore.getState().recordedUrl, null);
 assert.equal(useAudioStore.getState().recordingStatus, 'recording');
 
 await useAudioStore.getState().setSelectedDevice('input-2');
-assert.equal(switchedDevice, 'input-2');
+assert.equal(startedDevice, 'input-2');
+assert.equal(engineStarts, 1);
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
+assert.equal(useAudioStore.getState().isRunning, true);
 
 useAudioStore.getState().startRecording();
 await useAudioStore.getState().start();
-assert.equal(engineStarts, 1);
+assert.equal(engineStarts, 2);
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
 
 useAudioStore.getState().startRecording();
 await useAudioStore.getState().startFile(new File(['audio'], 'test.wav', { type: 'audio/wav' }));
 assert.equal(engineFileStarts, 1);
-assert.equal(typeof playbackEndedHandler, 'function');
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
+assert.equal(useAudioStore.getState().inputMode, 'file');
 
+// 연결 해제: 정리 절차를 순서대로 지나고, 녹음을 저장하고, 저장했다는 안내만 띄운다.
 useAudioStore.getState().startRecording();
+useToastStore.getState().clear();
+teardownOrder.length = 0;
 await useAudioStore.getState().stop();
 assert.equal(engineStops, 1);
+assert.deepEqual(teardownOrder, [
+  'invalidate-pending-start',
+  'silence-output',
+  'stop-input',
+  'pause-playback',
+  'release-graph',
+  'close-context',
+  'advance-generation',
+]);
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
+assert.deepEqual(toastMessages(), ['녹음을 저장했습니다.']);
+assert.equal(useAudioStore.getState().isRunning, false);
+assert.equal(useAudioStore.getState().isLoading, false);
 
-useAudioStore.setState({ isRunning: true, inputMode: 'device' });
+// 정지 절차는 '실제로 시작된 세션'을 정지할 때만 안내를 띄우므로 start() 로 세션을 연다.
+await useAudioStore.getState().start();
 useAudioStore.getState().startRecording();
 recorder = MockMediaRecorder.instances.at(-1);
 const urlsBeforePanic = createdUrls.length;
+const stopsBeforePanic = engineStops;
+useToastStore.getState().clear();
+teardownOrder.length = 0;
 useAudioStore.getState().panic();
-await new Promise(resolve => setImmediate(resolve));
-assert.equal(enginePanics, 1);
+assert.equal(useAudioStore.getState().isRunning, false, 'Panic 은 화면을 곧바로 연결 안 됨으로 돌려야 합니다');
+await settleStop(stopsBeforePanic + 1);
+assert.equal(engineStops, stopsBeforePanic + 1, 'Panic 도 AudioContext 를 닫는 정리 절차를 지나야 합니다');
+assert.deepEqual(teardownOrder, [
+  'invalidate-pending-start',
+  'silence-output',
+  'stop-input',
+  'pause-playback',
+  'release-graph',
+  'close-context',
+  'advance-generation',
+]);
 assert.equal(recorder.stopCalls, 1);
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
 assert.ok(useAudioStore.getState().recordedUrl);
 assert.equal(createdUrls.length, urlsBeforePanic + 1, 'Panic should save recorded audio');
+assert.equal(toastMessages().length, 1);
+assert.match(toastMessages()[0], /긴급 정지했습니다\. 마이크와 오디오를 모두 껐습니다\./);
+assert.match(toastMessages()[0], /녹음은 저장했습니다\./);
+assert.equal(useAudioStore.getState().error, null);
 
-useAudioStore.setState({
-  isRunning: true,
-  inputMode: 'device',
-  howlProtectionEnabled: true,
-  error: null,
-});
+await useAudioStore.getState().start();
+useAudioStore.setState({ howlProtectionEnabled: true });
 useAudioStore.getState().startRecording();
+const stopsBeforeHowl = engineStops;
+useToastStore.getState().clear();
 engine.howlHandler();
-await new Promise(resolve => setImmediate(resolve));
-assert.equal(enginePanics, 2);
+await settleStop(stopsBeforeHowl + 1);
+assert.equal(engineStops, stopsBeforeHowl + 1);
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
 assert.ok(useAudioStore.getState().recordedUrl);
-assert.match(useAudioStore.getState().error, /피드백/);
+assert.equal(toastMessages().length, 1);
+assert.match(toastMessages()[0], /하울링이 감지되어 정지했습니다\. 스피커 음량을 줄이거나 헤드폰을 쓰세요\./);
+assert.match(toastMessages()[0], /녹음은 저장했습니다\./);
+assert.equal(useAudioStore.getState().error, null);
 
 useAudioStore.setState({ isRunning: true, inputMode: 'device', error: null });
 useAudioStore.getState().startRecording();
@@ -467,7 +527,8 @@ useAudioStore.getState().disposeRecording();
 delete globalThis.AudioContext;
 
 // Default input unplug: the current track ends, the recording finalizes, and stale events are ignored.
-useAudioStore.setState({ isRunning: true, isLoading: false, inputMode: 'device', selectedDeviceId: '', error: null });
+useAudioStore.setState({ selectedDeviceId: '', error: null });
+await useAudioStore.getState().start();
 useAudioStore.getState().setRecordingFormat('webm');
 useAudioStore.getState().startRecording();
 let endedCallback;
@@ -477,12 +538,15 @@ engine.stream = liveStream;
 const generation = engine.sessionGeneration;
 engine.watchInputEnd(liveStream, generation);
 const stopsBeforeDisconnect = engineStops;
+useToastStore.getState().clear();
 endedCallback();
 endedCallback();
-await new Promise((resolve) => setImmediate(resolve));
+await settleStop(stopsBeforeDisconnect + 1);
 assert.equal(engineStops, stopsBeforeDisconnect + 1);
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
-assert.match(useAudioStore.getState().error, /입력 장치 연결이 끊어져/);
+assert.equal(toastMessages().length, 1);
+assert.match(toastMessages()[0], /입력 장치 연결이 끊겼습니다\. 장치를 다시 연결한 뒤 연결하기를 누르세요\./);
+assert.equal(useAudioStore.getState().error, null);
 assert.equal(useAudioStore.getState().isRunning, false);
 engine.sessionGeneration += 1;
 endedCallback();

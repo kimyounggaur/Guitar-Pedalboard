@@ -250,6 +250,10 @@ export interface AudioTracking {
   offlineContexts: number;
   /** getUserMedia 호출 횟수 */
   getUserMediaCalls: number;
+  /** getUserMedia 가 돌려준 입력 트랙들의 현재 readyState('live' | 'ended') */
+  inputTracks: Array<{ kind: string; readyState: string }>;
+  /** 실시간 AudioContext 가 동시에 열려 있던(닫히지 않은) 최대 개수. 새 컨텍스트를 만드는 순간에 센다. */
+  maxOpenContexts: number;
 }
 
 /**
@@ -259,7 +263,8 @@ export interface AudioTracking {
 export async function trackAudioContexts(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const tracked: BaseAudioContext[] = [];
-    const counters = { offline: 0, getUserMedia: 0 };
+    const streams: MediaStream[] = [];
+    const counters = { offline: 0, getUserMedia: 0, maxOpen: 0 };
     const wrap = <T extends { new (...args: never[]): BaseAudioContext }>(Native: T, onCreate: (instance: BaseAudioContext) => void): T => {
       const Wrapped = function (this: unknown, ...args: never[]) {
         const instance = Reflect.construct(Native, args, new.target ?? Wrapped) as BaseAudioContext;
@@ -271,7 +276,11 @@ export async function trackAudioContexts(page: Page): Promise<void> {
       return Wrapped;
     };
     if (typeof AudioContext === 'function') {
-      window.AudioContext = wrap(AudioContext, (instance) => tracked.push(instance));
+      window.AudioContext = wrap(AudioContext, (instance) => {
+        tracked.push(instance);
+        const open = tracked.filter((context) => context.state !== 'closed').length;
+        counters.maxOpen = Math.max(counters.maxOpen, open);
+      });
     }
     if (typeof OfflineAudioContext === 'function') {
       window.OfflineAudioContext = wrap(OfflineAudioContext, () => {
@@ -283,9 +292,11 @@ export async function trackAudioContexts(page: Page): Promise<void> {
       const nativeGetUserMedia = devices.getUserMedia.bind(devices);
       Object.defineProperty(devices, 'getUserMedia', {
         configurable: true,
-        value: (constraints?: MediaStreamConstraints) => {
+        value: async (constraints?: MediaStreamConstraints) => {
           counters.getUserMedia += 1;
-          return nativeGetUserMedia(constraints);
+          const stream = await nativeGetUserMedia(constraints);
+          streams.push(stream);
+          return stream;
         },
       });
     }
@@ -295,6 +306,8 @@ export async function trackAudioContexts(page: Page): Promise<void> {
         contexts: tracked.map((context) => ({ state: context.state, sampleRate: context.sampleRate })),
         offlineContexts: counters.offline,
         getUserMediaCalls: counters.getUserMedia,
+        inputTracks: streams.flatMap((stream) => stream.getTracks().map((track) => ({ kind: track.kind, readyState: track.readyState }))),
+        maxOpenContexts: counters.maxOpen,
       }),
     });
   });
@@ -302,4 +315,57 @@ export async function trackAudioContexts(page: Page): Promise<void> {
 
 export async function readAudioTracking(page: Page): Promise<AudioTracking> {
   return page.evaluate(() => (window as unknown as { __audioTracking: () => AudioTracking }).__audioTracking());
+}
+
+// ---------------------------------------------------------------------------------------------
+// 하울링 차단 모의 · 사용자 동작 시각
+// ---------------------------------------------------------------------------------------------
+/**
+ * 출력 가드(howl-guard) 워클릿이 '하울링 감지' 메시지를 보낸 것처럼 만들 수 있게 한다.
+ * AudioWorkletNode 생성자를 감싸 `howl-guard` 노드의 포트를 붙잡아 두고, `triggerHowl()` 이 그 포트의 onmessage 를 부른다.
+ * 실제 소리로 하울링을 일으키는 시험은 어렵고 흔들리므로, 차단 이후의 정리 경로만 확인하는 용도다.
+ */
+export async function mockHowlGuard(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const guards: AudioWorkletNode[] = [];
+    const Native = window.AudioWorkletNode;
+    if (typeof Native !== 'function') return;
+    const Wrapped = function (this: unknown, ...args: ConstructorParameters<typeof AudioWorkletNode>) {
+      const instance = Reflect.construct(Native, args, new.target ?? Wrapped) as AudioWorkletNode;
+      if (args[1] === 'howl-guard') guards.push(instance);
+      return instance;
+    } as unknown as typeof AudioWorkletNode;
+    Wrapped.prototype = Native.prototype;
+    Object.setPrototypeOf(Wrapped, Native);
+    window.AudioWorkletNode = Wrapped;
+    Object.defineProperty(window, '__triggerHowl', {
+      configurable: true,
+      value: () => {
+        const guard = guards[guards.length - 1];
+        const handler = guard?.port.onmessage;
+        if (!guard || !handler) return false;
+        (window as unknown as { __lastTrigger: number }).__lastTrigger = performance.now();
+        handler.call(guard.port, new MessageEvent('message', { data: { type: 'howl' } }));
+        return true;
+      },
+    });
+  });
+}
+
+/** 마지막으로 만든 howl-guard 노드에 하울링 감지 메시지를 보낸다. 노드가 없으면 false. */
+export async function triggerHowl(page: Page): Promise<boolean> {
+  return page.evaluate(() => (window as unknown as { __triggerHowl: () => boolean }).__triggerHowl());
+}
+
+/**
+ * 키 누름·포인터 누름·클릭의 시각(`performance.now()`)을 `window.__lastTrigger` 에 남긴다.
+ * '누른 뒤 500 ms 안에' 같은 기준을 Playwright 왕복 시간 없이 페이지 안에서 정확히 재기 위한 것이다.
+ */
+export async function markTriggers(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const stamp = () => {
+      (window as unknown as { __lastTrigger: number }).__lastTrigger = performance.now();
+    };
+    for (const type of ['keydown', 'pointerdown', 'click']) window.addEventListener(type, stamp, { capture: true });
+  });
 }
