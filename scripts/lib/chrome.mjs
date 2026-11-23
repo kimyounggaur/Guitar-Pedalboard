@@ -6,7 +6,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
-import { setTimeout } from 'node:timers';
+import { clearTimeout, setTimeout } from 'node:timers';
 
 /** GitHub Actions 등 CI 는 CI=true 를 넣는다. 'false'·'0' 은 CI 가 아닌 것으로 본다. */
 export const runsInCi = Boolean(process.env.CI) && !['false', '0'].includes(process.env.CI);
@@ -113,8 +113,16 @@ export async function createCdpClient(webSocketUrl) {
     socket.addEventListener('error', reject, { once: true });
   });
   let nextId = 1;
+  let closedReason = null;
   const pending = new Map();
   const handlers = new Map();
+  // 연결이 끊기면 답을 기다리던 요청은 영영 풀리지 않는다. 특히 Browser.close 는 Chrome 이 답하기 전에 종료하면서
+  // 소켓을 닫는 일이 있어(간헐적으로 시험이 180초 동안 멈췄다), 끊기는 순간 대기 요청을 모두 거부하고 이후 send 도 바로 거부한다.
+  socket.addEventListener('close', () => {
+    closedReason = 'CDP 연결이 닫혔습니다.';
+    for (const { reject } of pending.values()) reject(new Error(closedReason));
+    pending.clear();
+  });
   socket.addEventListener('message', (event) => {
     const message = JSON.parse(String(event.data));
     if (message.method && handlers.has(message.method)) {
@@ -130,6 +138,7 @@ export async function createCdpClient(webSocketUrl) {
 
   return {
     send(method, params = {}) {
+      if (closedReason) return Promise.reject(new Error(closedReason));
       const id = nextId;
       nextId += 1;
       return new Promise((resolve, reject) => {
@@ -168,10 +177,17 @@ export async function startChrome({ chromePath, extraArgs = [], profilePrefix = 
 
   const close = async () => {
     if (cdp) {
+      // Browser.close 가 답 없이 소켓만 닫히면 거부(→ 정상 종료로 본다), 소켓도 안 닫히고 답도 없으면 3초 뒤 강제로 넘어간다.
+      let giveUp;
+      const gaveUp = new Promise((resolve) => {
+        giveUp = setTimeout(resolve, 3_000);
+      });
       try {
-        await cdp.send('Browser.close');
+        await Promise.race([cdp.send('Browser.close'), gaveUp]);
       } catch {
         cdp.close();
+      } finally {
+        clearTimeout(giveUp);
       }
     }
     await stopChild(chromeProcess);
