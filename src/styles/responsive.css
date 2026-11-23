@@ -150,7 +150,10 @@
     scroll-padding-inline: 10px;
     scroll-snap-type: x mandatory;
     overscroll-behavior-inline: contain;
-    touch-action: pan-x;
+    /* F-3: 예전 `pan-x` 는 페달 카드 위에서 시작한 세로 터치 스크롤을 막아, 카드가 화면을 거의 채우는 휴대폰에서 아래쪽 스위치로
+       내려갈 방법이 머리글을 잡는 것뿐이었다. 가로 스와이프(보드 스크롤)와 세로 스크롤(문서)을 둘 다 브라우저에 맡긴다.
+       노브·페이더·드래그 손잡이는 각자 touch-action: none 이라 영향이 없다. */
+    touch-action: manipulation;
   }
 
   .sortable-pedal {

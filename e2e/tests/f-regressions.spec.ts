@@ -1,8 +1,10 @@
 // F-n 회귀 시험: 이미 고친 결함이 되살아나지 않는지 본다. 시험 제목 앞에 REFACTOR_LOG 의 결함 번호(F-n)를 적는다.
+import type { Page } from '@playwright/test';
 import { openApp, pedalSwitches } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { reachable } from '../helpers/geometry';
 import { measureSwitches } from '../helpers/switches';
+import { settledScroll, touchDrag } from '../helpers/touch';
 
 /** 그래픽 EQ 페달의 고정 대역 수(GraphicEQEffect 의 7밴드). 바꾸면 이 값과 시험을 같이 바꾼다. */
 const GRAPHIC_EQ_FADERS = 7;
@@ -69,5 +71,58 @@ test.describe('F-1 그래픽 EQ 숫자 입력이 화면을 덮던 결함', () =>
       await target.click({ timeout: 5_000 });
       await expect(target).not.toHaveAttribute('aria-pressed', before ?? '');
     }
+  });
+});
+
+test.describe('F-3 페달 카드 위에서 시작한 터치 스크롤', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  /** 첫 페달 카드 안에서 컨트롤이 아닌 빈 자리(카드 가장자리) 두 곳. 컨트롤 위에서 시작하면 스크롤이 막히는 것이 정상이라 피한다. */
+  async function passiveSpots(page: Page) {
+    return page.evaluate(() => {
+      const card = document.querySelector('.pedal-board .pedal-card');
+      if (!card) throw new Error('페달 카드가 없다');
+      const rect = card.getBoundingClientRect();
+      const y = Math.round(Math.min(window.innerHeight - 200, rect.bottom - 20));
+      return [Math.round(rect.left + 4), Math.round(rect.right - 4)].map((x) => {
+        const hit = document.elementFromPoint(x, y);
+        return {
+          x,
+          y,
+          hit: hit ? `${hit.tagName.toLowerCase()}.${String(hit.className).split(' ')[0]}` : 'null',
+          inCard: Boolean(hit?.closest('.pedal-card')),
+          interactive: Boolean(hit?.closest('button, input, select, textarea, a, [role="slider"], .drag-handle')),
+        };
+      });
+    });
+  }
+
+  test('F-3 카드 가장자리에서 위로 끄는 터치가 문서를 세로로 스크롤한다', async ({ page }) => {
+    await openApp(page);
+    const documentOverflow = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    expect(documentOverflow, '문서가 화면보다 충분히 길어야 시험이 의미가 있다').toBeGreaterThan(400);
+
+    const [spot] = await passiveSpots(page);
+    expect(spot, `시작 점이 카드 안의 빈 자리여야 한다(${spot.hit})`).toMatchObject({ inCard: true, interactive: false });
+
+    expect((await settledScroll(page)).y).toBe(0);
+    await touchDrag(page, { x: spot.x, y: spot.y }, { x: spot.x, y: spot.y - 300 });
+    const after = await settledScroll(page);
+    test.info().annotations.push({ type: 'F-3 세로 스크롤', description: `손가락 300 px → 문서 ${after.y} px` });
+    // 예전(pan-x)에는 0 에 머물렀다. 손가락이 300 px 움직였으니 절반 이상은 따라와야 한다.
+    expect(after.y).toBeGreaterThan(150);
+  });
+
+  test('F-3 카드 가장자리에서 옆으로 끄는 터치는 여전히 페달 보드를 가로로 넘긴다', async ({ page }) => {
+    await openApp(page);
+    const [, spot] = await passiveSpots(page);
+    expect(spot, `시작 점이 카드 안의 빈 자리여야 한다(${spot.hit})`).toMatchObject({ inCard: true, interactive: false });
+
+    expect((await settledScroll(page)).boardX).toBe(0);
+    await touchDrag(page, { x: spot.x, y: spot.y }, { x: spot.x - 260, y: spot.y });
+    const after = await settledScroll(page);
+    test.info().annotations.push({ type: 'F-3 가로 스와이프', description: `손가락 260 px → 보드 ${after.boardX} px, 문서 ${after.y} px` });
+    expect(after.boardX).toBeGreaterThan(100);
+    expect(after.y, '가로로 끌었는데 문서가 세로로 움직이면 안 된다').toBeLessThan(40);
   });
 });
