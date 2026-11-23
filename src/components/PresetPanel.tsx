@@ -1,6 +1,7 @@
 import { notifyStorageFailure } from '../store/storageNotice';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
+import { formatTrimDb } from '../audio/offline/loudnessSpec';
 import { usePedalStore } from '../store/pedalStore';
 import {
   applyPresetPedals,
@@ -57,7 +58,10 @@ export function PresetPanel() {
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => readStringList(FAVORITES_KEY));
   const [recentIds, setRecentIds] = useState<string[]>(() => readStringList(RECENTS_KEY));
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [measuring, setMeasuring] = useState(false);
   const pedals = usePedalStore((state) => state.pedals);
+  const presetTrimDb = usePedalStore((state) => state.presetTrimDb);
+  const setPresetTrimDb = usePedalStore((state) => state.setPresetTrimDb);
   const resetPedalOrder = usePedalStore((state) => state.resetPedalOrder);
   const presets = usePresetStore((state) => state.presets);
   const savePreset = usePresetStore((state) => state.savePreset);
@@ -146,7 +150,7 @@ export function PresetPanel() {
   }, []);
 
   const loadPreset = useCallback((preset: PresetListItem) => {
-    applyPresetPedals(preset.pedals);
+    applyPresetPedals(preset.pedals, preset.trimDb);
     setName(preset.name);
     setActivePresetId(preset.id);
     rememberRecent(preset.id);
@@ -171,6 +175,34 @@ export function PresetPanel() {
     savePreset(name, pedals);
     setActiveLibraryId('user');
     setMessage('프리셋을 저장했습니다.');
+  };
+
+  // '음량 맞추기': 지금 체인에 기준 신호(REF-PC)를 4초 흘려 보내 평균 음량과 피크를 재고, 목표(−20 dBFS)에 맞는 보정값을 정한다.
+  // 순간 피크가 커서 목표까지 올리면 리미터가 1 dB 넘게 눌러야 하면 거기서 멈춘다(GS-7).
+  // 오프라인 렌더라 스피커로는 아무 소리도 나가지 않는다. 렌더 코드는 이 버튼을 누를 때만 불러온다.
+  const matchLoudness = async () => {
+    if (measuring) return;
+    setMeasuring(true);
+    setMessage('현재 체인의 음량을 재는 중입니다…');
+    try {
+      const { computeTrimForChain } = await import('../audio/offline/measureLoudness');
+      const sampleRate = AudioEngine.getInstance().readLatency().sampleRate || 48000;
+      const result = await computeTrimForChain(usePedalStore.getState().pedals, { sampleRate });
+      if (!result.audible) {
+        setMessage('소리가 거의 나오지 않아 음량을 맞출 수 없습니다. 노이즈 게이트와 볼륨 설정을 확인해 주세요.');
+        return;
+      }
+      setPresetTrimDb(result.trimDb);
+      setMessage(
+        result.headroomLimited
+          ? `음량 보정을 ${formatTrimDb(result.trimDb)} 로 맞췄습니다. 순간 소리가 커서 평균 ${result.resultRmsDb.toFixed(1)} dBFS 까지만 올렸습니다(리미터를 아끼려고 −20 dBFS 까지는 올리지 않았습니다). 프리셋으로 저장하면 이 값도 함께 저장됩니다.`
+          : `음량 보정을 ${formatTrimDb(result.trimDb)} 로 맞췄습니다. 프리셋으로 저장하면 이 값도 함께 저장됩니다.`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? `음량을 재지 못했습니다: ${error.message}` : '음량을 재지 못했습니다.');
+    } finally {
+      setMeasuring(false);
+    }
   };
 
   const removePreset = useCallback((presetId: string) => {
@@ -302,6 +334,21 @@ export function PresetPanel() {
             />
             <button type="button" className="secondary-button" onClick={saveCurrentPreset}>
               저장
+            </button>
+          </div>
+          <div className="preset-loudness" role="group" aria-label="프리셋 음량 보정">
+            <p className="preset-loudness-value" data-testid="preset-trim-value">
+              음량 보정 <strong>{formatTrimDb(presetTrimDb)}</strong>
+            </p>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void matchLoudness()}
+              disabled={measuring}
+              aria-busy={measuring}
+              title="기준 신호로 현재 체인의 음량을 재서 −20 dBFS 에 맞춥니다"
+            >
+              {measuring ? '재는 중…' : '음량 맞추기'}
             </button>
           </div>
           <div className="preset-actions">

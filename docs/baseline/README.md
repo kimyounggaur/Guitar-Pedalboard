@@ -40,7 +40,7 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 | P-02 | 출력 5 dB만 감소 | 입력 51.6 dB 감쇠 중 출력 42.3 dB 감소 | ≥ 25 dB | ✔ |
 | P-03 | 0 dBFS 초과 | 시작 시점: 리미터 있음 −1.012 dBFS (없으면 +68.4 dBFS). **S1.4a 이후**: 리미터 있음 −1.000 dBFS(44.1·48 kHz), 없으면 +68.4 / +67.9 dBFS(S1.4b 의 Cab 보충 이득 +0.2 dB 로 +68.6 / +68.1). 앱 기본 구성에서 Cab 만 끈 경우도 −1.000 dBFS(리미터 없으면 +2.97 / +2.99 dBFS, 즉 Cab 을 끄면 깨졌다) | ≤ −1.0 dBFS (허용 −0.9) | ✔ (천장이 −1.0 dBFS, 기준은 −0.9) |
 | P-04 | 약 15 dB | 시작 시점(S1.4b 전): 기본(V30, 마이크 55) −0.16 dB, 모델·마이크 15가지 중 최대 1.58 / 1.73 dB (v30-4x12 마이크 100 이 가장 큼). **S1.4b 이후**: 기본 +0.04 / +0.04 dB, 최대 0.17 / 0.19 dB (임펄스 밖의 보충 이득 ≤ 6 dB 와 모델별 보정표, REFACTOR_LOG L-35·L-36) | ≤ 1.5 dB | ✔ S1.4b 에서 해결 |
-| P-05 | −51 ~ −24 dBFS, 중앙값 −31 | −33.4 ~ −12.1 dBFS, 중앙값 −16.2 / −16.3, 폭 21.3 / 21.4 dB (48 kHz 는 −33.5 ~ −12.1). S1.4a: 리미터 교체로 큰 프리셋 44개가 최대 0.75 dB 내려갔다. S1.4b: Cab 보충 이득으로 Cab 을 쓰는 프리셋 39개(40개 중 `direct-clean` 만 Cab 없음)가 +0.02 ~ +0.20 dB 올랐다(−12 ~ −14 dBFS 의 큰 프리셋 14개는 +0.02 ~ +0.04, 클린·앰비언트 계열 19개는 +0.20) | −20 ± 2 dBFS | ✖ 중앙값은 목표 밖, 프리셋 최대 −12 dBFS (S1.4c 에서 프리셋별 보정) |
+| P-05 | −51 ~ −24 dBFS, 중앙값 −31 | 시작 시점(S1.4c 전): −33.4 ~ −12.1 dBFS, 중앙값 −16.2 / −16.3, 폭 21.3 / 21.4 dB (48 kHz 는 −33.5 ~ −12.1). S1.4a: 리미터 교체로 큰 프리셋 44개가 최대 0.75 dB 내려갔다. S1.4b: Cab 보충 이득으로 Cab 을 쓰는 프리셋 39개가 +0.02 ~ +0.20 dB 올랐다. **S1.4c 이후**: 팩토리 음량 보정을 적용한 출력이 −26.1 ~ −19.0 dBFS(중앙값 −20.0, 폭 6.4 / 7.0 dB — 'Headphone Safe Start' 만 D6 예외로 −26), 표준 목표 프리셋 39개는 −22.7 ~ −19.0 dBFS(Acoustic Room 만 −22.4 ~ −22.7, 나머지는 −20 에서 ±1.3 dB 안), 클린↔드라이브 전환 최대 3.2 / 2.7 dB, 리미터 최대 감소량 0.95 / 0.98 dB, '음량 맞추기'(4초) 오차 ≤ 0.53 dB. 측정 의미가 바뀌어 기준선을 갱신했다(REFACTOR_LOG L-39~L-41) | −20 ± 2 dBFS, 전환 ≤ 4 dB, 리미터 감소량 ≤ 1 dB | ✔ S1.4c 에서 해결 (Acoustic Room −2.4 ~ −2.7 dB 는 GS-7 과 맞바꾼 예외, L-40) |
 | P-06 | 오른쪽 무음, 왼쪽 −20 dB | 시작 시점: 모드 `1` 좌우 차 0 dB, 모드 `2` 는 왼쪽만 있는 입력에서 무음, 모드 `stereo` 는 오른쪽 무음·왼쪽 −3.01 dB. **S1.3 이후**: 자동 판정(왼쪽만·오른쪽만·양쪽 같은 소리) 좌우 차 0 dB·손실 0 dB, 판정까지 0.3초, 판정 전 손실 6.02 dB(한쪽만 신호) / 0 dB(양쪽 같음). 정의가 바뀌어 기준선을 갱신했다(L-28) | 좌우 차 ≤ 1 dB, 손실 ≤ 0.5 dB | ✔ S1.3 에서 해결 (시작 시점엔 ✖ `stereo` 모드) |
 | P-08 | Mix 75% 2.2 dB | 0.006 / 0.007 dB (Mix 45%: 0.004 dB) | ≤ ±0.5 dB | ✔ |
 | P-09 | 최대 14 dB | 0 dB | ≤ 0.5 dB | ✔ |
@@ -61,7 +61,7 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 ### 이 표에서 읽을 점
 
 - 보고서에 있던 큰 결함 가운데 P-01·P-02·P-04·P-08·P-09·P-11·P-15·P-21 은 이미 고쳐져 있다. 이 항목들의 Step 은 "새로 고치기"가 아니라 "고쳐진 상태가 지켜지는지 확인하기"로 진행한다.
-- 아직 열려 있는 방향: P-05(프리셋 음량 분포), P-12(Phaser 빗살), P-13(Distortion 낮은 노브), P-16(Drive·Crunch·Fuzz 지연), P-17(꺼진 Phaser 비용), P-20(저장된 Decay 7.5초).
+- 아직 열려 있는 방향: P-12(Phaser 빗살), P-13(Distortion 낮은 노브), P-16(Drive·Crunch·Fuzz 지연), P-17(꺼진 Phaser 비용), P-20(저장된 Decay 7.5초).
 - 코드 지도(`docs/refactoring/code-map.md`)가 "구현됨"으로 분류한 Step 중 위 ✖ 에 걸리는 것은 Step 을 시작할 때 다시 대조한다.
 
 ## 아직 재지 않는 프로브
@@ -78,3 +78,12 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 - 꺼진 페달은 신호를 그대로 통과시키므로 P-05 는 체인에서 뺀 채 렌더해 시간을 줄이고, 첫 프리셋을 15개 전체로 한 번 더 렌더해 같음을 확인한다(`bypassTransparent`).
 - 신호는 모두 고정 시드로 만든다(`src/audio/testing/signals.ts`). WAV 는 `node scripts/make-fixture-wavs.mjs` 가 `e2e/fixtures/` 에 만든다(S0.4 가짜 마이크용, git 에는 넣지 않음).
 - 프로브 페이지(`probe.html`)는 `vite build --mode test` 에서만 빌드되고 `dist-probe/`(gitignore)에 나온다. 일반 빌드와 GitHub Pages 배포에는 들어가지 않는다.
+
+
+### P-05 (S1.4c 이후) 읽는 법
+
+- 프리셋마다 REF-PC 를 두 번 렌더한다: ① 보정·리미터 없이(`rawDb.*`·`rawPeakDb.*` — `npm run trims` 가 trim 을 계산하는 입력), ② 앱이 내보내는 소리 그대로(팩토리 trim + 리미터: `preset.*`·`peakDb.*`).
+- `deviationDb.*` 는 ② 의 평균이 프리셋의 **도달 가능한 목표**(`achievableTargetDb.*`: 표준 −20 dBFS 또는 D6 예외 목표, 단 피크가 0 dBFS 를 넘지 않는 곳까지)에서 벗어난 양이다(판정 ±2). 표준 목표에서의 거리는 `offTargetDb.*`·`maxAbsOffTargetDb` 로 따로 남긴다(≤ 3).
+- `limiterReductionDb.*`·`maxLimiterReductionDb` 는 보정한 피크가 리미터 천장(−1 dBFS)을 넘는 양이다(GS-7, ≤ 1 dB). `quickMeasureErrorDb.*`·`quick.*` 는 '음량 맞추기' 버튼(4초 렌더)이 8초 렌더와 얼마나 다른지 본다.
+- 팩토리 trim 을 다시 계산하려면 `npm run trims`(기준값은 `src/audio/offline/loudnessSpec.ts`). trim 이 바뀌면 이 기준선도 같은 Step 에서 갱신한다.
+- 측정만 하고 기준선과 비교하지 않으려면 `node scripts/audio-render-probe.mjs --only P-05 --no-compare` (`--out 파일` 로 결과 저장).

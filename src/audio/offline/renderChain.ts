@@ -1,12 +1,13 @@
 // 실제 이펙트 클래스와 워클릿으로 신호 체인을 OfflineAudioContext 에서 렌더한다.
 // 그래프 모양은 AudioEngine 과 같다:
-//   입력 → InputStage(장치 입력이면 채널 선택·자동 판정) → inputGain → 이펙트 체인(페달 순서) → OutputStage(masterGain → howlGuard → limiter) → 출력
+//   입력 → InputStage(장치 입력이면 채널 선택·자동 판정) → inputGain → 이펙트 체인(페달 순서) → OutputStage(presetTrim → masterGain → howlGuard → limiter) → 출력
 // 오디오 프로브(src/audio/testing)가 쓰고, 나중에 '음량 맞추기'(프리셋 trim 계산)도 같은 코드를 쓴다.
 import type { EffectNodeWrapper, PedalParamValue, PedalState } from '../types';
 import { InputStage, MONITOR_INTERVAL_MS, type InputChannelMode } from '../engine/InputStage';
 import { limiterLookaheadFrames, OutputStage } from '../engine/OutputStage';
 import { dbToGain } from '../utils/db';
 import { ImpulseCache } from '../utils/impulseCache';
+import { clampTrimDb } from './loudnessSpec';
 import { createOfflineEffect } from './effectFactory';
 import { registerWorklets } from './workletModules';
 
@@ -46,6 +47,8 @@ export interface RenderChainOptions {
   inputGainDb?: number;
   /** 마스터 볼륨(0~1). 엔진 기본 0.9. */
   masterVolume?: number;
+  /** 프리셋 음량 보정(dB, S1.4c). 체인 끝과 마스터 게인 사이에 들어간다. 엔진 기본 0(= 보정 없음). */
+  presetTrimDb?: number;
   /** 'device' 는 마이크 입력(채널 선택 적용), 'file' 은 파일 재생(그대로 통과). 기본 'device'. */
   source?: 'device' | 'file';
   /** 장치 입력의 채널 선택. 엔진 기본값과 같은 'auto'(2채널이면 신호를 보고 판정한다). */
@@ -101,6 +104,7 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
     tailSeconds = 0,
     inputGainDb = 0,
     masterVolume = 0.9,
+    presetTrimDb = 0,
     source = 'device',
     inputChannelMode = 'auto',
     limiter = true,
@@ -140,6 +144,10 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
   const outputStage = limiter ? new OutputStage(context, { guard: howlGuard }) : null;
   const masterGain = outputStage?.input ?? context.createGain();
   masterGain.gain.value = masterVolume;
+  // 체인 끝이 들어가는 프리셋 음량 보정. 리미터를 끈 렌더도 같은 자리에 같은 노드를 둔다.
+  const presetTrim = outputStage?.presetTrim ?? context.createGain();
+  if (!outputStage) presetTrim.connect(masterGain);
+  presetTrim.gain.value = dbToGain(clampTrimDb(presetTrimDb));
 
   // AudioEngine.createInputStage 와 같은 입력 처리. 판정에 쓰는 레벨 측정은 아래에서 렌더 도중 일정 간격으로 부른다.
   const inputStage = new InputStage(context, sourceNode, paddedInput.length, {
@@ -172,7 +180,7 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
       previous.connect(effect.input);
       previous = effect.output;
     }
-    previous.connect(masterGain);
+    previous.connect(presetTrim);
     if (outputStage) {
       outputStage.output.connect(context.destination);
     } else {

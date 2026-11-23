@@ -243,6 +243,11 @@ export interface Preset {
   id: string;
   name: string;
   pedals: PedalState[];
+  /**
+   * 프리셋 음량 보정(dB, S1.4c). REF-PC 기준 출력 음량을 −20 dBFS 로 맞추는 고정 이득이다.
+   * 없으면 0(보정 없음)으로 읽는다(M6). 이전 버전이 저장·내보낸 프리셋에는 이 필드가 없다.
+   */
+  trimDb?: number;
   updatedAt: number;
   libraryId?: string;
   libraryName?: string;

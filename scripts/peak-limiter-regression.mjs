@@ -244,7 +244,7 @@ function runInQuanta(node, left, right) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 7. OutputStage: 마스터 게인 → (가드) → 리미터 연결과 정리
+// 7. OutputStage: 프리셋 음량 보정 → 마스터 게인 → (가드) → 리미터 연결과 정리
 // ---------------------------------------------------------------------------------------------
 {
   const bundle = await build({
@@ -297,15 +297,19 @@ function runInQuanta(node, left, right) {
   assert.equal(created[0].name, 'limiter-processor');
   assert.deepEqual(created[0].options, { outputChannelCount: [2] });
   assert.equal(stage.output, created[0]);
+  assert.notEqual(stage.presetTrim, stage.input, '프리셋 음량 보정(trim)은 마스터 게인과 다른 노드다');
+  assert.deepEqual([...stage.presetTrim.connections], [stage.input], '체인 끝이 들어오는 trim 은 마스터 게인으로 간다');
   assert.deepEqual([...stage.input.connections], [guard], '마스터 게인은 가드로 간다');
   assert.deepEqual([...guard.connections], [stage.output], '가드는 리미터로 간다');
   stage.dispose();
+  assert.equal(stage.presetTrim.connections.size, 0, 'trim 의 연결도 끊는다');
   assert.equal(stage.input.connections.size, 0);
   assert.equal(stage.output.connections.size, 0);
   assert.equal(guard.connections.size, 0, '가드와 리미터의 연결도 끊는다');
   assert.doesNotThrow(() => stage.dispose(), '두 번 불러도 괜찮다');
 
   const direct = new OutputStage(context);
+  assert.deepEqual([...direct.presetTrim.connections], [direct.input], '가드가 없어도 trim 은 마스터 게인으로 간다');
   assert.deepEqual([...direct.input.connections], [direct.output], '가드가 없으면 마스터 게인이 바로 리미터로 간다');
   delete globalThis.AudioWorkletNode;
 }
@@ -327,6 +331,13 @@ assert.match(engine, /this\.outputStage\?\.output\.connect\(this\.recorderDestin
 assert.match(engine, /limiterWorkletUrl/, '엔진이 리미터 워클릿 파일을 등록한다');
 assert.match(modules, /limiterWorkletUrl/, '오프라인 렌더도 같은 파일을 등록한다');
 assert.match(renderChain, /new OutputStage\(context, \{ guard: howlGuard \}\)/, '오프라인 렌더도 같은 출력 단계를 쓴다');
+// 프리셋 음량 보정(S1.4c): 체인 끝은 trim 으로 들어간다. 엔진과 오프라인 렌더가 같은 자리를 쓴다.
+assert.match(engine, /to: chainEnd/, '엔진은 체인 끝을 마스터 게인이 아니라 trim 에 잇는다');
+assert.match(engine, /this\.buildChainConnections\(\s*pedals,\s*nextEffects,\s*chainInput,\s*presetTrim,?\s*\)/);
+assert.match(engine, /presetTrim\.gain\.value = dbToGain\(clampTrimDb\(this\.getPresetTrimDb\(\)\)\)/, '그래프를 만들 때 trim 의 처음 값은 스토어 값이다');
+assert.match(engine, /rampParam\(trim\.gain, dbToGain\(clampTrimDb\(db\)\), context, PRESET_TRIM_RAMP_SECONDS\)/, 'trim 변경은 램프로 옮긴다');
+assert.match(renderChain, /previous\.connect\(presetTrim\)/, '오프라인 렌더도 체인 끝을 trim 에 잇는다');
+assert.doesNotMatch(engine, /previous\.connect\(masterGain\)|to: masterGain/, '체인 끝이 마스터 게인으로 곧장 가는 연결은 없다');
 assert.doesNotMatch(engine + modules + renderChain, /peak-limiter-processor|peakLimiterProcessorSource/, '옛 리미터는 남기지 않는다');
 
 console.log('Master limiter (lookahead 1 ms, ceiling −1 dBFS, release 80 ms), OutputStage wiring and recording route passed');
