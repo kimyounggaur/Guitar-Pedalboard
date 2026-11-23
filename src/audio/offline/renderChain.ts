@@ -175,8 +175,14 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
   inputGain.gain.value = dbToGain(inputGainDb);
   const chainInput = context.createGain();
   const monitorMessages: MonitorMsg[] = [];
+  // 수신기를 건 포트는 닫기 전에는 가비지 수집되지 않는다(수신기가 있는 포트는 메시지가 더 올 수 있으니 살아 있다고 본다).
+  // 닫지 않으면 컨텍스트마다 워클릿 모듈 9개와 렌더 버퍼가 통째로 남아, 렌더를 수백 번 되풀이하는 프로브가 6 GB 에서 죽는다(REFACTOR_LOG L-47).
+  // 그래서 건 포트를 모아 두었다가 끝에서 모두 닫는다.
+  const observedNodes: AudioWorkletNode[] = [];
   const collect = (node: AudioWorkletNode | null): void => {
-    if (node) node.port.onmessage = (event: MessageEvent<MonitorMsg>) => monitorMessages.push(event.data);
+    if (!node) return;
+    node.port.onmessage = (event: MessageEvent<MonitorMsg>) => monitorMessages.push(event.data);
+    observedNodes.push(node);
   };
   const inputTap = monitoring ? createLevelMeter(context, 'in') : null;
   const outputTap = monitoring ? createLevelMeter(context, 'out') : null;
@@ -184,7 +190,8 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
   [inputTap, outputTap, guard].forEach(collect);
   // AudioEngine 과 같은 출력 단계(마스터 게인 → 가드 → 리미터 → 출력 미터). 리미터를 끄는 렌더(limiter: false)는 리미터만 빠진다.
   const outputStage = limiter ? new OutputStage(context, { guard, levelMeter: outputTap }) : null;
-  if (outputStage) collect(outputStage.limiter);
+  // 리미터 메시지(최대 이득 감소)도 모니터링 그래프에서만 모은다. `monitoring: false` 의 `monitorMessages` 는 비어 있어야 한다.
+  if (outputStage && monitoring) collect(outputStage.limiter);
   const masterGain = outputStage?.input ?? context.createGain();
   masterGain.gain.value = masterVolume;
   // 체인 끝이 들어가는 프리셋 음량 보정. 리미터를 끈 렌더도 같은 자리에 같은 노드를 둔다.
@@ -313,6 +320,11 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
       setupMilliseconds,
     };
   } finally {
+    // 포트를 닫아야 이 컨텍스트와 워클릿 영역이 수집된다. `afterRender` 가 이미 끝난 뒤라 메시지는 모두 읽혔다.
+    for (const node of observedNodes) {
+      node.port.onmessage = null;
+      node.port.close();
+    }
     inputStage.dispose();
     effects.forEach((effect) => effect.dispose());
     if (ownsImpulseCache) impulseCache.dispose();
