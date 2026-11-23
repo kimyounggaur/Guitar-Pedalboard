@@ -1,16 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import console from 'node:console';
-import { access, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
-import { createServer } from 'node:net';
-import { tmpdir } from 'node:os';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
-import { setTimeout } from 'node:timers';
 import { fileURLToPath, URL } from 'node:url';
-
-// GitHub Actions 등 CI 는 CI=true 를 넣는다. 'false'·'0' 은 CI 가 아닌 것으로 본다.
-const runsInCi = Boolean(process.env.CI) && !['false', '0'].includes(process.env.CI);
+import { delay, getOpenPort, requireChrome, startChrome, stopChild, waitForHttp } from './lib/chrome.mjs';
 
 const [
   appShellSource,
@@ -255,15 +250,8 @@ async function collectFiles(directory) {
 }
 
 async function verifyMobileBrowserLayout() {
-  const chromePath = await findChromePath();
-  if (!chromePath || typeof globalThis.WebSocket === 'undefined') {
-    if (runsInCi) {
-      // CI 에서 브라우저 검사를 말없이 건너뛰면 '통과'로 보이는 검사 공백이 생긴다.
-      throw new Error(
-        'Responsive browser geometry cannot be skipped in CI: Chrome or WebSocket is unavailable. '
-          + 'Set CHROME_PATH to an installed Chrome/Chromium executable.',
-      );
-    }
+  const chromePath = await requireChrome('Responsive browser geometry');
+  if (!chromePath) {
     console.warn('Responsive browser geometry skipped: Chrome or WebSocket is unavailable.');
     return null;
   }
@@ -271,12 +259,9 @@ async function verifyMobileBrowserLayout() {
   const projectRoot = fileURLToPath(new URL('..', import.meta.url));
   const vitePath = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
   const appPort = await getOpenPort();
-  const debuggingPort = await getOpenPort();
-  const profileDirectory = await mkdtemp(join(tmpdir(), 'guitar-pedalboard-responsive-'));
   const appUrl = `http://127.0.0.1:${appPort}/`;
   let viteProcess;
-  let chromeProcess;
-  let cdp;
+  let browser;
 
   try {
     viteProcess = spawn(
@@ -286,27 +271,8 @@ async function verifyMobileBrowserLayout() {
     );
     await waitForHttp(appUrl, viteProcess);
 
-    chromeProcess = spawn(
-      chromePath,
-      [
-        '--headless=new',
-        '--disable-background-networking',
-        '--disable-component-update',
-        '--disable-default-apps',
-        '--disable-gpu',
-        '--no-first-run',
-        '--disable-dev-shm-usage',
-        ...(process.env.CI ? ['--no-sandbox'] : []),
-        '--remote-debugging-address=127.0.0.1',
-        `--remote-debugging-port=${debuggingPort}`,
-        `--user-data-dir=${profileDirectory}`,
-        'about:blank',
-      ],
-      { stdio: ['ignore', 'ignore', 'inherit'], windowsHide: true },
-    );
-
-    const target = await waitForChromeTarget(debuggingPort, chromeProcess);
-    cdp = await createCdpClient(target.webSocketDebuggerUrl);
+    browser = await startChrome({ chromePath, profilePrefix: 'guitar-pedalboard-responsive-' });
+    const { cdp } = browser;
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
     await cdp.send('Emulation.setDeviceMetricsOverride', {
@@ -325,123 +291,9 @@ async function verifyMobileBrowserLayout() {
     });
     return await waitForBrowserLayout(cdp);
   } finally {
-    if (cdp) {
-      try {
-        await cdp.send('Browser.close');
-      } catch {
-        cdp.close();
-      }
-    }
-    await stopChild(chromeProcess);
+    await browser?.close();
     await stopChild(viteProcess);
-    const tempRoot = tmpdir().toLowerCase();
-    assert.ok(
-      profileDirectory.toLowerCase().startsWith(tempRoot),
-      'Chrome 임시 프로필이 시스템 temp 밖에 있습니다.',
-    );
-    await rm(profileDirectory, { recursive: true, force: true, maxRetries: 4, retryDelay: 100 });
   }
-}
-
-async function findChromePath() {
-  const explicitPath = process.env.CHROME_PATH;
-  const fallbackPaths = [
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium',
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  ];
-  // CI 에서 CHROME_PATH 를 정했는데 그 파일이 없으면 다른 Chrome 으로 넘어가지 않는다(설정 오류로 실패시킨다).
-  const candidates = runsInCi && explicitPath
-    ? [explicitPath]
-    : [explicitPath, ...fallbackPaths].filter(Boolean);
-
-  for (const candidate of candidates) {
-    try {
-      await access(candidate);
-      return candidate;
-    } catch {
-      // Try the next supported browser location.
-    }
-  }
-  return null;
-}
-
-async function getOpenPort() {
-  const server = createServer();
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  const address = server.address();
-  assert.ok(address && typeof address !== 'string');
-  await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
-  return address.port;
-}
-
-async function waitForHttp(url, child) {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (child.exitCode !== null) throw new Error(`Vite exited with ${child.exitCode}`);
-    try {
-      const response = await globalThis.fetch(url);
-      if (response.ok) return;
-    } catch {
-      // The server is still starting.
-    }
-    await delay(50);
-  }
-  throw new Error(`Timed out waiting for ${url}`);
-}
-
-async function waitForChromeTarget(port, child) {
-  const endpoint = `http://127.0.0.1:${port}/json/list`;
-  for (let attempt = 0; attempt < 600; attempt += 1) {
-    if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Chrome exited with code ${child.exitCode} and signal ${child.signalCode}`);
-    try {
-      const targets = await (await globalThis.fetch(endpoint)).json();
-      const page = targets.find((target) => target.type === 'page' && target.webSocketDebuggerUrl);
-      if (page) return page;
-    } catch {
-      // DevTools is still starting.
-    }
-    await delay(50);
-  }
-  throw new Error('Timed out waiting for Chrome DevTools.');
-}
-
-async function createCdpClient(webSocketUrl) {
-  const socket = new globalThis.WebSocket(webSocketUrl);
-  await new Promise((resolve, reject) => {
-    socket.addEventListener('open', resolve, { once: true });
-    socket.addEventListener('error', reject, { once: true });
-  });
-  let nextId = 1;
-  const pending = new Map();
-  socket.addEventListener('message', (event) => {
-    const message = JSON.parse(String(event.data));
-    if (!message.id || !pending.has(message.id)) return;
-    const { resolve, reject } = pending.get(message.id);
-    pending.delete(message.id);
-    if (message.error) reject(new Error(message.error.message));
-    else resolve(message.result);
-  });
-
-  return {
-    send(method, params = {}) {
-      const id = nextId;
-      nextId += 1;
-      return new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject });
-        socket.send(JSON.stringify({ id, method, params }));
-      });
-    },
-    close() {
-      socket.close();
-    },
-  };
 }
 
 async function waitForBrowserLayout(cdp) {
@@ -504,15 +356,4 @@ async function waitForBrowserLayout(cdp) {
     await delay(50);
   }
   throw new Error('Timed out waiting for the responsive app layout.');
-}
-
-async function stopChild(child) {
-  if (!child || child.exitCode !== null) return;
-  const exited = new Promise((resolve) => child.once('exit', resolve));
-  child.kill();
-  await Promise.race([exited, delay(2_000)]);
-}
-
-function delay(milliseconds) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
