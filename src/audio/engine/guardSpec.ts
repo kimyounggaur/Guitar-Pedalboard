@@ -45,7 +45,7 @@ export const HOWL_ONSET_RISE_DB = 6;
 export const HOWL_ONSET_LOOKBACK_FRAMES = 5;
 /**
  * 기울기를 잴 때 후보 구간의 맨 앞 프레임 몇 개는 뺀다. 소리가 막 시작한 프레임은 분석 창이 아직 다 차지 않아 레벨이 낮게 나오고,
- * 그 뒤로 오르는 것처럼 보여 기울기를 0.4~0.9 dB/s 쯤 위로 끌어올린다(−1.2 dB/s 로 줄어드는 음이 하울링으로 오판됐다).
+ * 그 뒤로 오르는 것처럼 보여 기울기를 0.4~0.9 dB/s 쯤 위로 끌어올린다(기준 −1.0 바로 밖인 −1.1 dB/s 로 줄어드는 음이 하울링으로 오판됐다).
  * 분석 창이 hop 의 두 배이므로 2프레임이면 된다. 지속 시간(HOWL_HOLD_SECONDS)은 이 프레임을 포함해 그대로 센다.
  */
 export const HOWL_SLOPE_SKIP_FRAMES = 2;

@@ -319,6 +319,22 @@ for (const sampleRate of [44100, 48000]) {
   const h4 = signals.howl4(48000);
   assert.equal(runDetector(48000, h4, { options: literal, gain: 10 }).cut, undefined, '글자 그대로의 판정은 48 kHz H-4(세기가 비슷한 다섯 음)를 놓친다 — L-44');
   assert.ok(runDetector(48000, h4, { gain: 10 }).cut, 'L-44 보강을 하면 같은 신호를 잡는다');
+
+  // 보강 셋이 각각 어느 신호 때문에 필요한지(하나씩 끄면 그 신호가 어긋난다). 어느 보강도 다른 보강의 몫을 대신하지 않는다.
+  const without = (flag) => ({ onsetRestart: true, holdReference: true, skipLeadFrames: true, [flag]: false });
+  assert.ok(runDetector(48000, g1, { options: without('onsetRestart') }).cut, '① 새 음 재시작이 없으면 48 kHz G-1 을 오차단한다');
+  assert.equal(runDetector(48000, g1, { options: without('holdReference') }).cut, undefined, '③ 기준 음 붙들기는 G-1 의 몫이 아니다');
+  assert.equal(runDetector(48000, g1, { options: without('skipLeadFrames') }).cut, undefined, '② 앞 프레임 제외는 G-1 의 몫이 아니다');
+  assert.equal(runDetector(48000, h4, { options: without('holdReference'), gain: 10 }).cut, undefined, '③ 기준 음 붙들기가 없으면 48 kHz H-4 를 놓친다');
+  assert.ok(runDetector(48000, h4, { options: without('onsetRestart'), gain: 10 }).cut, '① 새 음 재시작은 H-4 의 몫이 아니다');
+  assert.ok(runDetector(48000, h4, { options: without('skipLeadFrames'), gain: 10 }).cut, '② 앞 프레임 제외는 H-4 의 몫이 아니다');
+  // ② 앞 프레임 제외: 소리가 막 시작한 프레임은 분석 창이 덜 차 레벨이 낮게 나와 기울기를 위로 끌어올린다.
+  // 기준(−1.0 dB/s) 바로 밖인 −1.1 dB/s 로 줄어드는 음이 그 때문에 하울링으로 읽힌다(−1.2 dB/s 부터는 둘 다 기타 줄로 본다).
+  for (const sampleRate of [44100, 48000]) {
+    const slowDecay = generated(3, (t) => 0.1 * 10 ** ((-1.1 * t) / 20) * Math.sin(2 * Math.PI * 1000 * t));
+    assert.equal(runDetector(sampleRate, slowDecay).cut, undefined, `−1.1 dB/s 로 줄어드는 음은 기타 줄 @${sampleRate}`);
+    assert.ok(runDetector(sampleRate, slowDecay, { options: without('skipLeadFrames') }).cut, `② 앞 프레임 제외가 없으면 −1.1 dB/s 감쇠음을 하울링으로 오판한다 @${sampleRate}`);
+  }
 }
 
 // 새로 친 음이 끼면 처음부터 다시 센다 — 1.5초마다 새로 치고 −6 dB/s 로 줄어드는 음은 하울링이 아니다.
