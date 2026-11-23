@@ -956,32 +956,40 @@ const p17: ProbeDefinition = {
   id: 'P-17',
   title: '렌더 시간(CPU 대용 지표)',
   describe:
-    'REF-PC 6초를 구성마다 5번(구성을 돌려가며) 렌더해 가장 빠른 시간을 쓴다. cpuShare = 렌더 시간 ÷ 오디오 길이. 시간 자체(time.*)는 기계마다 달라 비교하지 않고, 비율(ratio.*)만 기준선과 견준다. 처음 다섯 구성은 레벨 미터·출력 가드를 뺀 그래프(S1.5 이전 모양)로 재서 예전 기준선과 이어지고, 미터 둘과 장치 모드 가드(하울링 판정)를 넣은 빈 체인(emptyMonitored)과 15개를 모두 켠 체인(allOnMonitored)의 시간 차이를 따로 잰다. monitorOverheadOverPedals = 가드·미터가 더한 시간 ÷ 15개 페달이 쓰는 시간(설계서 S1.5 수용 기준 ≤ 5%).',
+    'REF-PC 6초를 구성마다 5번(라운드마다 모든 구성을 한 번씩) 렌더해 구성별로 가장 빠른 시간을 쓴다. cpuShare = 렌더 시간 ÷ 오디오 길이. 시간 자체(time.*)는 기계마다 달라 비교하지 않고, 비율(ratio.*)만 기준선과 견준다. 처음 다섯 구성은 레벨 미터·출력 가드를 뺀 그래프(S1.5 이전 모양)로 재서 예전 기준선과 이어지고, 미터 둘과 장치 모드 가드(하울링 판정)를 넣은 빈 체인(emptyMonitored)과 15개를 모두 켠 체인(allOnMonitored)을 더해 가드·미터가 늘린 시간을 따로 잰다. monitorOverheadOverPedals = 가드·미터가 더한 시간 ÷ 15개 페달이 쓰는 시간(설계서 S1.5 수용 기준 ≤ 5%)이고, 같은 라운드의 값끼리 나눈 5개 비율의 가운뎃값이다.',
   steps: 'S1.5, S3.4, S4.2',
   async run(ctx) {
     const input = signals.refPc(ctx.sampleRate, 6);
-    // 처음 다섯 구성은 S1.5 이전과 같은 그래프(monitoring: false)로 잰다. 기준선 값이 의미를 바꾸지 않는다.
+    // 모니터링 없는 다섯 구성은 S1.5 이전과 같은 그래프(monitoring: false)라 기준선이 이어진다. 가드·미터 오버헤드를 재려고 그 옆에 둘을 더 둔다.
+    // 라운드 안에서 서로 짝이 되는 구성끼리 붙여 둔다(empty → emptyMonitored → allOn → allOnMonitored): 오버헤드 비율을 라운드마다 따로 계산해
+    // 가운뎃값을 쓰기 위해서다. 기계 잡음(다른 프로세스·클럭)은 몇 초씩 이어지므로, 구성마다 가장 빠른 값을 따로 고른 뒤 나누면 시간대가 다른 값끼리
+    // 나뉘어 0.025~0.063 으로 흔들렸다. 같은 라운드(약 3초) 안의 값끼리 나누면 잡음이 분자·분모에 같이 실려 상쇄된다.
     const configurations: Array<[string, () => ChainRequest]> = [
       ['empty', () => ({ input: [input], pedals: [], monitoring: false })],
-      ['allOff', () => ({ input: [input], pedals: allPedalsBypassed(), monitoring: false })],
-      ['allOn', () => ({ input: [input], pedals: allPedalsOn(), monitoring: false })],
-      ['phaserOff', () => ({ input: [input], pedals: [pedal('phaser', {}, { bypassed: true })], monitoring: false })],
-      ['phaserOn', () => ({ input: [input], pedals: [pedal('phaser')], monitoring: false })],
       // 레벨 미터 둘 + 출력 가드(장치 모드: 하울링 판정이 FFT 를 돌린다)
       ['emptyMonitored', () => ({ input: [input], pedals: [], monitoring: true, guardMode: 'device' })],
+      ['allOn', () => ({ input: [input], pedals: allPedalsOn(), monitoring: false })],
       ['allOnMonitored', () => ({ input: [input], pedals: allPedalsOn(), monitoring: true, guardMode: 'device' })],
+      ['allOff', () => ({ input: [input], pedals: allPedalsBypassed(), monitoring: false })],
+      ['phaserOff', () => ({ input: [input], pedals: [pedal('phaser', {}, { bypassed: true })], monitoring: false })],
+      ['phaserOn', () => ({ input: [input], pedals: [pedal('phaser')], monitoring: false })],
     ];
-    // 구성을 돌려가며(라운드마다 모든 구성을 한 번씩) 잰다. 한 구성을 몰아서 재면 그 시간대의 기계 잡음(다른 프로세스·클럭)이 한 구성에만 실려
-    // 구성 사이 비율이 흔들린다. 라운드를 섞으면 모든 구성이 조용한 순간을 한 번은 만나고, 구성마다 가장 빠른 값이 그 순간의 값이 된다.
     const ATTEMPTS = 5;
     const best: Record<string, number> = Object.fromEntries(configurations.map(([name]) => [name, Number.POSITIVE_INFINITY]));
+    const overOverPedals: number[] = [];
+    const overInAllOn: number[] = [];
     let audioSeconds = 0;
     for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
+      const round: Record<string, number> = {};
       for (const [name, build] of configurations) {
         const render = await ctx.render(build());
+        round[name] = render.renderMilliseconds;
         best[name] = Math.min(best[name], render.renderMilliseconds);
         audioSeconds = (render.leadFrames + render.signalFrames) / render.sampleRate;
       }
+      const pedalsMs = round.allOn - round.empty;
+      overOverPedals.push((round.emptyMonitored - round.empty) / pedalsMs);
+      overInAllOn.push((round.allOnMonitored - round.allOn) / pedalsMs);
     }
     const values: Record<string, MetricValue> = {};
     for (const [name, milliseconds] of Object.entries(best)) {
@@ -991,9 +999,11 @@ const p17: ProbeDefinition = {
     values['ratio.allOffOverAllOn'] = best.allOff / best.allOn;
     values['ratio.phaserOffContribution'] = (best.phaserOff - best.empty) / best.allOn;
     values['ratio.phaserOnContribution'] = (best.phaserOn - best.empty) / best.allOn;
-    // 가드·미터가 더한 시간을 15개 페달이 쓰는 시간(켠 체인 − 빈 체인)으로 나눈다. 두 가지 체인에서 각각 잰다.
-    values['ratio.monitorOverheadOverPedals'] = (best.emptyMonitored - best.empty) / (best.allOn - best.empty);
-    values['ratio.monitorOverheadInAllOn'] = (best.allOnMonitored - best.allOn) / (best.allOn - best.empty);
+    // 가드·미터가 더한 시간을 15개 페달이 쓰는 시간(켠 체인 − 빈 체인)으로 나눈다. 라운드마다 구한 비율의 가운뎃값이다(위 설명).
+    // 빈 체인에서 잰 것(OverPedals)과 15개를 켠 체인에서 잰 것(InAllOn) 둘 다 본다. 수용 기준은 앞의 것이다.
+    const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    values['ratio.monitorOverheadOverPedals'] = median(overOverPedals);
+    values['ratio.monitorOverheadInAllOn'] = median(overInAllOn);
     return { metrics: metrics(values) };
   },
 };
