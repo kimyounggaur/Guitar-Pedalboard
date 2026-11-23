@@ -18,6 +18,8 @@ import { fileURLToPath, URL } from 'node:url';
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 /** 시험 하나가 이 시간을 넘기면 멈춘 것으로 보고 실패로 처리한다. */
 const TIMEOUT_MS = 180_000;
+/** 오래 걸리는 시험만 따로 늘린다(오디오 렌더 프로브는 샘플레이트 2개 × 프로브 21개를 렌더해 1~2분이 걸린다). */
+const TIMEOUT_OVERRIDES_MS = { 'test:probe': 900_000 };
 /** `node 파일.mjs 인자…` 꼴이면 셸 없이 바로 실행한다(Windows 에서도 같은 방식으로 돈다). */
 const SIMPLE_NODE_COMMAND = /^node\s+([^\s&|;<>"'`$]+)((?:\s+[^\s&|;<>"'`$]+)*)\s*$/;
 /** 이 시험들은 빌드 결과(dist/)를 검사한다. dist/ 가 없으면 시험 전에 한 번 빌드한다. */
@@ -126,10 +128,11 @@ function runOne(name, command) {
       });
     };
 
+    const timeoutMs = TIMEOUT_OVERRIDES_MS[name] ?? TIMEOUT_MS;
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill();
-    }, TIMEOUT_MS);
+    }, timeoutMs);
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -140,7 +143,7 @@ function runOne(name, command) {
       finish(false, '실행하지 못함');
     });
     child.on('close', (code, signal) => {
-      if (timedOut) finish(false, `${TIMEOUT_MS / 1000}초 안에 끝나지 않아 멈춤`);
+      if (timedOut) finish(false, `${timeoutMs / 1000}초 안에 끝나지 않아 멈춤`);
       else if (code === 0) finish(true, '');
       else finish(false, signal ? `신호 ${signal}로 종료` : `종료 코드 ${code}`);
     });

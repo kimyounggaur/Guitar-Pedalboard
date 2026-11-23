@@ -158,9 +158,9 @@ export async function stopChild(child) {
  * 헤드리스 Chrome 을 임시 프로필로 띄우고 첫 페이지에 CDP 로 연결한다.
  * 돌려주는 close() 가 Chrome 종료와 임시 프로필 삭제를 맡는다(항상 finally 에서 부른다).
  *
- * @param {{ chromePath: string, extraArgs?: string[], profilePrefix?: string }} options
+ * @param {{ chromePath: string, extraArgs?: string[], profilePrefix?: string, quiet?: boolean }} options  quiet: Chrome 이 stderr 로 내는 로그(컨테이너에서는 dbus 오류가 많다)를 버린다
  */
-export async function startChrome({ chromePath, extraArgs = [], profilePrefix = 'guitar-pedalboard-chrome-' }) {
+export async function startChrome({ chromePath, extraArgs = [], profilePrefix = 'guitar-pedalboard-chrome-', quiet = false }) {
   const debuggingPort = await getOpenPort();
   const profileDirectory = await mkdtemp(join(tmpdir(), profilePrefix));
   let chromeProcess;
@@ -200,7 +200,7 @@ export async function startChrome({ chromePath, extraArgs = [], profilePrefix = 
         ...extraArgs,
         'about:blank',
       ],
-      { stdio: ['ignore', 'ignore', 'inherit'], windowsHide: true },
+      { stdio: ['ignore', 'ignore', quiet ? 'ignore' : 'inherit'], windowsHide: true },
     );
     const target = await waitForChromeTarget(debuggingPort, chromeProcess);
     cdp = await createCdpClient(target.webSocketDebuggerUrl);
