@@ -1,9 +1,10 @@
 // 실제 이펙트 클래스와 워클릿으로 신호 체인을 OfflineAudioContext 에서 렌더한다.
 // 그래프 모양은 AudioEngine 과 같다:
-//   입력 → InputStage(장치 입력이면 채널 선택·자동 판정) → inputGain → 이펙트 체인(페달 순서) → masterGain → howlGuard → limiter → 출력
+//   입력 → InputStage(장치 입력이면 채널 선택·자동 판정) → inputGain → 이펙트 체인(페달 순서) → OutputStage(masterGain → howlGuard → limiter) → 출력
 // 오디오 프로브(src/audio/testing)가 쓰고, 나중에 '음량 맞추기'(프리셋 trim 계산)도 같은 코드를 쓴다.
 import type { EffectNodeWrapper, PedalParamValue, PedalState } from '../types';
 import { InputStage, MONITOR_INTERVAL_MS, type InputChannelMode } from '../engine/InputStage';
+import { limiterLookaheadFrames, OutputStage } from '../engine/OutputStage';
 import { dbToGain } from '../utils/db';
 import { ImpulseCache } from '../utils/impulseCache';
 import { createOfflineEffect } from './effectFactory';
@@ -51,6 +52,12 @@ export interface RenderChainOptions {
   inputChannelMode?: InputChannelMode;
   /** 마지막 리미터를 넣을지. 기본 true(엔진과 같다). */
   limiter?: boolean;
+  /**
+   * 리미터가 소리를 늦추는 고정 지연(룩어헤드 1 ms)을 출력에서 걷어 낼지. 기본 true.
+   * 입력과 출력을 같은 시각으로 맞춰 비교하는 측정(전달함수·클릭 창·RMS 창)은 이 지연이 끼면 어긋나므로 걷어 낸다.
+   * 실제 처리 지연을 재는 측정(P-16)만 false 로 두어 리미터의 지연까지 읽는다.
+   */
+  alignOutput?: boolean;
   events?: ChainEvent[];
   /** 여러 번 렌더하는 시험이 임펄스 응답 생성 비용을 나누도록 밖에서 만든 캐시를 넘길 수 있다. 넘기면 여기서 닫지 않는다. */
   impulseCache?: ImpulseCache;
@@ -66,8 +73,10 @@ export interface OfflineRender {
   leadFrames: number;
   /** 입력 신호의 길이(샘플). */
   signalFrames: number;
-  /** 전체 출력 [왼쪽, 오른쪽](앞 무음·꼬리 포함). */
+  /** 전체 출력 [왼쪽, 오른쪽](앞 무음·꼬리 포함). 입력과 같은 길이다. */
   output: Float32Array[];
+  /** 출력에 남아 있는 리미터의 고정 지연(샘플). alignOutput 이 true 면 걷어 냈으므로 0. */
+  outputDelayFrames: number;
   /** 앞 무음을 붙인 입력. 채널 수는 options.input 과 같다. */
   input: Float32Array[];
   /** startRendering() 이 걸린 시간(ms). CPU 사용량의 대용 지표다. */
@@ -95,6 +104,7 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
     source = 'device',
     inputChannelMode = 'auto',
     limiter = true,
+    alignOutput = true,
     events = [],
   } = options;
 
@@ -106,7 +116,10 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
 
   const leadFrames = Math.round(leadSeconds * sampleRate);
   const totalFrames = leadFrames + signalFrames + Math.round(tailSeconds * sampleRate);
-  const context = new OfflineAudioContext({ numberOfChannels: 2, length: totalFrames, sampleRate });
+  // 리미터가 있으면 소리가 룩어헤드만큼 늦게 나온다. 걷어 낼 때는 그만큼 더 렌더한 뒤 앞을 잘라 같은 길이로 맞춘다.
+  const limiterDelayFrames = limiter ? limiterLookaheadFrames(sampleRate) : 0;
+  const trimFrames = alignOutput ? limiterDelayFrames : 0;
+  const context = new OfflineAudioContext({ numberOfChannels: 2, length: totalFrames + trimFrames, sampleRate });
   await registerWorklets(context);
 
   const paddedInput = input.map((channel) => {
@@ -122,12 +135,11 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
   const inputGain = context.createGain();
   inputGain.gain.value = dbToGain(inputGainDb);
   const chainInput = context.createGain();
-  const masterGain = context.createGain();
-  masterGain.gain.value = masterVolume;
   const howlGuard = new AudioWorkletNode(context, 'howl-guard', { outputChannelCount: [2] });
-  const peakLimiter = limiter
-    ? new AudioWorkletNode(context, 'peak-limiter-processor', { outputChannelCount: [2] })
-    : null;
+  // AudioEngine 과 같은 출력 단계(마스터 게인 → 가드 → 리미터). 리미터를 끄는 렌더(limiter: false)는 가드까지만 잇는다.
+  const outputStage = limiter ? new OutputStage(context, { guard: howlGuard }) : null;
+  const masterGain = outputStage?.input ?? context.createGain();
+  masterGain.gain.value = masterVolume;
 
   // AudioEngine.createInputStage 와 같은 입력 처리. 판정에 쓰는 레벨 측정은 아래에서 렌더 도중 일정 간격으로 부른다.
   const inputStage = new InputStage(context, sourceNode, paddedInput.length, {
@@ -161,11 +173,10 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
       previous = effect.output;
     }
     previous.connect(masterGain);
-    masterGain.connect(howlGuard);
-    if (peakLimiter) {
-      howlGuard.connect(peakLimiter);
-      peakLimiter.connect(context.destination);
+    if (outputStage) {
+      outputStage.output.connect(context.destination);
     } else {
+      masterGain.connect(howlGuard);
       howlGuard.connect(context.destination);
     }
 
@@ -224,7 +235,11 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
       sampleRate,
       leadFrames,
       signalFrames,
-      output: [rendered.getChannelData(0).slice(), rendered.getChannelData(1).slice()],
+      output: [
+        rendered.getChannelData(0).slice(trimFrames, trimFrames + totalFrames),
+        rendered.getChannelData(1).slice(trimFrames, trimFrames + totalFrames),
+      ],
+      outputDelayFrames: limiterDelayFrames - trimFrames,
       input: paddedInput,
       renderMilliseconds,
       setupMilliseconds,

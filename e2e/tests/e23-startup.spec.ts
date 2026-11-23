@@ -2,7 +2,7 @@
 // 한 번 열어 캐시된 뒤에는 오프라인에서도 열리며, 오프라인에서도 연결(가짜 마이크)이 된다.
 import { expect, test } from '../helpers/fixtures';
 import { connectGuitar, openApp, PEDAL_COUNT, pedalCards } from '../helpers/app';
-import { readAudioTracking, trackAudioContexts } from '../helpers/mocks';
+import { readAudioTracking, readWorkletModules, trackAudioContexts, trackWorkletModules } from '../helpers/mocks';
 
 test.describe('E-23 시작 회귀', () => {
   test('E-23 로드 직후 AudioContext 0개·getUserMedia 0회', async ({ page }) => {
@@ -55,6 +55,41 @@ test.describe('E-23 시작 회귀', () => {
     await page.reload();
     await expect(pedalCards(page)).toHaveCount(PEDAL_COUNT);
     await connectGuitar(page);
+    await context.setOffline(false);
+  });
+
+  test('E-23 오프라인 연결에서 리미터 워클릿(별도 파일)이 캐시로 로드됨', async ({ launchWithMic }) => {
+    const { page, context } = await launchWithMic();
+    await trackWorkletModules(page);
+    await openApp(page);
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+    });
+    // 리미터는 문자열이 아니라 빌드가 내보낸 파일이므로 서비스 워커가 프리캐시에 넣었는지 따로 본다.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async () => {
+            for (const name of await caches.keys()) {
+              const urls = (await (await caches.open(name)).keys()).map((request) => request.url);
+              if (urls.some((url) => /\/assets\/limiter\.worklet-[\w-]+\.js$/.test(url))) return true;
+            }
+            return false;
+          }),
+        { message: '리미터 워클릿 파일이 프리캐시에 있어야 합니다', timeout: 20_000 },
+      )
+      .toBe(true);
+
+    await context.setOffline(true);
+    await page.reload();
+    await expect(pedalCards(page)).toHaveCount(PEDAL_COUNT);
+    await connectGuitar(page);
+    const loads = await readWorkletModules(page);
+    const limiter = loads.filter((load) => /\/assets\/limiter\.worklet-[\w-]+\.js$/.test(load.url));
+    expect(limiter, '연결하면 리미터 워클릿을 한 번 불러와야 합니다').toHaveLength(1);
+    expect(limiter[0].status, limiter[0].message).toBe('loaded');
+    expect(loads.filter((load) => load.status !== 'loaded'), '오프라인에서도 모든 워클릿이 로드되어야 합니다').toEqual([]);
+    expect(loads.length, '워클릿 모듈은 최소 8개(문자열 7 + 리미터 1)').toBeGreaterThanOrEqual(8);
     await context.setOffline(false);
   });
 });

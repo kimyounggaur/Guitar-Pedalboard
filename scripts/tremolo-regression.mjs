@@ -4,6 +4,7 @@ import console from 'node:console';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
 const effectSource = await readFile(
   new URL('../src/audio/nodes/TremoloEffect.ts', import.meta.url),
@@ -318,6 +319,7 @@ assert.ok(
 );
 
 const migrationBundle = await build({
+  plugins: [workerUrlStub],
   entryPoints: [
     fileURLToPath(new URL('../src/store/__migration_check.ts', import.meta.url)),
   ],

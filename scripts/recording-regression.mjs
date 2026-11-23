@@ -5,6 +5,7 @@ import { setImmediate } from 'node:timers';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
 const [engineSource, storeSource, meterSource, appShellSource, cssSource] = await Promise.all([
   readFile(new URL('../src/audio/AudioEngine.ts', import.meta.url), 'utf8'),
@@ -16,7 +17,8 @@ const [engineSource, storeSource, meterSource, appShellSource, cssSource] = awai
 
 assert.match(engineSource, /createRecorderStream\(\): MediaStream/);
 assert.match(engineSource, /this\.context\.createMediaStreamDestination\(\)/);
-assert.match(engineSource, /this\.limiter\?\.connect\(this\.recorderDestination\)/);
+// 녹음은 스피커와 같은 리미터 출력(OutputStage.output)에서 갈라진다.
+assert.match(engineSource, /this\.outputStage\?\.output\.connect\(this\.recorderDestination\)/);
 assert.match(engineSource, /destination\.stream\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/);
 assert.match(storeSource, /disposeRecordingRuntime[\s\S]*audioEngine\.disposeRecorderStream\(\)/);
 assert.match(storeSource, /export type RecordingStatus = 'idle' \| 'recording' \| 'ready'/);
@@ -46,6 +48,7 @@ assert.match(cssSource, /\.recording-panel/);
 assert.match(cssSource, /\.recording-actions/);
 
 const helperBundle = await build({
+  plugins: [workerUrlStub],
   entryPoints: [fileURLToPath(new URL('../src/audio/recording.ts', import.meta.url))],
   bundle: true,
   format: 'esm',
@@ -222,6 +225,7 @@ Object.defineProperty(globalThis, 'MediaRecorder', {
 });
 
 const runtimeBundle = await build({
+  plugins: [workerUrlStub],
   stdin: {
     contents: `
       export { AudioEngine } from './src/audio/AudioEngine.ts';
@@ -291,8 +295,7 @@ engine.context = {
     return destination;
   },
 };
-engine.masterGain = master;
-engine.limiter = master;
+engine.outputStage = { input: master, output: master, dispose() {} };
 let inputStops = 0;
 engine.stream = { getTracks: () => [{ stop: () => inputStops++ }] };
 assert.equal(engine.createRecorderStream(), recorderStream);

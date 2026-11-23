@@ -3,8 +3,10 @@ import console from 'node:console';
 import { Buffer } from 'node:buffer';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
 const bundle = await build({
+  plugins: [workerUrlStub],
   stdin: { contents: `
     export { usePedalStore, clonePedals } from './store/pedalStore.ts';
     export { useHistoryStore } from './store/historyStore.ts';

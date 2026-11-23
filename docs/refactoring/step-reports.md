@@ -257,3 +257,69 @@ source(2ch) ─▶ splitter ─┬ 0 ─▶ gainL ─┐
   - 프로브가 새 `P-06` 정의를 쓰므로 이전 기준선과 키가 다르다(L-28). 별도 `baseline:` 커밋으로 갱신했다.
 
 ---
+
+## S1.4a 마스터 리미터 (OutputStage)
+
+- 브랜치·병합: `refactor/s1-4a-limiter` → `phase/1`.
+- 해결 항목: R1-5 중 '마지막 출력 단계의 리미터'. **HEAD 에 리미터가 이미 있었다**(`peak-limiter-processor.ts` — 문자열 워클릿, 천장 0.89, 룩어헤드 없음, 해제 50 ms; 코드 지도 8절). 그래서 이 Step 은 새로 넣는 일이 아니라 ① 설계서 사양(GS-6)으로 **바꾸고**(룩어헤드 1 ms·해제 80 ms·천장 −1 dBFS 에 마지막 한 번 더 자르기), ② 엔진 안에 흩어져 있던 마스터 게인·리미터를 `OutputStage` 로 묶어 S1.5 가 하울 가드를 옮길 자리를 만들고, ③ 새 워클릿을 별도 파일(`?worker&url`)로 만드는 방식이 빌드·프리캐시·오프라인에서 되는지 검증하는 일이었다(L-29, L-32).
+- 변경 파일(기준선 JSON·이 보고서를 뺀 33개, 신규 6개, +1,117 / −425줄): `src/audio/engine/limiterSpec.ts`·`OutputStage.ts`, `src/audio/worklets/limiter.worklet.ts`·`urls.ts`(신규 4개), `src/audio/worklets/peak-limiter-processor.ts`(삭제), `src/audio/AudioEngine.ts`, `src/audio/offline/renderChain.ts`·`workletModules.ts`, `src/audio/testing/probes.ts`(P-03), `scripts/peak-limiter-regression.mjs`(다시 씀), `scripts/lib/esbuild-plugins.mjs`(신규)와 이를 쓰는 Node 시험 14개(`auto-wah`·`chorus`·`flanger`·`graphic-eq`·`history`·`knob`·`latency`·`midi`·`output-device`·`phaser`·`preset-ab`·`recording`·`shortcuts`·`tremolo`), `scripts/audio-render-probe.mjs`(P-03 요약 항목), `e2e/tests/s1-4a-output-stage.spec.ts`(신규)·`e23-startup.spec.ts`, `e2e/helpers/mocks.ts`, `docs/baseline/tolerances.json`(`criteria` 2개)·`README.md`, `docs/baseline/audio-probe.json`(별도 커밋 `baseline: S1.4a …`), `docs/REFACTOR_LOG.md`(L-29~L-33), `docs/refactoring/regex-assertions.md`. 시험 도구 수정(`scripts/lib/chrome.mjs`·`scripts/cdp-client-regression.mjs`·`package.json`, L-33)은 따로 가져갈 수 있게 별도 커밋이다.
+
+**그래프** — 스피커·출력 미터·녹음이 모두 리미터 **뒤**에서 갈라진다.
+
+```text
+이펙트 체인 ─▶ masterGain(OutputStage.input) ─▶ howlGuard ─▶ limiter(OutputStage.output) ─┬▶ 스피커(destination)
+                                                                                           ├▶ 출력 미터(AnalyserNode)
+                                                                                           └▶ 녹음(MediaStreamDestination, 녹음 중에만)
+```
+
+| 리미터 사양(GS-6) | 값 |
+|---|---|
+| 천장 | −1 dBFS(0.8913). 감소량을 곱한 뒤 ±천장으로 한 번 더 자른다 |
+| 룩어헤드 | 1 ms — 48 kHz 48샘플, 44.1 kHz 44샘플. 소리가 그만큼 늦게 나온다(L-30) |
+| 어택 / 해제 | 즉시(룩어헤드 구간 최댓값 기준) / 시상수 80 ms |
+| 채널 | 좌우 연동(두 채널 중 큰 값으로 이득 하나). 모노 입력은 양쪽으로 복사 |
+| 이상 값 | NaN·무한대는 0 으로 |
+| 화면 | 노출하지 않음(UI 변경 없음) |
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| P-03 최악 조합 피크 ≤ −1.0 dBFS(허용 −0.9) | 충족 | −1.000 dBFS(44.1·48 kHz). 리미터를 빼면 +68.4 / +67.9 dBFS 라 리미터가 실제로 일한다. `tolerances.json` 에 `P-03.peakWithLimiterDb` ≤ −0.9 추가 |
+| 앱 기본 구성에서 Cab 만 꺼도 ≤ −1.0 dBFS | 충족 | P-03 `defaultCabOffPeakDb` −1.000(리미터를 빼면 +2.97 / +2.99 dBFS — Cab 을 끄면 깨졌다). 같은 기준 추가 |
+| 녹음도 리미터 뒤 | 충족 | `test:recording`(녹음 연결이 `outputStage.output` 에서 나옴), 실제 그래프 시험(녹음 시작 전엔 녹음 노드에 연결 없음, 시작 뒤엔 입력이 리미터 하나뿐) |
+| P-23 클릭 없음·새 노드 0 | 충족 | 새 노드 0, 최대 클릭 비율 +1.01 / +1.22 dB(전 +3.48 / +4.13) |
+| E-23 오프라인 새로고침 뒤 연결 → 리미터 워클릿 로드 | 충족 | 새 시험: 캐시에 `/assets/limiter.worklet-….js` 있음 → 오프라인 새로고침 → 연결 → 리미터 모듈 `loaded` 1건, 불러오지 못한 모듈 0건 |
+| 리미터 파라미터를 화면에 내놓지 않는다 | 충족 | 화면 코드는 바꾸지 않았다 |
+
+**전후** (44.1 kHz / 48 kHz)
+
+| 측정 | 전(HEAD) | 후 |
+|---|---|---|
+| P-03 최악 조합 피크 | −1.012 / −1.012 dBFS | −1.000 / −1.000 dBFS |
+| P-03 최악 조합 평균 음량(RMS) | −3.16 / −3.11 dBFS | −10.65 / −10.47 dBFS |
+| P-03 기본 구성 + Cab 끔, 리미터 있음(새 측정) | — (리미터 없으면 +2.97 / +2.99) | −1.000 / −1.000 dBFS |
+| P-16 기본 구성 지연 | 3.02 / 2.79 ms | 4.02 / 3.79 ms(+1 ms, 룩어헤드) |
+| P-23 최대 클릭 비율 | +3.48 / +4.13 dB | +1.01 / +1.22 dB |
+| P-05 프리셋 음량 폭 / 중앙값 | 21.49 / 21.61 dB · −16.16 / −16.44 dBFS | 21.47 / 21.58 dB · −16.29 / −16.45 dBFS(큰 프리셋 22개가 최대 0.75 dB 내려감) |
+| 번들 | 문자열 워클릿 8개 | 문자열 워클릿 7개 + 별도 파일 1개(`limiter.worklet-CaSHv9dI.js`, 1,292 bytes, import 0개, 프리캐시 포함) |
+
+P-03 의 평균 음량이 크게 내려간 것은 과도한 입력에서 옛 리미터는 룩어헤드가 없어 큰 피크를 만난 뒤에야 이득을 내려 파형이 잘린 채 남고, 새 리미터는 1 ms 앞서 이득을 내려 파형을 덜 자르기 때문이다. 피크 상한은 같다. 소리가 어떻게 들리는지는 사람이 들어야 안다(아래 '사람 확인 필요').
+
+- 새 시험: `test:peak-limiter`(다시 씀 — 워클릿 코드를 esbuild 로 묶어 `vm` 안에서 실제 처리기를 돌린다: 천장 이하 투명, 모노→양쪽, 빈 입력, 좌우 연동, 극단 입력, NaN·무한대, 룩어헤드 선행 이득 감소, 해제 시상수 수식 일치, 128샘플 단위로 나눠 처리해도 같은 결과, 지속 과입력, 96 kHz, `OutputStage` 연결·정리, 소스 단언), E-23 1건(오프라인 로드), `s1-4a-output-stage.spec.ts` 2건(실제 오디오 그래프의 연결: 스피커는 리미터에서만, 리미터는 하울 가드에서만, 녹음 노드는 녹음 시작 뒤 리미터에서만, 끊었다 다시 연결하면 새 리미터가 스피커에 다시 이어짐 — 연결 기록에 리미터 → 스피커가 두 번), P-03 새 측정 2개, `test:cdp-client`(L-33).
+- 검증: `npx tsc -b --noEmit`, `npm run lint`, `npm run build`(프리캐시에 리미터 파일 포함 확인), `npm test` 29/29(164초), `npm run e2e` 56/56 통과.
+- 만난 문제
+  - Node 시험 14개가 `AudioWorkletProcessor is not defined` 로 죽었다 — esbuild 가 `?worker&url` 꼬리표를 떼고 워클릿 소스를 묶었다. 그 주소를 문자열로 바꿔 주는 `workerUrlStub` 으로 해결(L-29).
+  - P-11(주파수 응답)이 246.1 → 228.5 Hz 로 어긋났다 — 입력과 출력을 비교하는 측정이라 리미터의 48샘플 지연을 '위상 차' 로 읽었다. 오프라인 렌더에 `alignOutput`(기본 켬)을 더해 리미터 지연을 앞에서 잘라 냈고 P-11 은 기준선 그대로 돌아왔다. 지연을 재는 P-16 만 끈다(L-30).
+  - `npm test` 에서 `test:responsive-a11y` 가 180초 제한에 걸려 멈췄다 — S1.4a 와 무관한 시험 도구의 결함이었다(`Browser.close` 응답이 안 오면 영영 대기). 고쳤고 40회 연속 통과로 확인(L-33).
+- 사람 확인 필요
+  - **과도한 입력(전 페달 켬 + Level 200% + Graphic EQ +12 dB 같은 구성)을 헤드폰으로 짧게 들어 볼 것**(볼륨은 낮추고). 평균 음량이 −3 → −10.6 dBFS 로 내려갔으므로 찌그러짐 없이 눌리는지, 소리가 갑자기 작아졌다 커지는 느낌이 거슬리지 않는지.
+  - **녹음 파일(WAV/WebM)을 편집기에서 열어 피크가 −1 dBFS 를 넘지 않는지**(실제 파일은 시험하지 않았다. 그래프 연결과 단위 시험만 확인).
+  - 1 ms 지연이 귀로 느껴지지 않는지(기본 구성 지연이 약 4.0 ms 로 늘었다).
+  - 앱 기본 구성에서 Cab 만 끄고 센 소리를 쳐도 실제 하드웨어에서 깨지지 않는지(프로브는 가상 신호로만 확인).
+- 남은 위험
+  - 화면의 `출력 지연 추정` 은 baseLatency + outputLatency 만 보여 주고 처리 지연은 '추정 미지원' 이라 리미터 1 ms 가 거기에 없다 — S2.10 에서 처리 지연을 넣을 때 `limiterLookaheadFrames` 를 포함해야 한다(L-32).
+  - P-16 기본 구성(4.02 / 3.79 ms)이 목표 3.7 ms(2.7 + 리미터 1.0)를 44.1 kHz 에서 0.32 ms, 48 kHz 에서 0.09 ms 넘는다 — 열린 항목으로 남는다(L-30).
+  - P-05 음량 폭은 그대로 약 21.5 dB 다. S1.4b(Cab 보정)·S1.4c(프리셋 음량 맞춤)에서 줄인다.
+  - S1.5 는 `OutputStage` 의 `guard` 자리에 있는 출력 쪽 하울 가드를 입력 쪽 감지기로 바꾼다. 그때 `peak-limiter` 시험의 연결 단언과 이 보고서의 그래프를 같이 고쳐야 한다.
+  - 문자열 워클릿 7개는 그대로다(Step 범위 밖). 엔진·스토어를 묶는 Node 시험은 `workerUrlStub` 이 필요하다 — 엔진에 `?worker&url` 워클릿을 더하는 Step(S1.5)은 새 시험에도 같은 플러그인을 붙여야 한다.
+
+---

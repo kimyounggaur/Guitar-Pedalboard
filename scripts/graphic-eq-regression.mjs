@@ -4,6 +4,7 @@ import console from 'node:console';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
 const [effectSource, engineSource, pedalSource, faderSource, cardSource, iconSource, styleSource] =
   await Promise.all([
@@ -261,6 +262,7 @@ effect.dispose();
 assert.ok(effect.filters.every((filter) => filter.disconnectCount === 1), '필터 dispose 불완전');
 
 const migrationBundle = await build({
+  plugins: [workerUrlStub],
   entryPoints: [fileURLToPath(new URL('../src/store/__migration_check.ts', import.meta.url))],
   bundle: true,
   format: 'esm',
