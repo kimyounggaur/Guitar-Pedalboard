@@ -9,6 +9,9 @@ import process from 'node:process';
 import { setTimeout } from 'node:timers';
 import { fileURLToPath, URL } from 'node:url';
 
+// GitHub Actions 등 CI 는 CI=true 를 넣는다. 'false'·'0' 은 CI 가 아닌 것으로 본다.
+const runsInCi = Boolean(process.env.CI) && !['false', '0'].includes(process.env.CI);
+
 const [
   appShellSource,
   pedalBoardSource,
@@ -254,6 +257,13 @@ async function collectFiles(directory) {
 async function verifyMobileBrowserLayout() {
   const chromePath = await findChromePath();
   if (!chromePath || typeof globalThis.WebSocket === 'undefined') {
+    if (runsInCi) {
+      // CI 에서 브라우저 검사를 말없이 건너뛰면 '통과'로 보이는 검사 공백이 생긴다.
+      throw new Error(
+        'Responsive browser geometry cannot be skipped in CI: Chrome or WebSocket is unavailable. '
+          + 'Set CHROME_PATH to an installed Chrome/Chromium executable.',
+      );
+    }
     console.warn('Responsive browser geometry skipped: Chrome or WebSocket is unavailable.');
     return null;
   }
@@ -334,8 +344,8 @@ async function verifyMobileBrowserLayout() {
 }
 
 async function findChromePath() {
-  const candidates = [
-    process.env.CHROME_PATH,
+  const explicitPath = process.env.CHROME_PATH;
+  const fallbackPaths = [
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -343,7 +353,11 @@ async function findChromePath() {
     '/usr/bin/google-chrome',
     '/usr/bin/chromium',
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  ].filter(Boolean);
+  ];
+  // CI 에서 CHROME_PATH 를 정했는데 그 파일이 없으면 다른 Chrome 으로 넘어가지 않는다(설정 오류로 실패시킨다).
+  const candidates = runsInCi && explicitPath
+    ? [explicitPath]
+    : [explicitPath, ...fallbackPaths].filter(Boolean);
 
   for (const candidate of candidates) {
     try {
