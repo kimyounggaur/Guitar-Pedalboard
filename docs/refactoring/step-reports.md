@@ -131,3 +131,61 @@ Phase 1 의 Step 브랜치는 `phase/1` 에서 만들고 `phase/1` 로 병합한
 - 검증: `npm run typecheck`, `npm run lint`, `npm test` 통과(아래 '병합 직전 확인').
 - 사람 확인 필요: **British Crunch · Plexi Lead · Thrash Rhythm 세 프리셋에서 줄을 손으로 막고 30초** — '지글거리는' 잡음이 없어야 한다(청취).
 - 남은 위험: Gain 노브 곡선(20~30% 에서 이미 최대, R3-6)은 이 Step 의 범위가 아니다(S3.5). 설계서의 `drive` 스케치는 적용하지 않았다(L-14).
+
+---
+
+## S1.2 AudioSession 정리 절차
+
+- 브랜치·병합: `refactor/s1-2-session-teardown` → `phase/1`.
+- 해결 항목: R1-3(정지 뒤에도 마이크·엔진이 살아 있음), R2-12(Esc), R1-2(녹음 폐기 — HEAD 에서 이미 저장하고 있었고 시험으로 고정), 설계서 C2(정지 경로가 여러 개). 새로 발견한 결함 **F-2**(Esc 가 컨트롤 포커스에서 무시됨, L-17).
+- 변경 파일(18개 + 이 보고서, +1,692 / −133줄): `src/audio/engine/AudioSession.ts`(신규), `src/audio/AudioEngine.ts`, `src/store/audioStore.ts`, `src/store/toastStore.ts`·`src/components/Toast.tsx`(신규), `src/components/GlobalKeyboardShortcuts.tsx`, `src/App.tsx`, `src/styles/panels.css`, `scripts/audio-session-regression.mjs`(신규, `test:audio-session`), `scripts/recording-regression.mjs`·`scripts/shortcuts-regression.mjs`, `e2e/tests/e01-teardown.spec.ts`(신규), `e2e/helpers/{app,mocks,teardown}.ts`, `e2e/types/node-shim.d.ts`, `package.json`, `docs/REFACTOR_LOG.md`(L-15~L-21)
+
+**정리 순서표** — 어떤 이유로 멈추든(`user-disconnect`·`panic`·`howl`·`device-lost`·`error`) 같은 순서로 지난다. 한 단계가 실패해도 나머지는 계속하고 `failedSteps` 에 남긴다.
+
+| 순서 | 단계 | 하는 일 | 코드 |
+|---|---|---|---|
+| 사전 | (번호 없음) | 아직 끝나지 않은 시작 요청을 무효로 만든다 — `getUserMedia` 가 늦게 돌아와도 입력이 켜지지 않는다 | `AudioSession.ts:171` → `AudioEngine.invalidatePendingStart` |
+| ① | `silence-output` | 마스터 게인을 시상수 3 ms 로 0 으로, 24 ms 기다림(L-18) | `AudioEngine.silenceOutput` |
+| ② | `stop-input` | 입력 트랙 stop — 마이크 표시등이 여기서 꺼진다(②·③ 맞바꿈, L-16) | `AudioEngine.stopInput` |
+| ③ | `finalize-recording` | 녹음 중이면 마감을 최대 2초 기다려 파일을 남긴다 | `finalizeRecordingForStop`(`audioStore.ts`), 시간 제한 `AudioSession.ts:178` |
+| ④ | `pause-playback` | 파일 모드면 pause(File 객체는 그대로 둠) | `AudioEngine.pausePlayback` |
+| ⑤ | `release-graph` | 워클릿 포트 닫기, 노드 disconnect | `AudioEngine.releaseGraph` |
+| ⑥ | `close-context` | `await context.close()` — 컨텍스트는 한 번에 하나 | `AudioEngine.closeContext` |
+| ⑦ | `advance-generation` | 세대 번호 증가 — 늦게 도착한 비동기 결과 무시 | `AudioEngine.advanceGeneration` |
+| ⑧ | `notify` | 이유별 안내(토스트, L-21). 이미 멈춘 상태의 정지는 안내하지 않는다 | `announceStop`(`audioStore.ts`) |
+
+정지는 `audioStore.ts` 의 `stopSession(reason, detail)` 한 곳으로 모인다. 연결 해제·Panic 버튼·Esc·하울링 핸들러·장치 분리(`loadDevices`·입력 종료)·파일 재생 끝이 모두 여기를 부르고, 엔진의 `panic()`·`stop()` 은 지웠다(L-15).
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| Panic·Esc·하울링(모의)·연결 해제 뒤 500 ms 안에 모든 입력 트랙 `ended`, 모든 `AudioContext` `closed`, 화면이 '기타 연결하기' | 충족 | E-01(아래 측정값). 가장 느린 경우 115 ms |
+| 녹음 중 Panic → 파일이 남고 길이 = 녹음 시간 ±0.5초 | 충족 | E-01 '녹음 중 Panic' — 내려받은 파일을 디코딩해 길이 차 ≤ 0.5 s. 정지 완료 115 ms |
+| 정지 → 연결을 10번 되풀이해도 동시에 열린 `AudioContext` ≤ 1 | 충족 | E-01: 최대 동시 열림 1, `getUserMedia` 10회, 모든 트랙 `ended`, 모든 컨텍스트 `closed` |
+| 대화상자·메뉴가 열려 있으면 Esc 는 그것만 닫는다 | 충족 | E-01: 도움말 대화상자·MIDI 메뉴 — 첫 Esc 는 닫기만(트랙 `live`, 컨텍스트 `running`, 토스트 없음), 이어지는 Esc 가 정지 |
+| 모든 정지 경로가 `stop(reason)` 하나를 지난다 | 충족 | `test:audio-session`: 이유 5가지가 같은 단계 순서, 소스에서 `engine.panic`·`engine.stop` 제거 |
+| 녹음은 버리지 않는다 | 충족(HEAD 에서 이미 충족, 시험으로 고정) | `test:recording`, E-01 |
+
+**E-01 측정값**(정지 동작부터 위 세 조건이 처음 관찰될 때까지, 한도 500 ms)
+
+| 동작 | ms |
+|---|---|
+| Panic 버튼 | 56 |
+| Esc — 포커스: 페달 스위치 / 녹음 버튼 / 입력 트림 슬라이더 / 없음 | 92 / 99 / 70 / 64 |
+| Esc — 숫자 칸 편집 취소 다음의 Esc / MIDI 메뉴를 닫은 다음의 Esc | 59 / 51 |
+| 하울링 차단(모의) | 65 |
+| 연결 해제 버튼 | 57 |
+| 녹음 중 Panic | 115 |
+
+- 새 시험: `test:audio-session`(상태 기계·이유별 순서·단계별 실패 격리·마감 시간 초과·시작/정지 경쟁·Panic 직후 재연결·10회 반복, 변이 시험으로 확인), E-01 13건, `test:shortcuts` 에 포커스 대상 25가지 판정 표(변이 시험 2종으로 확인). `test:recording` 은 새 구조(`stopSession`·토스트)에 맞게 다시 썼다.
+- 검증: `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` 27/27(154초), `npm run e2e` 45/45(1.9분) 통과.
+- 발견(F-2, L-17): `isInteractiveShortcutTarget` 가드가 버튼·스위치·슬라이더·탭에 포커스가 있을 때 Esc 도 무시했다. 연주 중에는 포커스가 거기 있는 것이 보통이라 하울링이 날 때 Esc 가 듣지 않는다. E-01 첫 실행에서 재현했고(마이크 트랙·컨텍스트가 그대로 살아 있음) 고쳤다. **배포 사이트에도 있을 가능성이 높다**(F-1 과 같은 이유).
+- 사람 확인 필요
+  - **실제 마이크**로 연결한 뒤 Panic 버튼·Esc·'연결 해제' 를 눌러 브라우저의 마이크 사용 표시(주소창·탭)가 바로 꺼지는지(데스크톱 Chrome, 가능하면 iOS Safari).
+  - **실제 하울링**(스피커 + 마이크)에서 자동 정지와 안내가 뜨는지. 감지 방식은 S1.5 에서 바뀐다.
+  - 토스트가 휴대폰 화면에서 도크·페달을 가리지 않는지(위치는 S1.7 에서 다듬음).
+  - USB 오디오 장치를 연결한 채 뽑았을 때 '입력 장치 연결이 끊겼습니다' 안내.
+- 남은 위험
+  - 하울링 감지기는 아직 출력 쪽·−22 dBFS 방식이다(S1.5 에서 입력 쪽 −50 dBFS·±20 cents 로 교체). 정지 문구의 주파수(`StopDetail.howlFrequencyHz`)는 그때 채운다.
+  - 녹음 마감이 2초를 넘으면 기다리지 않고 정리를 이어간다 — 그 녹음은 남지 않을 수 있다(`test:audio-session` '마감 시간 초과'가 이 동작을 고정).
+  - 숫자 입력 칸·열린 메뉴·대화상자에서는 Esc 가 먼저 그 컨트롤에 쓰이고 한 번 더 눌러야 정지한다(L-17 의 의도된 선택).
+  - `connectGuitar`·`activate` 의 키보드 우회는 F-1 수정(S1.6) 뒤에 마우스 클릭으로 되돌린다. `AudioEngine.setInputDevice` 는 스토어에서 더는 쓰지 않지만 S1.3(입력 채널) 때 정리하려고 남겨 두었다.

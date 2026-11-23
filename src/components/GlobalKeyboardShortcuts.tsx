@@ -22,6 +22,39 @@ export function isInteractiveShortcutTarget(target: EventTarget | null): boolean
   );
 }
 
+const NON_TEXT_INPUT_TYPES = new Set(['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit']);
+
+/**
+ * Esc 를 그 컨트롤 자신이 먼저 써야 하는 대상인지: 글자·숫자를 고치는 칸(Esc 로 편집 취소),
+ * 열린 목록·메뉴·대화상자(Esc 로 닫기). 그 밖의 곳에서는 포커스가 어디 있든 Esc 가 긴급 정지로 통한다.
+ * 연주 중에는 포커스가 페달 스위치·슬라이더·버튼에 있는 것이 보통이라, 거기서 Esc 가 무시되면
+ * 하울링이 날 때 쓸 수 없다(보고서 R2-12, REFACTOR_LOG L-17).
+ */
+export function isEscapeOwnedByTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+
+  const tagName = target.tagName.toLowerCase();
+  if (tagName === 'select' || tagName === 'textarea') return true;
+  if (tagName === 'input') return !NON_TEXT_INPUT_TYPES.has((target as HTMLInputElement).type);
+  return (
+    target.closest(
+      '[contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="searchbox"], [role="spinbutton"], [role="combobox"], [role="listbox"], [role="menu"], [role="dialog"], [aria-modal="true"], [aria-haspopup][aria-expanded="true"]',
+    ) !== null
+  );
+}
+
+/**
+ * 포커스 위치 때문에 이 단축키를 막을지. 숫자·Space·T·A/B 는 컨트롤이 먼저 쓰므로 컨트롤에 포커스가 있으면 막지만,
+ * 긴급 정지(Esc)는 컨트롤에 포커스가 있어도 통한다. 막는 것은 Esc 를 자기 일에 쓰는 곳(위)과 한글 조합 취소뿐이다.
+ */
+export function isShortcutBlockedByTarget(
+  command: ShortcutCommand,
+  event: Pick<KeyboardEvent, 'target' | 'isComposing'>,
+): boolean {
+  if (command.type === 'panic') return event.isComposing || isEscapeOwnedByTarget(event.target);
+  return isInteractiveShortcutTarget(event.target);
+}
+
 export function executeShortcutCommand(
   command: ShortcutCommand,
   openHelp: () => void,
@@ -97,7 +130,7 @@ export function GlobalKeyboardShortcuts() {
         return;
       }
 
-      if (!command || isInteractiveShortcutTarget(event.target)) return;
+      if (!command || isShortcutBlockedByTarget(command, event)) return;
 
       if (executeShortcutCommand(command, openHelp)) {
         event.preventDefault();

@@ -49,6 +49,10 @@ interface ChainConnection {
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const CHAIN_FADE_SECONDS = 0.008;
 const CHAIN_RECONNECT_WAIT_MS = 12;
+/** 정지할 때 출력 이득을 0 으로 낮추는 시정수(초). 10 ms 면 약 −29 dB, 20 ms 면 약 −58 dB. */
+const SILENCE_TIME_CONSTANT_SECONDS = 0.003;
+/** 램프가 끝나도록 컨텍스트를 닫기 전에 기다리는 시간(ms). */
+const SILENCE_SETTLE_MS = 24;
 
 export class AudioEngine {
   private static instance: AudioEngine | null = null;
@@ -92,6 +96,7 @@ export class AudioEngine {
   private workletsLoaded = false;
   private workletUrls: string[] = [];
   private playbackEndedHandler: (() => void) | null = null;
+  private closePending: Promise<void> = Promise.resolve();
 
   static getInstance(): AudioEngine {
     if (!AudioEngine.instance) {
@@ -180,8 +185,7 @@ export class AudioEngine {
       throw new Error('이 브라우저는 오디오 입력을 지원하지 않습니다.');
     }
 
-    this.dispose();
-    const generation = ++this.sessionGeneration;
+    const generation = await this.beginSession();
     const context = new AudioContext({ latencyHint: 'interactive' });
     let stream: MediaStream | null = null;
     this.context = context;
@@ -228,8 +232,7 @@ export class AudioEngine {
       throw new Error('오디오 파일만 업로드할 수 있습니다.');
     }
 
-    this.dispose();
-    const generation = ++this.sessionGeneration;
+    const generation = await this.beginSession();
     const context = new AudioContext({ latencyHint: 'interactive' });
     let audioFileUrl: string | null = null;
     let audioElement: HTMLAudioElement | null = null;
@@ -517,23 +520,45 @@ export class AudioEngine {
     return 20 * Math.log10(Math.max(1, linearGain));
   }
 
-  panic(): void {
-    this.graphGeneration += 1;
+  /**
+   * ① 출력을 약 10 ms 안에 무음으로 만들고 램프가 끝날 때까지 기다린다(AudioSession 정리 절차의 첫 단계).
+   * 컨텍스트를 곧바로 닫으면 소리가 중간에서 끊겨 '딱' 소리가 날 수 있어 잠깐 기다린다.
+   */
+  async silenceOutput(): Promise<void> {
+    const context = this.context;
+    const master = this.masterGain;
+    if (!context || context.state === 'closed' || !master) return;
+    const now = context.currentTime;
+    master.gain.cancelScheduledValues(now);
+    master.gain.setTargetAtTime(0, now, SILENCE_TIME_CONSTANT_SECONDS);
+    await wait(SILENCE_SETTLE_MS);
+  }
 
-    if (this.masterGain && this.context && this.context.state !== 'closed') {
-      this.masterGain.gain.cancelScheduledValues(this.context.currentTime);
-      this.masterGain.gain.setValueAtTime(0, this.context.currentTime);
-    }
-
-    // Stop capture immediately, but leave the recorder graph alive until its final data event.
+  /** ② 입력 스트림의 모든 트랙을 멈춘다. 마이크 표시등이 꺼진다. 녹음기는 출력 쪽을 기록하므로 영향이 없다. */
+  stopInput(): void {
     this.inputEndedCleanup?.();
     this.inputEndedCleanup = null;
     this.stream?.getTracks().forEach((track) => track.stop());
+  }
+
+  /** ④ 파일 모드의 재생을 멈춘다. File 객체는 스토어가 갖고 있어 버려지지 않는다. */
+  pausePlayback(): void {
     this.audioElement?.pause();
   }
 
-  dispose(): void {
+  /** 아직 끝나지 않은 start/init 요청을 무효로 만든다. 늦게 돌아온 getUserMedia 결과는 버려진다. */
+  invalidatePendingStart(): void {
     this.sessionGeneration += 1;
+    this.graphGeneration += 1;
+  }
+
+  /** ⑦ 세대 번호를 올려 늦게 도착한 비동기 결과를 무시하게 한다. */
+  advanceGeneration(): void {
+    this.invalidatePendingStart();
+  }
+
+  /** ⑤ 워클릿 포트를 닫고 노드를 끊고 입력·파일 자원을 놓는다. AudioContext 는 closeContext() 가 닫는다. */
+  releaseGraph(): void {
     this.graphGeneration += 1;
     this.panicDisconnect();
     this.reverbImpulseCache?.dispose();
@@ -552,11 +577,6 @@ export class AudioEngine {
       this.audioFileUrl = null;
     }
 
-    if (this.context && this.context.state !== 'closed') {
-      void this.context.close();
-    }
-
-    this.context = null;
     this.source = null;
     this.inputGain = null;
     this.chainInput = null;
@@ -577,18 +597,50 @@ export class AudioEngine {
     this.workletUrls = [];
   }
 
+  /**
+   * ⑥ AudioContext 를 닫고 닫힐 때까지 기다린다. 이미 닫는 중인 것이 있으면 그것도 같이 기다려서,
+   * 이 함수가 끝났을 때는 열려 있는 컨텍스트가 없다('컨텍스트는 한 번에 하나').
+   */
+  closeContext(): Promise<void> {
+    const context = this.context;
+    this.context = null;
+    return context ? this.closeTracked(context) : this.closePending;
+  }
+
+  /** 닫는 중인 컨텍스트를 모두 추적한다. 취소된 시작이 만든 컨텍스트도 여기를 지난다. */
+  private closeTracked(context: AudioContext): Promise<void> {
+    if (context.state !== 'closed') {
+      const closing = context.close().catch(() => undefined);
+      this.closePending = Promise.all([this.closePending, closing]).then(() => undefined);
+    }
+    return this.closePending;
+  }
+
+  /**
+   * 새 세션 요청을 등록한다. 번호를 먼저(동기로) 올리므로 이전 요청은 즉시 무효가 되고,
+   * 이전 세션을 비우는 동안 정지가 불려도 이 요청이 취소된 것으로 드러난다.
+   */
+  private async beginSession(): Promise<number> {
+    this.invalidatePendingStart();
+    const generation = this.sessionGeneration;
+    this.releaseGraph();
+    await this.closeContext();
+    if (generation !== this.sessionGeneration) {
+      throw new DOMException('오디오 시작 요청이 취소되었습니다.', 'AbortError');
+    }
+    return generation;
+  }
+
+  /** 세션을 처음부터 비운다(시작 실패 정리). 정지는 AudioSession.stop 이 같은 단계를 순서대로 부른다. */
+  async dispose(): Promise<void> {
+    this.invalidatePendingStart();
+    this.releaseGraph();
+    await this.closeContext();
+  }
+
   async start(deviceId?: string): Promise<void> {
     await this.init(deviceId);
     this.rebuildChain();
-  }
-
-  async stop(): Promise<void> {
-    if (this.masterGain && this.context && this.context.state !== 'closed') {
-      rampParam(this.masterGain.gain, 0, this.context, 0.02);
-      await wait(24);
-    }
-
-    this.dispose();
   }
 
   updatePedal(pedal: PedalState): void {
@@ -689,13 +741,11 @@ export class AudioEngine {
 
   private cleanupFailedSession(context: AudioContext, generation: number): void {
     if (generation === this.sessionGeneration && context === this.context) {
-      this.dispose();
+      void this.dispose();
       return;
     }
 
-    if (context.state !== 'closed') {
-      void context.close();
-    }
+    void this.closeTracked(context);
   }
 
   private createWorkletUrl(source: string): string {

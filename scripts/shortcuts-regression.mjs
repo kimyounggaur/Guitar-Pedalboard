@@ -94,6 +94,14 @@ assert.match(globalSource, /audioState\.isRunning[\s\S]*audioState\.stop\(\)[\s\
 assert.match(globalSource, /tapTempoTap\(\)/);
 assert.match(globalSource, /activateSlot\(command\.slot\)/);
 assert.match(globalSource, /getState\(\)\.panic\(\)/);
+// 긴급 정지(Esc)는 컨트롤에 포커스가 있어도 통하되, Esc 를 자기 일에 쓰는 컨트롤만 예외다(REFACTOR_LOG L-17).
+assert.match(globalSource, /export function isEscapeOwnedByTarget/);
+assert.match(globalSource, /export function isShortcutBlockedByTarget/);
+assert.match(
+  globalSource,
+  /command\.type === 'panic'\) return event\.isComposing \|\| isEscapeOwnedByTarget\(event\.target\)/,
+);
+assert.match(globalSource, /!command \|\| isShortcutBlockedByTarget\(command, event\)/);
 
 const modalBranch = globalSource.indexOf('if (helpOpenRef.current)');
 const globalExecution = globalSource.indexOf('executeShortcutCommand(command, openHelp)');
@@ -145,7 +153,7 @@ const harnessBundle = await build({
   stdin: {
     contents: [
       "export { AudioEngine } from './audio/AudioEngine.ts';",
-      "export { executeShortcutCommand } from './components/GlobalKeyboardShortcuts.tsx';",
+      "export { executeShortcutCommand, isEscapeOwnedByTarget, isInteractiveShortcutTarget, isShortcutBlockedByTarget } from './components/GlobalKeyboardShortcuts.tsx';",
       "export { useAudioStore } from './store/audioStore.ts';",
       "export { clonePedals, usePedalStore } from './store/pedalStore.ts';",
       "export { usePresetStore } from './store/presetStore.ts';",
@@ -164,10 +172,120 @@ const {
   AudioEngine,
   clonePedals,
   executeShortcutCommand,
+  isEscapeOwnedByTarget,
+  isInteractiveShortcutTarget,
+  isShortcutBlockedByTarget,
   useAudioStore,
   usePedalStore,
   usePresetStore,
 } = await import(harnessUrl);
+
+// ── 긴급 정지(Esc)의 대상 판정 ────────────────────────────────────────────────
+// DOM 이 없는 환경이라 선택자를 쉼표 조각으로 나눠 '이 요소(또는 조상)가 해당하는 조각'이 있는지만 본다.
+// 운영 코드의 선택자 문자열에 그 조각이 들어 있어야 통과하므로, 선택자에서 조각이 빠지면 여기서 걸린다.
+class FakeElement {
+  constructor(tagName, { type = '', attributes = [], matches = [] } = {}) {
+    this.tagName = tagName.toUpperCase();
+    this.type = type;
+    this.attributes = new Set(attributes);
+    this.matches = new Set(matches);
+  }
+
+  hasAttribute(name) {
+    return this.attributes.has(name);
+  }
+
+  closest(selector) {
+    const clauses = selector.split(',').map((clause) => clause.trim());
+    return clauses.some((clause) => this.matches.has(clause)) ? this : null;
+  }
+}
+globalThis.Element = FakeElement;
+
+const escapeOwnedTargets = {
+  '<select>': new FakeElement('select'),
+  '<textarea>': new FakeElement('textarea'),
+  '글자 입력 칸': new FakeElement('input', { type: 'text' }),
+  '숫자 입력 칸(노브 값 편집)': new FakeElement('input', { type: 'number' }),
+  '검색 입력 칸': new FakeElement('input', { type: 'search' }),
+  'contenteditable': new FakeElement('div', {
+    matches: ['[contenteditable]:not([contenteditable="false"])'],
+  }),
+  'role=textbox': new FakeElement('div', { matches: ['[role="textbox"]'] }),
+  'role=searchbox': new FakeElement('div', { matches: ['[role="searchbox"]'] }),
+  'role=spinbutton': new FakeElement('div', { matches: ['[role="spinbutton"]'] }),
+  'role=combobox': new FakeElement('div', { matches: ['[role="combobox"]'] }),
+  'role=listbox': new FakeElement('div', { matches: ['[role="listbox"]'] }),
+  '열린 메뉴 안의 항목(MIDI 메뉴)': new FakeElement('button', { matches: ['button', '[role="menu"]'] }),
+  '대화상자 안(role=dialog)': new FakeElement('button', { matches: ['button', '[role="dialog"]'] }),
+  '모달 안(aria-modal)': new FakeElement('button', { matches: ['button', '[aria-modal="true"]'] }),
+  '메뉴가 열린 트리거 버튼': new FakeElement('button', {
+    matches: ['button', '[aria-haspopup][aria-expanded="true"]'],
+  }),
+};
+for (const [label, element] of Object.entries(escapeOwnedTargets)) {
+  assert.equal(isEscapeOwnedByTarget(element), true, `${label}: Esc 는 컨트롤이 먼저 써야 합니다.`);
+}
+
+const emergencyStopTargets = {
+  '버튼': new FakeElement('button', { matches: ['button'] }),
+  '페달 스위치(role=switch)': new FakeElement('button', { matches: ['button', '[role="switch"]'] }),
+  '슬라이더(input range)': new FakeElement('input', { type: 'range', matches: ['[role="slider"]'] }),
+  '체크박스': new FakeElement('input', { type: 'checkbox' }),
+  '라디오': new FakeElement('input', { type: 'radio' }),
+  '탭(role=tab)': new FakeElement('button', { matches: ['button', '[role="tab"]'] }),
+  '링크': new FakeElement('a', { attributes: ['href'], matches: ['a[href]'] }),
+  'role=button': new FakeElement('div', { matches: ['[role="button"]'] }),
+  'tabindex 요소': new FakeElement('div', { matches: ['[tabindex]:not([tabindex="-1"])'] }),
+  '메뉴가 닫힌 트리거 버튼': new FakeElement('button', { matches: ['button'] }),
+};
+for (const [label, element] of Object.entries(emergencyStopTargets)) {
+  assert.equal(isInteractiveShortcutTarget(element), true, `${label}: 컨트롤로 판정되어야 합니다.`);
+  assert.equal(isEscapeOwnedByTarget(element), false, `${label}: Esc 는 긴급 정지로 통해야 합니다.`);
+  assert.equal(
+    isShortcutBlockedByTarget({ type: 'panic' }, { target: element, isComposing: false }),
+    false,
+    `${label}: 포커스가 있어도 Esc 긴급 정지는 막히면 안 됩니다.`,
+  );
+  // Esc 가 아닌 단축키는 컨트롤이 먼저 쓰도록 계속 막는다(숫자 입력·Space 로 버튼 누르기 등).
+  for (const command of [
+    { type: 'toggle-pedal', index: 0 },
+    { type: 'toggle-audio' },
+    { type: 'tap-tempo' },
+    { type: 'activate-slot', slot: 'A' },
+    { type: 'show-help' },
+  ]) {
+    assert.equal(
+      isShortcutBlockedByTarget(command, { target: element, isComposing: false }),
+      true,
+      `${label}: ${command.type} 는 컨트롤에 포커스가 있으면 막혀야 합니다.`,
+    );
+  }
+}
+
+for (const [label, element] of Object.entries(escapeOwnedTargets)) {
+  assert.equal(
+    isShortcutBlockedByTarget({ type: 'panic' }, { target: element, isComposing: false }),
+    true,
+    `${label}: Esc 는 그 컨트롤이 쓰고 긴급 정지로 가지 않아야 합니다.`,
+  );
+}
+
+// 한글 조합을 취소하는 Esc 는 긴급 정지가 아니다.
+assert.equal(
+  isShortcutBlockedByTarget({ type: 'panic' }, { target: emergencyStopTargets['버튼'], isComposing: true }),
+  true,
+);
+// 컨트롤이 아닌 곳(body, 포커스 없음)에서는 전과 같이 모든 단축키가 통한다.
+const plainBody = new FakeElement('body');
+assert.equal(isInteractiveShortcutTarget(plainBody), false);
+for (const command of [{ type: 'panic' }, { type: 'toggle-audio' }, { type: 'tap-tempo' }]) {
+  assert.equal(isShortcutBlockedByTarget(command, { target: plainBody, isComposing: false }), false);
+}
+// Element 가 아닌 대상(window, null)은 막지 않는다.
+assert.equal(isEscapeOwnedByTarget(null), false);
+assert.equal(isEscapeOwnedByTarget({}), false);
+assert.equal(isShortcutBlockedByTarget({ type: 'panic' }, { target: null, isComposing: false }), false);
 
 const reorderedPedals = clonePedals(usePedalStore.getState().pedals).reverse();
 usePedalStore.getState().setPedals(reorderedPedals);
@@ -260,5 +378,5 @@ assert.equal(
 assert.equal(helpOpens, 1);
 
 console.log(
-  'Shortcut regression passed: guarded routing, current-order bypass, audio/A-B/tap/panic actions, single listener and accessible focus-trapped help.',
+  'Shortcut regression passed: guarded routing, Esc emergency stop through focused controls, current-order bypass, audio/A-B/tap/panic actions, single listener and accessible focus-trapped help.',
 );

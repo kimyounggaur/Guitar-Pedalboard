@@ -685,6 +685,64 @@ select,
   box-shadow: 0 12px 30px rgba(30, 35, 41, 0.24);
 }
 
+.toast-region {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: 12px;
+  z-index: 1100;
+  display: grid;
+  gap: 8px;
+  width: min(420px, calc(100vw - 24px));
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: rgba(8, 12, 20, 0.97);
+  box-shadow: var(--shadow);
+  color: #e8edf4;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.45;
+  pointer-events: auto;
+}
+
+.toast-info {
+  border-left-color: var(--accent);
+}
+
+.toast-success {
+  border-left-color: var(--success);
+}
+
+.toast-warning {
+  border-left-color: var(--warning);
+}
+
+.toast-error {
+  border-left-color: var(--danger);
+}
+
+.toast-message {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.toast-close {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+}
+
 .preset-form {
   gap: 8px;
 }
