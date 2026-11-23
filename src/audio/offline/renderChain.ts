@@ -1,9 +1,13 @@
 // 실제 이펙트 클래스와 워클릿으로 신호 체인을 OfflineAudioContext 에서 렌더한다.
-// 그래프 모양은 AudioEngine 과 같다:
-//   입력 → InputStage(장치 입력이면 채널 선택·자동 판정) → inputGain → 이펙트 체인(페달 순서) → OutputStage(presetTrim → masterGain → howlGuard → limiter) → 출력
+// 그래프 모양은 AudioEngine 과 같다(설계서 4.3절):
+//   입력 → level-meter#in → InputStage(장치 입력이면 채널 선택·자동 판정) → inputGain(→ output-guard 입력 1) → 이펙트 체인(페달 순서)
+//        → OutputStage(presetTrim → masterGain → output-guard 입력 0 → limiter → level-meter#out) → 출력
+// `monitoring: false` 면 레벨 미터와 출력 가드를 모두 뺀 그래프(S1.5 이전과 같은 모양)로 렌더한다. P-17 이 두 모양의 렌더 시간 차이를 잰다.
 // 오디오 프로브(src/audio/testing)가 쓰고, 나중에 '음량 맞추기'(프리셋 trim 계산)도 같은 코드를 쓴다.
 import type { EffectNodeWrapper, PedalParamValue, PedalState } from '../types';
-import { InputStage, MONITOR_INTERVAL_MS, type InputChannelMode } from '../engine/InputStage';
+import type { GuardMode, MonitorMsg } from '../engine/guardSpec';
+import { InputStage, type InputChannelMode } from '../engine/InputStage';
+import { createLevelMeter, createOutputGuard, GUARD_ANALYSIS_INPUT } from '../engine/monitorNodes';
 import { limiterLookaheadFrames, OutputStage } from '../engine/OutputStage';
 import { dbToGain } from '../utils/db';
 import { ImpulseCache } from '../utils/impulseCache';
@@ -26,6 +30,11 @@ export interface ChainHandle {
   inputStage: InputStage;
   /** 렌더 중에 페달 상태를 바꾼다(AudioEngine.setPedalParam 과 같은 경로: effect.update). */
   patchPedal(id: string, patch: PedalPatch): void;
+  /**
+   * 레벨 미터·출력 가드·리미터가 포트로 보낸 메시지(도착 순서). `monitoring: false` 면 비어 있다.
+   * 포트 메시지는 렌더가 끝난 직후에도 조금 늦게 도착할 수 있으므로, 끝 쪽 메시지가 필요하면 `afterRender` 에서 잠깐(수십 ms) 기다린 뒤 읽는다.
+   */
+  readonly monitorMessages: readonly MonitorMsg[];
 }
 
 export interface ChainEvent {
@@ -55,6 +64,13 @@ export interface RenderChainOptions {
   inputChannelMode?: InputChannelMode;
   /** 마지막 리미터를 넣을지. 기본 true(엔진과 같다). */
   limiter?: boolean;
+  /** 레벨 미터(in·out)와 출력 가드를 그래프에 넣을지. 기본 true(엔진과 같다). false 는 S1.5 이전 모양이다. */
+  monitoring?: boolean;
+  /**
+   * 출력 가드의 판정 모드. 기본 'off'(소리를 건드리지 않는다 — 일정한 음을 길게 내는 시험 신호가 하울링으로 차단되면 다른 측정이 무너진다).
+   * 'device' 는 입력 1(분석)을 켜고, 'file' 은 끈다. 하울링 시험(P-07)과 오버헤드 측정(P-17)만 'device' 를 쓴다.
+   */
+  guardMode?: GuardMode;
   /**
    * 리미터가 소리를 늦추는 고정 지연(룩어헤드 1 ms)을 출력에서 걷어 낼지. 기본 true.
    * 입력과 출력을 같은 시각으로 맞춰 비교하는 측정(전달함수·클릭 창·RMS 창)은 이 지연이 끼면 어긋나므로 걷어 낸다.
@@ -90,6 +106,23 @@ export interface OfflineRender {
 
 const RENDER_QUANTUM = 128;
 /**
+ * 2채널 장치 입력의 자동 판정에 채널별 RMS 를 넘기는 간격과 창. 실시간은 level-meter#in 이 포트로 알려 주는데, 포트 메시지는 렌더와
+ * 같은 시각에 도착하지 않아 오프라인에서는 판정 시각이 흔들린다. 그래서 렌더 도중 일정 간격으로 멈춰 입력 샘플에서 직접 재서 넘긴다
+ * (S1.5 이전의 InputStage.measure() 와 같은 창·같은 식이라 판정 결과가 그대로다. REFACTOR_LOG L-46).
+ */
+const CHANNEL_LEVEL_INTERVAL_MS = 50;
+const CHANNEL_LEVEL_WINDOW_SAMPLES = 2048;
+const SILENT_DB = -120;
+
+/** `channel` 의 [end − 창, end) 구간 RMS(dBFS). 끝난 뒤나 시작 전은 무음으로 센다. */
+function windowRmsDb(channel: Float32Array, end: number): number {
+  const stop = Math.min(end, channel.length);
+  let sum = 0;
+  for (let i = Math.max(0, end - CHANNEL_LEVEL_WINDOW_SAMPLES); i < stop; i += 1) sum += channel[i] * channel[i];
+  const rms = Math.sqrt(sum / CHANNEL_LEVEL_WINDOW_SAMPLES);
+  return rms > 1e-6 ? 20 * Math.log10(rms) : SILENT_DB;
+}
+/**
  * 캐시에 있는 임펄스를 ReverbEffect 가 컨볼버에 적용하는 데는 8 ms 타이머가 한 번 돈다.
  * 임펄스를 미리 요청해 두므로 이 시간만 기다리면 된다.
  */
@@ -108,6 +141,8 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
     source = 'device',
     inputChannelMode = 'auto',
     limiter = true,
+    monitoring = true,
+    guardMode = 'off',
     alignOutput = true,
     events = [],
   } = options;
@@ -139,9 +174,17 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
   const inputGain = context.createGain();
   inputGain.gain.value = dbToGain(inputGainDb);
   const chainInput = context.createGain();
-  const howlGuard = new AudioWorkletNode(context, 'howl-guard', { outputChannelCount: [2] });
-  // AudioEngine 과 같은 출력 단계(마스터 게인 → 가드 → 리미터). 리미터를 끄는 렌더(limiter: false)는 가드까지만 잇는다.
-  const outputStage = limiter ? new OutputStage(context, { guard: howlGuard }) : null;
+  const monitorMessages: MonitorMsg[] = [];
+  const collect = (node: AudioWorkletNode | null): void => {
+    if (node) node.port.onmessage = (event: MessageEvent<MonitorMsg>) => monitorMessages.push(event.data);
+  };
+  const inputTap = monitoring ? createLevelMeter(context, 'in') : null;
+  const outputTap = monitoring ? createLevelMeter(context, 'out') : null;
+  const guard = monitoring ? createOutputGuard(context, source === 'device' ? guardMode : 'file') : null;
+  [inputTap, outputTap, guard].forEach(collect);
+  // AudioEngine 과 같은 출력 단계(마스터 게인 → 가드 → 리미터 → 출력 미터). 리미터를 끄는 렌더(limiter: false)는 리미터만 빠진다.
+  const outputStage = limiter ? new OutputStage(context, { guard, levelMeter: outputTap }) : null;
+  if (outputStage) collect(outputStage.limiter);
   const masterGain = outputStage?.input ?? context.createGain();
   masterGain.gain.value = masterVolume;
   // 체인 끝이 들어가는 프리셋 음량 보정. 리미터를 끈 렌더도 같은 자리에 같은 노드를 둔다.
@@ -149,13 +192,16 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
   if (!outputStage) presetTrim.connect(masterGain);
   presetTrim.gain.value = dbToGain(clampTrimDb(presetTrimDb));
 
-  // AudioEngine.createInputStage 와 같은 입력 처리. 판정에 쓰는 레벨 측정은 아래에서 렌더 도중 일정 간격으로 부른다.
-  const inputStage = new InputStage(context, sourceNode, paddedInput.length, {
+  // AudioEngine.createInputStage 와 같은 입력 처리. 판정에 쓰는 레벨 측정은 아래에서 렌더 도중 일정 간격으로 넘긴다.
+  if (inputTap) sourceNode.connect(inputTap);
+  const inputStage = new InputStage(context, inputTap ?? sourceNode, paddedInput.length, {
     mode: inputChannelMode,
     passthrough: source === 'file',
   });
   inputStage.output.connect(inputGain);
   inputGain.connect(chainInput);
+  // 하울링 분석은 장치 입력일 때만 한다(AudioEngine 과 같다).
+  if (guard && source === 'device') inputGain.connect(guard, 0, GUARD_ANALYSIS_INPUT);
 
   const ownsImpulseCache = options.impulseCache === undefined;
   const impulseCache = options.impulseCache ?? new ImpulseCache(context);
@@ -184,8 +230,17 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
     if (outputStage) {
       outputStage.output.connect(context.destination);
     } else {
-      masterGain.connect(howlGuard);
-      howlGuard.connect(context.destination);
+      // 리미터 없는 렌더: 마스터 게인 → (가드) → (출력 미터) → 출력
+      let tail: AudioNode = masterGain;
+      if (guard) {
+        tail.connect(guard);
+        tail = guard;
+      }
+      if (outputTap) {
+        tail.connect(outputTap);
+        tail = outputTap;
+      }
+      tail.connect(context.destination);
     }
 
     // 켜진 리버브가 있을 때만 임펄스 적용을 기다린다(꺼진 리버브는 소리에 끼어들지 않는다).
@@ -206,29 +261,34 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
         if (patch.params) pedal.params = { ...pedal.params, ...patch.params } as PedalState['params'];
         effect.update(pedal);
       },
+      monitorMessages,
     };
 
     options.onBuilt?.(handle);
 
     // suspend 는 렌더 퀀텀(128샘플) 경계에서만 되고, 같은 시각에 두 번 걸 수 없다.
     const usedFrames = new Set<number>();
-    const scheduleSuspend = (requestedFrame: number, run: () => void): void => {
+    const scheduleSuspend = (requestedFrame: number, run: (frame: number) => void): void => {
       let frame = Math.max(RENDER_QUANTUM, Math.round(requestedFrame / RENDER_QUANTUM) * RENDER_QUANTUM);
       while (usedFrames.has(frame)) frame += RENDER_QUANTUM;
       usedFrames.add(frame);
       context.suspend(frame / sampleRate).then(() => {
-        run();
+        run(frame);
         return context.resume();
       }, () => undefined);
     };
     for (const event of [...events].sort((a, b) => a.atSeconds - b.atSeconds)) {
       scheduleSuspend(leadFrames + event.atSeconds * sampleRate, () => event.run(handle));
     }
-    // 2채널 장치 입력은 실시간처럼 일정 간격으로 채널별 레벨을 재서 자동 판정을 진행한다.
+    // 2채널 장치 입력은 실시간처럼 일정 간격으로 채널별 레벨을 넘겨 자동 판정을 진행한다(위 CHANNEL_LEVEL_* 설명).
     if (inputStage.selectable) {
-      const stepFrames = Math.round((sampleRate * MONITOR_INTERVAL_MS) / 1000);
+      const stepFrames = Math.round((sampleRate * CHANNEL_LEVEL_INTERVAL_MS) / 1000);
       for (let frame = stepFrames; frame < totalFrames; frame += stepFrames) {
-        scheduleSuspend(frame, () => inputStage.measure());
+        scheduleSuspend(frame, (suspendedAt) => {
+          const left = windowRmsDb(paddedInput[0], suspendedAt);
+          const right = paddedInput[1] ? windowRmsDb(paddedInput[1], suspendedAt) : SILENT_DB;
+          inputStage.onChannelLevels([left, right], suspendedAt / sampleRate);
+        });
       }
     }
 

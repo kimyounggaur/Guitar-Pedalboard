@@ -41,6 +41,7 @@ import {
   type MidiMappings,
 } from '../audio/midi';
 import { recordingFormatFromMime, selectRecorderMimeType, WavRecorder, type RecordingFileFormat } from '../audio/recording';
+import { monitorSink } from './monitorStore';
 import { usePedalStore } from './pedalStore';
 import { showToast } from './toastStore';
 
@@ -160,10 +161,6 @@ function persistIoSettings(settings: IoSettings): void {
   } catch {
     notifyStorageFailure();
   }
-}
-
-function resetHowlWatch(): void {
-  // Detection state is held in the audio worklet.
 }
 
 function isSamePitch(left: PitchReading, right: PitchReading): boolean {
@@ -814,7 +811,6 @@ function rememberInputChannels(): void {
 function stopSession(reason: StopReason, detail: StopDetail = {}): Promise<StopResult> {
   const active = audioSession.state !== 'idle' || useAudioStore.getState().isRunning;
   if (active) {
-    resetHowlWatch();
     useAudioStore.setState({
       isRunning: false,
       inputMode: 'idle',
@@ -906,7 +902,6 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   },
 
   setHowlProtectionEnabled: (enabled) => {
-    resetHowlWatch();
     audioEngine.setHowlProtection(enabled);
     set({ howlProtectionEnabled: enabled });
     persistIoSettings({
@@ -1000,7 +995,6 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
     if (!wasRunning || get().inputMode !== 'device') return;
 
-    resetHowlWatch();
     set({ isLoading: true });
 
     try {
@@ -1033,7 +1027,6 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
   start: async () => {
     const { selectedDeviceId } = get();
-    resetHowlWatch();
     set({ isLoading: true, error: null });
     loadInputChannels(selectedDeviceId);
 
@@ -1065,7 +1058,6 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   },
 
   startFile: async (file) => {
-    resetHowlWatch();
     set({ isLoading: true, error: null });
 
     try {
@@ -1396,10 +1388,14 @@ audioEngine.setPlaybackEndedHandler(() => {
   void stopSession('user-disconnect');
 });
 
-// The audio worklet detects and mutes without depending on any mounted meter UI.
+// 레벨·가드 상태는 오디오 스레드의 워클릿이 재고 MonitorService 가 monitorStore 에 둔다. 화면은 읽어 그리기만 한다.
+audioEngine.setMonitorSink(monitorSink);
+// 하울링 판정과 안전 무음은 출력 가드 워클릿이 오디오 스레드에서 한다(미터 화면·탭·문서 가시성과 무관).
+// 차단 보고가 오면 소리는 이미 무음이다. 하나뿐인 정리 절차로 세션을 끝내고(녹음은 남는다) 감지한 주파수를 안내에 싣는다.
+// 보호 스위치를 끄는 순간과 겹쳐 차단이 먼저 일어났어도 무음으로 계속 돌지 않도록 스위치는 다시 확인하지 않는다.
 audioEngine.setHowlProtection(initialIoSettings.howlProtectionEnabled);
-audioEngine.setHowlHandler(() => {
+audioEngine.setHowlHandler((freqHz) => {
   const state = useAudioStore.getState();
-  if (!state.isRunning || state.inputMode !== 'device' || !state.howlProtectionEnabled) return;
-  void stopSession('howl');
+  if (!state.isRunning || state.inputMode !== 'device') return;
+  void stopSession('howl', { howlFrequencyHz: freqHz });
 });

@@ -1,11 +1,11 @@
 // S1.3 입력 채널 처리(InputStage) 시험.
 //   1) 자동 판정 규칙(ChannelDecider): 300 ms·15 dB·−50 dBFS 경계, 한 번만 판정, 늦은 폴링에도 안전
 //   2) InputStage 그래프: 연결 모양, 모드별 게인, 20 ms·8 ms 램프, 판정 적용, 통과 모드, 정리
+//   3) S1.5: 채널 레벨은 InputStage 가 재지 않는다(분석 노드 없음). MonitorService 가 넘긴 오디오 시계로 판정하고, 표시할 채널을 알려 준다.
 // 실제 소리(좌우 RMS 차·레벨 손실)는 프로브 P-06 과 E2E E-02 가 브라우저에서 잰다.
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
-import { setTimeout } from 'node:timers';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
 
@@ -247,14 +247,14 @@ function build2ch(options = {}, channelCount = 2) {
   const stage = new InputStage(context, source, channelCount, options);
   const byKind = (kind) => context.nodes.filter((node) => node.kind === kind);
   const [output, gainL, gainR, mono, monoGate, stereoGate] = byKind('gain');
-  return { context, source, stage, output, gainL, gainR, mono, monoGate, stereoGate, splitter: byKind('splitter')[0], analysers: byKind('analyser') };
+  return { context, source, stage, output, gainL, gainR, mono, monoGate, stereoGate, splitter: byKind('splitter')[0] };
 }
 
 const connectsTo = (from, to, output = 0) => from.connections.some((connection) => connection.destination === to && connection.output === output);
 
 {
   // 연결 모양
-  const { source, stage, output, gainL, gainR, mono, monoGate, stereoGate, splitter, analysers } = build2ch();
+  const { context, source, stage, output, gainL, gainR, mono, monoGate, stereoGate, splitter } = build2ch();
   assert.equal(stage.selectable, true);
   assert.equal(stage.output, output);
   assert.ok(connectsTo(source, splitter) && connectsTo(source, stereoGate));
@@ -264,9 +264,9 @@ const connectsTo = (from, to, output = 0) => from.connections.some((connection) 
   assert.equal(mono.channelCount, 1);
   assert.equal(mono.channelCountMode, 'explicit');
   assert.ok(connectsTo(mono, monoGate) && connectsTo(monoGate, output) && connectsTo(stereoGate, output));
-  assert.equal(analysers.length, 2);
-  assert.ok(connectsTo(splitter, analysers[0], 0) && connectsTo(splitter, analysers[1], 1));
-  assert.ok(analysers.every((analyser) => analyser.smoothingTimeConstant === 0));
+  // S1.5: 채널별 레벨은 level-meter#in 워클릿이 잰다. InputStage 는 분석 노드를 만들지 않는다.
+  assert.equal(context.nodes.filter((node) => node.kind === 'analyser').length, 0, '분석 노드가 없다');
+  assert.equal(splitter.connections.length, 2, '분할기는 gainL·gainR 로만 간다');
   // 자동 판정 전에는 0.5/0.5 로 합치고 모노 경로를 쓴다.
   assert.equal(stage.mode, 'auto');
   assert.equal(stage.decision, 'pending');
@@ -372,21 +372,47 @@ for (const [mode, expected] of [['ch1', [1, 0]], ['ch2', [0, 1]]]) {
   assert.deepEqual([gainL.gain.value, gainR.gain.value], [0.5, 0.5]);
 }
 {
-  // measure(): 분석 노드의 샘플 RMS 를 dB 로 바꿔 판정에 넣는다.
-  const { context, stage, analysers } = build2ch();
-  analysers[0].data = 0.05; // RMS −26 dBFS
-  analysers[1].data = 0; // 무음
+  // S1.5: 판정 시각은 측정이 끝난 오디오 시계(MonitorService 가 frame ÷ sampleRate 로 넘긴다)다. 컨텍스트의 currentTime 과 무관하다.
+  const { context, stage } = build2ch();
   const heard = [];
   stage.onDecision((decision) => heard.push(decision));
+  context.currentTime = 99; // 메인 스레드의 시계가 앞서 있어도(탭이 멈췄다 돌아온 경우 등) 판정은 넘겨 받은 시각을 따른다.
+  for (let step = 0; step < 20; step += 1) stage.onChannelLevels([-27, -120], step * 0.05);
+  assert.deepEqual(heard, ['ch1']);
+  assert.equal(stage.decision, 'ch1');
+}
+{
+  // 시각을 생략하면 컨텍스트 시계를 쓴다(오프라인 렌더·옛 호출).
+  const { context, stage } = build2ch();
   for (let step = 0; step < 20; step += 1) {
     context.currentTime = step * 0.05;
-    stage.measure();
+    stage.onChannelLevels([-27, -120]);
   }
-  assert.deepEqual(heard, ['ch1']);
+  assert.equal(stage.decision, 'ch1');
+}
+{
+  // 표시할 채널: 소리가 실제로 흘러 들어가는 채널만(1번만 쓰는 중에 2번의 잡음이 막대를 흔들지 않는다).
+  const auto = build2ch();
+  assert.equal(auto.stage.meteredChannels, 'all', '자동 판정 전(0.5/0.5 합침)');
+  for (let step = 0; step < 20; step += 1) auto.stage.onChannelLevels([-27, -120], step * 0.05);
+  assert.equal(auto.stage.meteredChannels, 0, '자동 판정이 ch1 이면 1번 채널');
+  auto.stage.setMode('ch2');
+  assert.equal(auto.stage.meteredChannels, 1, '수동 2번');
+  auto.stage.setMode('stereo');
+  assert.equal(auto.stage.meteredChannels, 'all', '스테레오는 모두');
+  auto.stage.setMode('ch1');
+  assert.equal(auto.stage.meteredChannels, 0);
+  assert.equal(build2ch({ mode: 'ch2' }).stage.meteredChannels, 1);
+  const summed = build2ch();
+  for (let step = 0; step < 20; step += 1) summed.stage.onChannelLevels([-27, -27], step * 0.05);
+  assert.equal(summed.stage.decision, 'sum');
+  assert.equal(summed.stage.meteredChannels, 'all', '합치는 중이면 모두');
+  assert.equal(build2ch({}, 1).stage.meteredChannels, 'all', '채널 1개 장치');
+  assert.equal(build2ch({ passthrough: true }).stage.meteredChannels, 'all', '파일 재생');
 }
 {
   // 구독 해제, 정리(분석 노드·경로 끊기, 폴링 중지)
-  const { context, source, stage, output, splitter, analysers, monoGate, stereoGate } = build2ch();
+  const { context, source, stage, output, splitter, monoGate, stereoGate } = build2ch();
   const heard = [];
   const unsubscribe = stage.onDecision((decision) => heard.push(decision));
   unsubscribe();
@@ -395,36 +421,19 @@ for (const [mode, expected] of [['ch1', [1, 0]], ['ch2', [0, 1]]]) {
     stage.onChannelLevels([-27, -120]);
   }
   assert.deepEqual(heard, []);
-  stage.startMonitoring(1);
-  stage.startMonitoring(1);
   stage.dispose();
   assert.ok(!connectsTo(source, splitter) && !connectsTo(source, stereoGate), '소스와의 연결을 끊는다');
-  assert.ok([output, splitter, monoGate, stereoGate, ...analysers].every((node) => node.disconnected));
+  assert.ok([output, splitter, monoGate, stereoGate].every((node) => node.disconnected));
   stage.dispose();
   stage.setMode('ch2');
   stage.onChannelLevels([-20, -120]);
-  stage.measure();
 }
 {
-  // 폴링: 일정 간격으로 measure 를 부르고 dispose 하면 멈춘다.
-  const { context, stage, analysers } = build2ch();
-  analysers[0].data = 0.05;
-  analysers[1].data = 0;
-  let measures = 0;
-  const original = stage.measure.bind(stage);
-  stage.measure = () => {
-    measures += 1;
-    context.currentTime += 0.05;
-    original();
-  };
-  stage.startMonitoring(2);
-  await new Promise((resolve) => setTimeout(resolve, 80));
-  assert.ok(measures >= 10, `폴링이 돌아야 합니다: ${measures}`);
-  assert.equal(stage.decision, 'ch1');
+  // 정리한 뒤에는 늦게 도착한 측정이 판정을 만들지 않는다(세션이 끝난 뒤 남은 포트 메시지 등).
+  const { stage } = build2ch();
   stage.dispose();
-  const stopped = measures;
-  await new Promise((resolve) => setTimeout(resolve, 30));
-  assert.equal(measures, stopped, 'dispose 뒤에는 폴링이 멈춘다');
+  for (let step = 0; step < 20; step += 1) stage.onChannelLevels([-27, -120], step * 0.05);
+  assert.equal(stage.decision, 'pending');
 }
 for (const [label, build] of [
   ['채널 1개 장치', () => build2ch({}, 1)],
@@ -437,7 +446,6 @@ for (const [label, build] of [
   stage.setMode('ch2');
   assert.equal(stage.mode, 'ch2');
   stage.onChannelLevels([-20, -120]);
-  stage.startMonitoring(1);
   assert.equal(stage.decision, 'pending');
   stage.dispose();
   assert.ok(!connectsTo(source, output));

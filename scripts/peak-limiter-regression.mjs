@@ -1,5 +1,6 @@
 // 마스터 리미터(S1.4a, 설계서 GS-6) 시험.
 //   · limiter.worklet.ts 를 실제 파일 그대로 읽어 오디오 스레드를 흉내 낸 vm 에서 돌린다(문자열 복사본이 아니다).
+//   · S1.5: 최근 100 ms 의 최대 이득 감소량을 포트로 알린다({type:'limiter', maxGrDb, frame}).
 //   · OutputStage 는 가짜 컨텍스트로 연결 모양만 본다. 엔진 연결(스피커·미터·녹음)은 소스 단언 몇 개로 지킨다.
 // 소리 자체(최악 조합 피크)는 오디오 렌더 프로브 P-03 이 잰다.
 import assert from 'node:assert/strict';
@@ -27,11 +28,20 @@ const compiled = await build({
 });
 const workletCode = compiled.outputFiles[0].text;
 const registered = [];
+/** 오디오 스레드의 전역을 흉내 낸다. `currentFrame` 은 process 를 부를 때마다 테스트가 올려 준다. */
+const audioGlobals = { currentFrame: 0 };
 function loadProcessor(sampleRate = SAMPLE_RATE) {
   let Processor;
   vm.runInNewContext(workletCode, {
     sampleRate,
-    AudioWorkletProcessor: class {},
+    get currentFrame() {
+      return audioGlobals.currentFrame;
+    },
+    AudioWorkletProcessor: class {
+      constructor() {
+        this.port = { messages: [], postMessage: (message) => this.port.messages.push(message) };
+      }
+    },
     registerProcessor(name, klass) {
       registered.push(name);
       Processor = klass;
@@ -54,6 +64,7 @@ function runInQuanta(node, left, right) {
   const out = [new Float32Array(left.length), new Float32Array(left.length)];
   for (let start = 0; start < left.length; start += 128) {
     const end = Math.min(left.length, start + 128);
+    audioGlobals.currentFrame = start;
     const block = run(node, left.subarray(start, end), right ? right.subarray(start, end) : undefined);
     out[0].set(block[0], start);
     out[1].set(block[1], start);
@@ -292,25 +303,29 @@ function runInQuanta(node, left, right) {
   const context = { createGain: () => new FakeNode('master') };
 
   const guard = new FakeNode('guard');
-  const stage = new OutputStage(context, { guard });
+  const meter = new FakeNode('level-meter#out');
+  const stage = new OutputStage(context, { guard, levelMeter: meter });
   assert.equal(created.length, 1);
   assert.equal(created[0].name, 'limiter-processor');
   assert.deepEqual(created[0].options, { outputChannelCount: [2] });
-  assert.equal(stage.output, created[0]);
+  assert.equal(stage.limiter, created[0], '리미터 노드는 포트로 감소량을 알리므로 밖에서도 읽을 수 있다');
+  assert.equal(stage.output, meter, '출력 레벨 미터가 있으면 그 노드가 이 단계의 출력이다(스피커·녹음이 여기서 갈라진다)');
+  assert.deepEqual([...stage.limiter.connections], [meter], '리미터 뒤에 level-meter#out');
   assert.notEqual(stage.presetTrim, stage.input, '프리셋 음량 보정(trim)은 마스터 게인과 다른 노드다');
   assert.deepEqual([...stage.presetTrim.connections], [stage.input], '체인 끝이 들어오는 trim 은 마스터 게인으로 간다');
   assert.deepEqual([...stage.input.connections], [guard], '마스터 게인은 가드로 간다');
-  assert.deepEqual([...guard.connections], [stage.output], '가드는 리미터로 간다');
+  assert.deepEqual([...guard.connections], [stage.limiter], '가드는 리미터로 간다');
   stage.dispose();
   assert.equal(stage.presetTrim.connections.size, 0, 'trim 의 연결도 끊는다');
   assert.equal(stage.input.connections.size, 0);
-  assert.equal(stage.output.connections.size, 0);
+  assert.equal(stage.limiter.connections.size, 0);
   assert.equal(guard.connections.size, 0, '가드와 리미터의 연결도 끊는다');
   assert.doesNotThrow(() => stage.dispose(), '두 번 불러도 괜찮다');
 
   const direct = new OutputStage(context);
   assert.deepEqual([...direct.presetTrim.connections], [direct.input], '가드가 없어도 trim 은 마스터 게인으로 간다');
-  assert.deepEqual([...direct.input.connections], [direct.output], '가드가 없으면 마스터 게인이 바로 리미터로 간다');
+  assert.deepEqual([...direct.input.connections], [direct.limiter], '가드가 없으면 마스터 게인이 바로 리미터로 간다');
+  assert.equal(direct.output, direct.limiter, '미터가 없으면 리미터가 이 단계의 출력이다');
   delete globalThis.AudioWorkletNode;
 }
 
@@ -324,13 +339,17 @@ const [engine, urls, modules, renderChain] = await Promise.all([
   readFile('src/audio/offline/renderChain.ts', 'utf8'),
 ]);
 assert.match(urls, /from '\.\/limiter\.worklet\.ts\?worker&url'/, '리미터는 별도 파일을 ?worker&url 로 불러온다');
-assert.match(engine, /new OutputStage\(this\.context, \{ guard: this\.howlGuard \}\)/);
-assert.match(engine, /this\.outputStage\.output\.connect\(this\.context\.destination\)/);
+assert.match(engine, /new OutputStage\(context, \{ guard: this\.outputGuard, levelMeter: this\.outputTap \}\)/);
+assert.match(engine, /this\.outputStage\.output\.connect\(context\.destination\)/);
 assert.match(engine, /this\.outputStage\.output\.connect\(this\.outputMeter\.input\)/);
 assert.match(engine, /this\.outputStage\?\.output\.connect\(this\.recorderDestination\)/, '녹음은 같은 리미터 출력을 받는다');
 assert.match(engine, /limiterWorkletUrl/, '엔진이 리미터 워클릿 파일을 등록한다');
 assert.match(modules, /limiterWorkletUrl/, '오프라인 렌더도 같은 파일을 등록한다');
-assert.match(renderChain, /new OutputStage\(context, \{ guard: howlGuard \}\)/, '오프라인 렌더도 같은 출력 단계를 쓴다');
+assert.match(renderChain, /new OutputStage\(context, \{ guard, levelMeter: outputTap \}\)/, '오프라인 렌더도 같은 출력 단계를 쓴다');
+assert.match(engine, /levelMeterWorkletUrl[\s\S]*outputGuardWorkletUrl/, '엔진이 레벨 미터·출력 가드 워클릿 파일도 등록한다');
+assert.match(modules, /levelMeterWorkletUrl[\s\S]*outputGuardWorkletUrl/, '오프라인 렌더도 같은 파일들을 등록한다');
+assert.match(urls, /level-meter\.worklet\.ts\?worker&url/);
+assert.match(urls, /output-guard\.worklet\.ts\?worker&url/);
 // 프리셋 음량 보정(S1.4c): 체인 끝은 trim 으로 들어간다. 엔진과 오프라인 렌더가 같은 자리를 쓴다.
 assert.match(engine, /to: chainEnd/, '엔진은 체인 끝을 마스터 게인이 아니라 trim 에 잇는다');
 assert.match(engine, /this\.buildChainConnections\(\s*pedals,\s*nextEffects,\s*chainInput,\s*presetTrim,?\s*\)/);
@@ -340,4 +359,49 @@ assert.match(renderChain, /previous\.connect\(presetTrim\)/, '오프라인 렌�
 assert.doesNotMatch(engine, /previous\.connect\(masterGain\)|to: masterGain/, '체인 끝이 마스터 게인으로 곧장 가는 연결은 없다');
 assert.doesNotMatch(engine + modules + renderChain, /peak-limiter-processor|peakLimiterProcessorSource/, '옛 리미터는 남기지 않는다');
 
-console.log('Master limiter (lookahead 1 ms, ceiling −1 dBFS, release 80 ms), OutputStage wiring and recording route passed');
+// ---------------------------------------------------------------------------------------------
+// 9. 감소량 보고(S1.5): 최근 100 ms 의 최대 이득 감소량을 포트로 알린다. 줄일 일이 없으면 보내지 않는다.
+// ---------------------------------------------------------------------------------------------
+{
+  const REPORT_FRAMES = Math.round(SAMPLE_RATE * 0.1);
+  const reportOf = (node) => node.port.messages.filter((message) => message.type === 'limiter');
+
+  // 천장 아래 신호: 보고가 없다
+  const quiet = new Processor();
+  const tone = new Float32Array(REPORT_FRAMES * 4);
+  for (let i = 0; i < tone.length; i += 1) tone[i] = 0.5 * Math.sin((2 * Math.PI * 440 * i) / SAMPLE_RATE);
+  runInQuanta(quiet, tone);
+  assert.equal(quiet.port.messages.length, 0, '줄이지 않으면 메시지가 없다');
+
+  // 큰 피크 하나: 한 번 보고하고(최대 감소량 ≈ 20·log10(2/천장) = 6.99 + 0.9 dB), 지나간 뒤 0 을 한 번 알리고, 그 뒤로는 조용하다
+  const loud = new Processor();
+  const burst = new Float32Array(REPORT_FRAMES * 20).fill(0.1);
+  burst[200] = 2;
+  runInQuanta(loud, burst);
+  const reports = reportOf(loud);
+  assert.ok(reports.length >= 2, `감소를 알리고 끝났음도 알린다: ${JSON.stringify(reports)}`);
+  const expectedDb = -20 * Math.log10(CEILING / 2);
+  assert.ok(Math.abs(reports[0].maxGrDb - expectedDb) < 0.01, `첫 보고는 최대 감소량 ${expectedDb.toFixed(2)} dB: ${reports[0].maxGrDb}`);
+  assert.ok(reports[0].frame >= REPORT_FRAMES && reports[0].frame <= REPORT_FRAMES + 128, `보고 시각(frame)은 100 ms 쯤: ${reports[0].frame}`);
+  assert.ok(reports.every((report) => report.frame % 128 === 0), '보고는 렌더 양자 끝(frame)에 붙는다');
+  const last = reports.at(-1);
+  assert.ok(last.maxGrDb < 0.05, `마지막 보고는 '줄이지 않음'이다: ${last.maxGrDb}`);
+  const decreasing = reports.map((report) => report.maxGrDb);
+  assert.deepEqual(decreasing, [...decreasing].sort((a, b) => b - a), '릴리즈 동안 보고되는 감소량은 줄어든다');
+  assert.ok(reports.length < 12, `릴리즈가 끝나면 보고가 멈춘다: ${reports.length}`);
+  const countBefore = loud.port.messages.length;
+  runInQuanta(loud, new Float32Array(REPORT_FRAMES * 5).fill(0.1));
+  assert.equal(loud.port.messages.length, countBefore, '이미 0 을 알렸으면 더 보내지 않는다');
+
+  // 지속되는 과입력: 100 ms 마다 계속 알린다(천장 ÷ 1.5 → 약 4.4 dB)
+  const steady = new Processor();
+  const loudTone = new Float32Array(REPORT_FRAMES * 10);
+  for (let i = 0; i < loudTone.length; i += 1) loudTone[i] = 1.5 * Math.sin((2 * Math.PI * 500 * i) / SAMPLE_RATE);
+  runInQuanta(steady, loudTone);
+  const sustained = reportOf(steady);
+  assert.ok(sustained.length >= 8, `지속 과입력에서는 계속 보고한다: ${sustained.length}`);
+  const settled = sustained.at(-1).maxGrDb;
+  assert.ok(Math.abs(settled - -20 * Math.log10(CEILING / 1.5)) < 0.3, `정상 상태 감소량 ≈ 4.4 dB: ${settled}`);
+}
+
+console.log('Master limiter (lookahead 1 ms, ceiling −1 dBFS, release 80 ms, GR report), OutputStage wiring and recording route passed');
