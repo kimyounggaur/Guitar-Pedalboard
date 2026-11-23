@@ -21,12 +21,12 @@
 | L-2 | 전체 | 기준 커밋 `4ac9cf7` | 실제 HEAD는 `2a5ab81`(2026-11-13), 기준 이후 8커밋·136파일 변경 | 저장소가 설계서 작성 이후 앞서 나감(Codex PR #1 병합 포함). S0.1에서 항목별로 대조 |
 | L-3 | S0.1 | 설계서·초안의 줄 번호와 "현재" 서술은 기준 커밋 `4ac9cf7` 기준 | 코드 지도의 `파일:줄` 인용 168건을 현재 코드(`2a5ab81`)를 열어 내용으로 대조하고, 스크립트 치환 74곳과 손으로 고친 몇 곳을 바로잡음. 판정 집계는 해결 21·부분 20·미해결 3(합 44). 판정 3건(R2-7·R2-10·R2-14)은 '부분'으로 바꿈 | 줄 범위 안인지만 보면 틀린 줄이 남는다(예: `PedalCard.tsx` 311→313, `tuner-processor.ts` 3→4). 머리말 집계도 표에서 다시 세어 고침(20/18/6 → 21/20/3). `npm test`가 `responsive-a11y`를 뺀다는 점, localStorage 호출이 7개 파일 16곳이라는 점도 이때 바로잡음 |
 | L-4 | S2.11 (D13) | 10~15번째 페달 단축키 `Shift + 1~6` | **현재 키 `0 Q W E R Y` 유지** | 이미 구현돼 있고(`keyboardShortcuts.ts:30`) `shortcuts-regression.mjs`가 31곳으로 지킨다. 바꾸면 사용자 습관과 시험이 깨지는데 얻는 것이 없다. D13 기본값을 바꾸는 것이므로 편차로 남긴다 |
+| L-5 | S0.2 | ① 시험 순서 typecheck → lint → test → build ② esbuild를 devDependencies에 추가 ③ 시험 14개 ④ `verify.yml`: PR과 main 공통 | ① **typecheck → lint → build → test**(`test:pwa`가 `dist/`를 읽으므로 빌드가 먼저. `deploy.yml`도 원래 이 순서) ② 이미 들어 있어 추가 없음 ③ **24개**(`responsive-a11y` 포함 — 예전 `npm test`는 이것만 빼고 돌았다) ④ 트리거는 PR(모든 브랜치)·`phase/**` push·수동 실행, **main push는 뺌**(main에서는 `deploy.yml`이 같은 검사를 배포 앞에서 하므로 중복 방지) | 코드 지도 14번: 현재 저장소가 설계서 작성 시점보다 앞서 있음. 그 밖의 추가: 깨끗한 체크아웃에서 `npm test`가 `dist/` 없어 실패하므로 러너가 `dist/`가 없으면 먼저 빌드함 · CI에서 `CHROME_PATH`가 틀리면 다른 Chrome으로 넘어가지 않고 실패 · `CI=false`/`0`은 CI로 보지 않음 · 통과한 시험이 남긴 '건너뜀' 경고를 요약에 다시 보여 줌 · `actionlint`는 설치가 막혀 돌리지 못함(YAML 문법만 확인) |
 
 ### 아직 실행 전이지만 코드 지도(8절)에서 이미 정한 방향
 
 각 Step을 실제로 할 때 결과를 위 표에 번호를 붙여 옮긴다. 아래는 실행 전 판단이라 바뀔 수 있다.
 
-- **S0.2** — `esbuild`가 이미 devDependency다. 남은 일: 24개를 한 명령으로 돌리기(`npm test`는 `responsive-a11y`를 뺌), `engines`, PR·`phase/*`용 `verify.yml`, CI에서 Chrome이 없으면 건너뛰지 않고 실패.
 - **S1.4a** — 리미터가 이미 있다(`peak-limiter-processor.ts`, 천장 0.89 ≈ −1 dBFS). 새로 만들지 않고 `OutputStage`로 옮기며 룩어헤드 1 ms·릴리즈 80 ms·안전 클립만 바꾼다.
 - **S1.5** — 하울링 감지가 이미 워클릿이지만 출력 쪽·−22 dBFS 기준이다. 설계서의 입력 쪽 −50 dBFS·±20 cents 방식으로 **교체**한다.
 - **S2.4** — On/Off·Bypass 통합이 단일 스위치와 스키마 11로 이미 들어와 있다. `active` 이름 바꾸기보다 v2 키·백업·다중 탭·서비스 워커 업데이트 처리에 집중한다.

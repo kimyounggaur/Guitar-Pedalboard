@@ -1,9 +1,9 @@
 # 정규식 단언 위치 목록
 
-> `node docs/refactoring/tools/list-regex-assertions.mjs` 로 생성한 파일이다(수정하지 말고 다시 생성한다).
+> `node docs/refactoring/tools/list-regex-assertions.mjs` 로 생성한 파일이다(수정하지 말고 다시 생성한다). 줄 번호는 생성한 시점의 `scripts/` 기준이므로, 시험 파일을 고친 Step 뒤에는 다시 생성한다.
 > 세는 대상은 `assert.match(` 와 `assert.doesNotMatch(` 호출이다. 보고서의 "337곳"은 기준 커밋 `4ac9cf7`에서 이 두 호출을 센 값과 같다(316 + 21).
 
-**현재(HEAD) 합계: 312곳** (match 293 + doesNotMatch 19)
+**생성 시점 합계: 312곳** (match 293 + doesNotMatch 19)
 
 | 파일 | match | doesNotMatch | 합계 |
 |---|---:|---:|---:|
@@ -227,97 +227,97 @@
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
 |---:|---|---|---|
-| 50 | match | `appShellSource` | `/MOBILE_LAYOUT_QUERY = '\(max-width: 767px\)'/` |
-| 51 | match | `appShellSource` | `/role="tablist"/` |
-| 52 | match | `appShellSource` | `/role="tab"/` |
-| 58 | match | `appShellSource` | `new RegExp('\\{ id: '${id}', label: '${label}' \\}')` |
-| 63 | match | `appShellSource` | `/aria-selected=\{isActive\}/` |
-| 64 | match | `appShellSource` | `/tabIndex=\{isActive \? 0 : -1\}/` |
-| 69 | match | `appShellSource` | `/const inputPanel = <ConnectGuitarPanel isMobile=\{isMobileLayout\} \/` |
-| 70 | match | `appShellSource` | `/const meterPanel = <Meter active=\{!isMobileLayout \\|\\| activeMobil` |
-| 71 | match | `appShellSource` | `/inputPanel=\{isMobileLayout \? undefined : inputPanel\}/` |
-| 72 | match | `appShellSource` | `/window\.addEventListener\('online', updateOnlineStatus\)/` |
-| 73 | match | `appShellSource` | `/window\.addEventListener\('offline', updateOnlineStatus\)/` |
-| 74 | match | `appShellSource` | `/window\.removeEventListener\('online', updateOnlineStatus\)/` |
-| 75 | match | `appShellSource` | `/window\.removeEventListener\('offline', updateOnlineStatus\)/` |
-| 76 | match | `appShellSource` | `/오프라인 상태입니다\./` |
-| 77 | match | `appShellSource` | `/기타 실시간 입력은 사용할 수 없습니다\. 음원 파일 재생 모드로 톤을 확인해 주세요\./` |
-| 78 | !match | `appShellSource` | `/addEventListener\('keydown'/` |
-| 80 | match | `pedalBoardSource` | `/interface PedalBoardProps[\s\S]*inputPanel\?: ReactNode/` |
-| 81 | match | `pedalBoardSource` | `/export function PedalBoard\(\{ inputPanel \}: PedalBoardProps\)/` |
-| 82 | match | `pedalBoardSource` | `/\{inputPanel\}/` |
-| 83 | match | `pedalBoardSource` | `/className="signal-chain-text"[\s\S]{0,100}role="region"/` |
-| 84 | match | `pedalBoardSource` | `/aria-label="현재 신호 체인"/` |
-| 85 | match | `pedalBoardSource` | `/aria-atomic="true"/` |
-| 86 | match | `pedalBoardSource` | `/tabIndex=\{0\}/` |
-| 88 | match | `mediaQuerySource` | `/window\.matchMedia\(query\)/` |
-| 89 | match | `mediaQuerySource` | `/mediaQuery\.addEventListener\('change', updateMatch\)/` |
-| 90 | match | `mediaQuerySource` | `/mediaQuery\.removeEventListener\('change', updateMatch\)/` |
-| 92 | match | `meterSource` | `/interface MeterProps[\s\S]*active\?: boolean/` |
-| 93 | match | `meterSource` | `/export function Meter\(\{ active = true \}: MeterProps\)/` |
-| 99 | match | `meterSource` | `/\}, \[active, isRunning\]\` |
-| 100 | match | `meterSource` | `/window\.setInterval\(update, STORE_REFRESH_INTERVAL_MS\)/` |
-| 101 | match | `meterSource` | `/\}, \[isRunning, refreshMeters\]\` |
-| 102 | match | `meterSource` | `/tunerStatus === 'in-tune'[\s\S]*'정확함'/` |
-| 103 | match | `meterSource` | `/roundedCents > 0 \? '높음' : '낮음'/` |
-| 104 | match | `meterSource` | `/const boundedCents = Math\.round\(Math\.min\(50, Math\.max\(-50, hasP` |
-| 105 | match | `meterSource` | `/aria-valuenow=\{boundedCents\}/` |
-| 106 | match | `meterSource` | `/aria-valuetext=\{tuningStatusLabel\}[\s\S]{0,120}role="meter"/` |
-| 108 | match | `connectSource` | `/guitar-pedalboard:mobile-audio-notice-dismissed/` |
-| 109 | match | `connectSource` | `/모바일은 입력 지연이 커서 실시간 연주에 적합하지 않습니다\./` |
-| 110 | match | `connectSource` | `/음원 파일 재생 모드로 톤을 확인하거나, PC \+ 오디오 인터페이스 사용을 권장합니다\./` |
-| 112 | match | `connectSource` | `/aria-label="모바일 오디오 안내 닫기"/` |
-| 114 | match | `pedalCardSource` | `/<article[\s\S]*role="group"[\s\S]*aria-label=\{'\$\{pedal\.name\} 이펙터` |
-| 115 | match | `delaySource` | `/ariaValueText=\{delayModeLabels\[params\.mode\]\}/` |
-| 116 | match | `delaySource` | `/<div className="delay-led" aria-hidden="true" \/>/` |
-| 117 | !match | `delaySource` | `/delay-led[^>]*aria-label/` |
-| 118 | match | `noiseGateSource` | `/noise-gate-led[^>]*aria-hidden="true"/` |
-| 119 | !match | `noiseGateSource` | `/noise-gate-led[^>]*aria-label/` |
-| 120 | match | `fuzzSource` | `/ariaValueText=\{fuzzModeLabels\[params\.mode\]\}/` |
-| 121 | match | `presetSource` | `/<ul className="preset-library-list" aria-label="프리셋 라이브러리">/` |
-| 122 | match | `presetSource` | `/<li key=\{library\.id\}>/` |
-| 123 | match | `presetSource` | `/<ul className="preset-list" aria-label="프리셋 목록">/` |
-| 124 | match | `presetSource` | `/<li className=\{'preset-item/` |
-| 125 | !match | `presetSource` | `/role="list"/` |
-| 134 | match | `namedGenericTag` | `/\brole=/, '${componentFile}: 이름 있는 generic 요소에 유효한 role이 필요합니다.'` |
-| 145 | match | `inputTag` | `/aria-label=/, '${componentFile}: range aria-label 누락'` |
-| 146 | match | `inputTag` | `/aria-valuetext=/, '${componentFile}: range aria-valuetext 누락'` |
-| 154 | match | `indexSource` | `/viewport-fit=cover/` |
-| 155 | match | `responsiveCss` | `/@media \(min-width: 768px\) and \(max-width: 1279px\)/` |
-| 156 | match | `pedalsCss` | `/grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 300px\), ` |
-| 157 | match | `appShellSource` | `/useState\(false\)/` |
-| 158 | match | `appShellSource` | `/aria-expanded=\{mobileDockOpen\}/` |
-| 159 | match | `responsiveCss` | `/\.mobile-control-panels\[hidden\]/` |
-| 160 | match | `responsiveCss` | `/@media \(max-width: 767px\)/` |
-| 161 | match | `responsiveCss` | `/grid-auto-flow: column/` |
-| 162 | match | `responsiveCss` | `/scroll-snap-type: x mandatory/` |
-| 163 | match | `responsiveCss` | `/scroll-snap-align: start/` |
-| 164 | match | `responsiveCss` | `/position: fixed[\s\S]*bottom: 0[\s\S]*\.mobile-bottom-tabs/` |
-| 165 | match | `responsiveCss` | `/env\(safe-area-inset-bottom\)/` |
-| 166 | match | `responsiveCss` | `/min-height: 44px/` |
-| 167 | match | `responsiveCss` | `/\.chain-toast[\s\S]*bottom: calc\(82px \+ env\(safe-area-inset-bottom` |
-| 168 | match | `responsiveCss` | `/\.app-shell[\s\S]*overflow-x: clip/` |
-| 169 | match | `responsiveCss` | `/\.workspace[\s\S]*overflow-x: clip/` |
-| 170 | match | `responsiveCss` | `/\.board-section[\s\S]*overflow-x: clip/` |
-| 177 | match | `responsiveCss.slice(hiddenPanelRuleIndex` | `/display: none !important/,` |
-| 181 | match | `responsiveCss` | `/@media \(prefers-reduced-motion: reduce\)/` |
-| 182 | match | `responsiveCss` | `/\.sortable-pedal[\s\S]*\.stomp-toggle-led[\s\S]*\[class\$="-led"\]/` |
-| 183 | match | `responsiveCss` | `/animation: none !important/` |
-| 184 | match | `responsiveCss` | `/transition: none !important/` |
-| 185 | match | `controlsCss` | `/:where\(button, a\[href\], input, select, textarea, \[tabindex\]\):fo` |
-| 186 | match | `controlsCss` | `/\.toggle-switch:focus-within \.switch-track/` |
-| 187 | match | `controlsCss` | `/\.effect-status\.state-closed\s*\{\s*color: var\(--danger\` |
-| 188 | match | `layoutCss` | `/\.preset-library-list > li\s*\{\s*display: contents;/` |
-| 189 | match | `layoutCss` | `/\.section-heading\s*\{[\s\S]{0,140}flex-direction: column;/` |
-| 190 | match | `layoutCss` | `/\.header-tools\s*\{[\s\S]{0,180}width: 100%;/` |
-| 191 | match | `layoutCss` | `/\.header-tools \.connect-panel \.audio-file-upload\s*\{[\s\S]{0,180}g` |
-| 195 | match | `layoutCss` | `/\.signal-chain-hop\s*\{\s*flex: 0 0 auto;/` |
-| 196 | match | `layoutCss` | `/\.chain-effect-pill\s*\{\s*flex: 0 0 auto;/` |
-| 197 | match | `panelsCss` | `/\.mobile-audio-notice/` |
-| 198 | match | `panelsCss` | `/\.tuner-status-text/` |
-| 199 | match | `panelsCss` | `/\.primary-button\s*\{\s*background: #2f72cb;/` |
-| 200 | match | `panelsCss` | `/\.primary-button:hover:not\(:disabled\)\s*\{\s*background: #2869bd;/` |
-| 201 | match | `pedalsCss` | `/\.compressor-brand-panel\s*\{[\s\S]{0,180}background: #0878bf;/` |
+| 53 | match | `appShellSource` | `/MOBILE_LAYOUT_QUERY = '\(max-width: 767px\)'/` |
+| 54 | match | `appShellSource` | `/role="tablist"/` |
+| 55 | match | `appShellSource` | `/role="tab"/` |
+| 61 | match | `appShellSource` | `new RegExp('\\{ id: '${id}', label: '${label}' \\}')` |
+| 66 | match | `appShellSource` | `/aria-selected=\{isActive\}/` |
+| 67 | match | `appShellSource` | `/tabIndex=\{isActive \? 0 : -1\}/` |
+| 72 | match | `appShellSource` | `/const inputPanel = <ConnectGuitarPanel isMobile=\{isMobileLayout\} \/` |
+| 73 | match | `appShellSource` | `/const meterPanel = <Meter active=\{!isMobileLayout \\|\\| activeMobil` |
+| 74 | match | `appShellSource` | `/inputPanel=\{isMobileLayout \? undefined : inputPanel\}/` |
+| 75 | match | `appShellSource` | `/window\.addEventListener\('online', updateOnlineStatus\)/` |
+| 76 | match | `appShellSource` | `/window\.addEventListener\('offline', updateOnlineStatus\)/` |
+| 77 | match | `appShellSource` | `/window\.removeEventListener\('online', updateOnlineStatus\)/` |
+| 78 | match | `appShellSource` | `/window\.removeEventListener\('offline', updateOnlineStatus\)/` |
+| 79 | match | `appShellSource` | `/오프라인 상태입니다\./` |
+| 80 | match | `appShellSource` | `/기타 실시간 입력은 사용할 수 없습니다\. 음원 파일 재생 모드로 톤을 확인해 주세요\./` |
+| 81 | !match | `appShellSource` | `/addEventListener\('keydown'/` |
+| 83 | match | `pedalBoardSource` | `/interface PedalBoardProps[\s\S]*inputPanel\?: ReactNode/` |
+| 84 | match | `pedalBoardSource` | `/export function PedalBoard\(\{ inputPanel \}: PedalBoardProps\)/` |
+| 85 | match | `pedalBoardSource` | `/\{inputPanel\}/` |
+| 86 | match | `pedalBoardSource` | `/className="signal-chain-text"[\s\S]{0,100}role="region"/` |
+| 87 | match | `pedalBoardSource` | `/aria-label="현재 신호 체인"/` |
+| 88 | match | `pedalBoardSource` | `/aria-atomic="true"/` |
+| 89 | match | `pedalBoardSource` | `/tabIndex=\{0\}/` |
+| 91 | match | `mediaQuerySource` | `/window\.matchMedia\(query\)/` |
+| 92 | match | `mediaQuerySource` | `/mediaQuery\.addEventListener\('change', updateMatch\)/` |
+| 93 | match | `mediaQuerySource` | `/mediaQuery\.removeEventListener\('change', updateMatch\)/` |
+| 95 | match | `meterSource` | `/interface MeterProps[\s\S]*active\?: boolean/` |
+| 96 | match | `meterSource` | `/export function Meter\(\{ active = true \}: MeterProps\)/` |
+| 102 | match | `meterSource` | `/\}, \[active, isRunning\]\` |
+| 103 | match | `meterSource` | `/window\.setInterval\(update, STORE_REFRESH_INTERVAL_MS\)/` |
+| 104 | match | `meterSource` | `/\}, \[isRunning, refreshMeters\]\` |
+| 105 | match | `meterSource` | `/tunerStatus === 'in-tune'[\s\S]*'정확함'/` |
+| 106 | match | `meterSource` | `/roundedCents > 0 \? '높음' : '낮음'/` |
+| 107 | match | `meterSource` | `/const boundedCents = Math\.round\(Math\.min\(50, Math\.max\(-50, hasP` |
+| 108 | match | `meterSource` | `/aria-valuenow=\{boundedCents\}/` |
+| 109 | match | `meterSource` | `/aria-valuetext=\{tuningStatusLabel\}[\s\S]{0,120}role="meter"/` |
+| 111 | match | `connectSource` | `/guitar-pedalboard:mobile-audio-notice-dismissed/` |
+| 112 | match | `connectSource` | `/모바일은 입력 지연이 커서 실시간 연주에 적합하지 않습니다\./` |
+| 113 | match | `connectSource` | `/음원 파일 재생 모드로 톤을 확인하거나, PC \+ 오디오 인터페이스 사용을 권장합니다\./` |
+| 115 | match | `connectSource` | `/aria-label="모바일 오디오 안내 닫기"/` |
+| 117 | match | `pedalCardSource` | `/<article[\s\S]*role="group"[\s\S]*aria-label=\{'\$\{pedal\.name\} 이펙터` |
+| 118 | match | `delaySource` | `/ariaValueText=\{delayModeLabels\[params\.mode\]\}/` |
+| 119 | match | `delaySource` | `/<div className="delay-led" aria-hidden="true" \/>/` |
+| 120 | !match | `delaySource` | `/delay-led[^>]*aria-label/` |
+| 121 | match | `noiseGateSource` | `/noise-gate-led[^>]*aria-hidden="true"/` |
+| 122 | !match | `noiseGateSource` | `/noise-gate-led[^>]*aria-label/` |
+| 123 | match | `fuzzSource` | `/ariaValueText=\{fuzzModeLabels\[params\.mode\]\}/` |
+| 124 | match | `presetSource` | `/<ul className="preset-library-list" aria-label="프리셋 라이브러리">/` |
+| 125 | match | `presetSource` | `/<li key=\{library\.id\}>/` |
+| 126 | match | `presetSource` | `/<ul className="preset-list" aria-label="프리셋 목록">/` |
+| 127 | match | `presetSource` | `/<li className=\{'preset-item/` |
+| 128 | !match | `presetSource` | `/role="list"/` |
+| 137 | match | `namedGenericTag` | `/\brole=/, '${componentFile}: 이름 있는 generic 요소에 유효한 role이 필요합니다.'` |
+| 148 | match | `inputTag` | `/aria-label=/, '${componentFile}: range aria-label 누락'` |
+| 149 | match | `inputTag` | `/aria-valuetext=/, '${componentFile}: range aria-valuetext 누락'` |
+| 157 | match | `indexSource` | `/viewport-fit=cover/` |
+| 158 | match | `responsiveCss` | `/@media \(min-width: 768px\) and \(max-width: 1279px\)/` |
+| 159 | match | `pedalsCss` | `/grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 300px\), ` |
+| 160 | match | `appShellSource` | `/useState\(false\)/` |
+| 161 | match | `appShellSource` | `/aria-expanded=\{mobileDockOpen\}/` |
+| 162 | match | `responsiveCss` | `/\.mobile-control-panels\[hidden\]/` |
+| 163 | match | `responsiveCss` | `/@media \(max-width: 767px\)/` |
+| 164 | match | `responsiveCss` | `/grid-auto-flow: column/` |
+| 165 | match | `responsiveCss` | `/scroll-snap-type: x mandatory/` |
+| 166 | match | `responsiveCss` | `/scroll-snap-align: start/` |
+| 167 | match | `responsiveCss` | `/position: fixed[\s\S]*bottom: 0[\s\S]*\.mobile-bottom-tabs/` |
+| 168 | match | `responsiveCss` | `/env\(safe-area-inset-bottom\)/` |
+| 169 | match | `responsiveCss` | `/min-height: 44px/` |
+| 170 | match | `responsiveCss` | `/\.chain-toast[\s\S]*bottom: calc\(82px \+ env\(safe-area-inset-bottom` |
+| 171 | match | `responsiveCss` | `/\.app-shell[\s\S]*overflow-x: clip/` |
+| 172 | match | `responsiveCss` | `/\.workspace[\s\S]*overflow-x: clip/` |
+| 173 | match | `responsiveCss` | `/\.board-section[\s\S]*overflow-x: clip/` |
+| 180 | match | `responsiveCss.slice(hiddenPanelRuleIndex` | `/display: none !important/,` |
+| 184 | match | `responsiveCss` | `/@media \(prefers-reduced-motion: reduce\)/` |
+| 185 | match | `responsiveCss` | `/\.sortable-pedal[\s\S]*\.stomp-toggle-led[\s\S]*\[class\$="-led"\]/` |
+| 186 | match | `responsiveCss` | `/animation: none !important/` |
+| 187 | match | `responsiveCss` | `/transition: none !important/` |
+| 188 | match | `controlsCss` | `/:where\(button, a\[href\], input, select, textarea, \[tabindex\]\):fo` |
+| 189 | match | `controlsCss` | `/\.toggle-switch:focus-within \.switch-track/` |
+| 190 | match | `controlsCss` | `/\.effect-status\.state-closed\s*\{\s*color: var\(--danger\` |
+| 191 | match | `layoutCss` | `/\.preset-library-list > li\s*\{\s*display: contents;/` |
+| 192 | match | `layoutCss` | `/\.section-heading\s*\{[\s\S]{0,140}flex-direction: column;/` |
+| 193 | match | `layoutCss` | `/\.header-tools\s*\{[\s\S]{0,180}width: 100%;/` |
+| 194 | match | `layoutCss` | `/\.header-tools \.connect-panel \.audio-file-upload\s*\{[\s\S]{0,180}g` |
+| 198 | match | `layoutCss` | `/\.signal-chain-hop\s*\{\s*flex: 0 0 auto;/` |
+| 199 | match | `layoutCss` | `/\.chain-effect-pill\s*\{\s*flex: 0 0 auto;/` |
+| 200 | match | `panelsCss` | `/\.mobile-audio-notice/` |
+| 201 | match | `panelsCss` | `/\.tuner-status-text/` |
+| 202 | match | `panelsCss` | `/\.primary-button\s*\{\s*background: #2f72cb;/` |
+| 203 | match | `panelsCss` | `/\.primary-button:hover:not\(:disabled\)\s*\{\s*background: #2869bd;/` |
+| 204 | match | `pedalsCss` | `/\.compressor-brand-panel\s*\{[\s\S]{0,180}background: #0878bf;/` |
 
 ### shortcuts-regression.mjs
 
