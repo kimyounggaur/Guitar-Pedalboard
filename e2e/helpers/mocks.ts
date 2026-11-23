@@ -367,17 +367,21 @@ export interface GraphEdge {
   from: string;
   /** 연결된 노드. 이름 규칙은 같다. */
   to: string;
+  /** 출발 노드의 출력 번호(`connect(dest, output, input)` 의 두 번째 인자). 생략하면 0. */
+  output: number;
+  /** 도착 노드의 입력 번호(세 번째 인자). 생략하면 0. 입력이 둘인 출력 가드(0 = 프로그램, 1 = 하울링 분석 전용)를 가려내는 데 쓴다. */
+  input: number;
 }
 
 /**
  * `AudioNode.connect` 호출과 워클릿 처리기 이름을 기록해 실제로 만들어진 그래프의 연결 모양을 볼 수 있게 한다.
- * (스피커·미터·녹음이 같은 리미터 출력에서 갈라지는지처럼, 소리 레벨만으로는 알 수 없는 연결을 확인하는 데 쓴다.)
+ * (스피커·미터·녹음이 같은 레벨 미터#out 출력에서 갈라지는지처럼, 소리 레벨만으로는 알 수 없는 연결을 확인하는 데 쓴다.)
  * 앱 코드보다 먼저 심어야 하므로 page.goto 전에 부른다.
  */
 export async function trackAudioGraph(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const names = new WeakMap<object, string>();
-    const edges: Array<{ from: string; to: string }> = [];
+    const edges: Array<{ from: string; to: string; output: number; input: number }> = [];
     const NativeWorkletNode = window.AudioWorkletNode;
     if (typeof NativeWorkletNode === 'function') {
       window.AudioWorkletNode = class extends NativeWorkletNode {
@@ -390,8 +394,15 @@ export async function trackAudioGraph(page: Page): Promise<void> {
     const label = (node: object): string => names.get(node) ?? node.constructor.name;
     const nativeConnect = AudioNode.prototype.connect as (this: AudioNode, ...args: unknown[]) => unknown;
     AudioNode.prototype.connect = function connect(this: AudioNode, destination: unknown, ...rest: unknown[]): unknown {
-      // AudioParam 으로 가는 연결은 건너뛰고 노드끼리의 연결만 센다.
-      if (destination instanceof AudioNode) edges.push({ from: label(this), to: label(destination) });
+      // AudioParam 으로 가는 연결은 건너뛰고 노드끼리의 연결만 센다. 출력·입력 번호는 `connect(dest, output, input)` 의 인자 순서를 따른다.
+      if (destination instanceof AudioNode) {
+        edges.push({
+          from: label(this),
+          to: label(destination),
+          output: typeof rest[0] === 'number' ? rest[0] : 0,
+          input: typeof rest[1] === 'number' ? rest[1] : 0,
+        });
+      }
       return nativeConnect.call(this, destination, ...rest);
     } as typeof AudioNode.prototype.connect;
     Object.defineProperty(window, '__audioEdges', {
@@ -513,9 +524,10 @@ export async function readOutputLevels(page: Page, durationMs = 1000): Promise<O
 // 하울링 차단 모의 · 사용자 동작 시각
 // ---------------------------------------------------------------------------------------------
 /**
- * 출력 가드(howl-guard) 워클릿이 '하울링 감지' 메시지를 보낸 것처럼 만들 수 있게 한다.
- * AudioWorkletNode 생성자를 감싸 `howl-guard` 노드의 포트를 붙잡아 두고, `triggerHowl()` 이 그 포트의 onmessage 를 부른다.
- * 실제 소리로 하울링을 일으키는 시험은 어렵고 흔들리므로, 차단 이후의 정리 경로만 확인하는 용도다.
+ * 출력 가드(output-guard) 워클릿이 '하울링 차단' 메시지를 보낸 것처럼 만들 수 있게 한다(S1.5).
+ * AudioWorkletNode 생성자를 감싸 `output-guard` 노드의 포트를 붙잡아 두고, `triggerHowl()` 이 그 포트의 onmessage 를 부른다.
+ * 메시지 모양은 가드가 실제로 보내는 `{type:'howl-cut', freqHz, frame}` 이다. 소리로 일으키는 진짜 하울링 시험은 E-03(`e03-howl.spec.ts`)이 맡고,
+ * 이 모의는 차단 이후의 정리 경로(마이크 해제·토스트·녹음 보존)만 소리 없이 빠르게 확인하는 용도다.
  */
 export async function mockHowlGuard(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -524,7 +536,7 @@ export async function mockHowlGuard(page: Page): Promise<void> {
     if (typeof Native !== 'function') return;
     const Wrapped = function (this: unknown, ...args: ConstructorParameters<typeof AudioWorkletNode>) {
       const instance = Reflect.construct(Native, args, new.target ?? Wrapped) as AudioWorkletNode;
-      if (args[1] === 'howl-guard') guards.push(instance);
+      if (args[1] === 'output-guard') guards.push(instance);
       return instance;
     } as unknown as typeof AudioWorkletNode;
     Wrapped.prototype = Native.prototype;
@@ -532,21 +544,150 @@ export async function mockHowlGuard(page: Page): Promise<void> {
     window.AudioWorkletNode = Wrapped;
     Object.defineProperty(window, '__triggerHowl', {
       configurable: true,
-      value: () => {
+      value: (freqHz: number) => {
         const guard = guards[guards.length - 1];
         const handler = guard?.port.onmessage;
         if (!guard || !handler) return false;
         (window as unknown as { __lastTrigger: number }).__lastTrigger = performance.now();
-        handler.call(guard.port, new MessageEvent('message', { data: { type: 'howl' } }));
+        handler.call(guard.port, new MessageEvent('message', { data: { type: 'howl-cut', freqHz, frame: 0 } }));
         return true;
       },
     });
   });
 }
 
-/** 마지막으로 만든 howl-guard 노드에 하울링 감지 메시지를 보낸다. 노드가 없으면 false. */
-export async function triggerHowl(page: Page): Promise<boolean> {
-  return page.evaluate(() => (window as unknown as { __triggerHowl: () => boolean }).__triggerHowl());
+/** 마지막으로 만든 output-guard 노드에 하울링 차단 메시지(`howl-cut`, 주파수 freqHz)를 보낸다. 노드가 없으면 false. */
+export async function triggerHowl(page: Page, freqHz = 1000): Promise<boolean> {
+  return page.evaluate((hz) => (window as unknown as { __triggerHowl: (hz: number) => boolean }).__triggerHowl(hz), freqHz);
+}
+
+// ---------------------------------------------------------------------------------------------
+// 출력 가드 관찰(E-03): 진짜 하울링 차단이 오디오 시계로 몇 초 만에 일어났는지
+// ---------------------------------------------------------------------------------------------
+export interface GuardObservation {
+  /** 오디오 컨텍스트의 샘플레이트(Hz). 가드·레벨 미터 노드가 아직 없으면 0. */
+  sampleRate: number;
+  /** 입력 쪽 레벨 미터(level-meter#in)가 지금까지 보낸 메시지 수. 마이크가 실제로 흐르는지 확인하는 데 쓴다. */
+  inputLevelMessages: number;
+  /** 입력 레벨이 처음 −50 dBFS(가드의 레벨 하한)를 넘은 구간의 시작 시각(오디오 시계, 초). 한 번도 없으면 null. 보고 간격(약 33 ms)만큼 앞당겨 잡아 늦게 재지 않는다. */
+  firstAudibleSeconds: number | null;
+  /** 가드가 `howl-cut` 을 알린 시각(오디오 시계, 초). 차단이 없었으면 null. */
+  cutSeconds: number | null;
+  /** 차단 때 가드가 알린 하울링 주파수(Hz) */
+  cutFreqHz: number | null;
+  /** 차단 메시지를 메인 스레드가 받은 시각(`performance.now()`). 정지 정리까지 걸린 시간을 이 시각부터 잰다. */
+  cutReceivedAt: number | null;
+  /** 차단 메시지를 메인 스레드가 받은 때의 `document.visibilityState`. 차단이 없었으면 null. */
+  visibilityAtCut: string | null;
+  /** 판정 진행 중(`howl-suspect`) 메시지 수 */
+  suspectMessages: number;
+}
+
+/**
+ * 출력 가드(`output-guard`)와 레벨 미터(`level-meter`) 노드의 포트 메시지를 앱과 나란히 엿본다(앱의 수신기는 그대로 둔다).
+ * 가드가 1 kHz 지속음을 입력에서 처음 들은 때부터 차단 메시지를 보낸 때까지를 **오디오 시계**로 재기 위한 것이다.
+ * 벽시계로 재면 마이크를 여는 시간·Playwright 왕복이 섞이고, 문서가 숨겨진 쪽은 타이머가 늦춰져 값이 흔들린다.
+ * 차단 메시지를 받으면 `window.__lastTrigger` 도 그 시각으로 남기므로 `waitForTeardown` 이 '차단 → 정리 끝'을 잴 수 있다.
+ * 앱 코드보다 먼저 심어야 하므로 page.goto 전에 부른다.
+ */
+export async function observeGuard(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const state = {
+      sampleRate: 0,
+      inputLevelMessages: 0,
+      firstAudibleFrame: null as number | null,
+      reportFrames: 0,
+      cutFrame: null as number | null,
+      cutFreqHz: null as number | null,
+      cutReceivedAt: null as number | null,
+      visibilityAtCut: null as string | null,
+      suspectMessages: 0,
+    };
+    const Native = window.AudioWorkletNode;
+    if (typeof Native !== 'function') return;
+    // 가드의 레벨 하한(부록 B)과 같은 값. 이 레벨을 넘는 첫 입력을 '신호가 들어오기 시작한 때'로 본다.
+    const AUDIBLE_DB = -50;
+    const LEVEL_REPORT_HZ = 30;
+    const RENDER_QUANTUM = 128;
+    const Wrapped = function (this: unknown, ...args: ConstructorParameters<typeof AudioWorkletNode>) {
+      const instance = Reflect.construct(Native, args, new.target ?? Wrapped) as AudioWorkletNode;
+      const name = args[1];
+      if (name === 'level-meter' || name === 'output-guard') {
+        state.sampleRate = instance.context.sampleRate;
+        state.reportFrames = Math.ceil(Math.round(state.sampleRate / LEVEL_REPORT_HZ) / RENDER_QUANTUM) * RENDER_QUANTUM;
+        instance.port.addEventListener('message', (event: MessageEvent) => {
+          const data = event.data as { type?: string; tap?: string; frame?: number; rmsDb?: number[]; freqHz?: number } | null;
+          if (!data || typeof data !== 'object') return;
+          if (data.type === 'level' && data.tap === 'in' && Array.isArray(data.rmsDb) && typeof data.frame === 'number') {
+            state.inputLevelMessages += 1;
+            if (state.firstAudibleFrame === null && Math.max(...data.rmsDb) > AUDIBLE_DB) state.firstAudibleFrame = data.frame - state.reportFrames;
+          } else if (data.type === 'howl-suspect') {
+            state.suspectMessages += 1;
+          } else if (data.type === 'howl-cut' && state.cutFrame === null && typeof data.frame === 'number') {
+            state.cutFrame = data.frame;
+            state.cutFreqHz = typeof data.freqHz === 'number' ? data.freqHz : null;
+            state.cutReceivedAt = performance.now();
+            state.visibilityAtCut = document.visibilityState;
+            (window as unknown as { __lastTrigger: number }).__lastTrigger = state.cutReceivedAt;
+          }
+        });
+        // 수신기를 하나 더 달아도 앱의 `port.onmessage =` 가 포트를 시작시키지만, 먼저 시작해 두어도 앱이 받는 메시지는 달라지지 않는다.
+        instance.port.start();
+      }
+      return instance;
+    } as unknown as typeof AudioWorkletNode;
+    Wrapped.prototype = Native.prototype;
+    Object.setPrototypeOf(Wrapped, Native);
+    window.AudioWorkletNode = Wrapped;
+    Object.defineProperty(window, '__guardObservation', {
+      configurable: true,
+      value: (): GuardObservation => ({
+        sampleRate: state.sampleRate,
+        inputLevelMessages: state.inputLevelMessages,
+        firstAudibleSeconds: state.firstAudibleFrame === null || state.sampleRate === 0 ? null : Math.max(0, state.firstAudibleFrame) / state.sampleRate,
+        cutSeconds: state.cutFrame === null || state.sampleRate === 0 ? null : state.cutFrame / state.sampleRate,
+        cutFreqHz: state.cutFreqHz,
+        cutReceivedAt: state.cutReceivedAt,
+        visibilityAtCut: state.visibilityAtCut,
+        suspectMessages: state.suspectMessages,
+      }),
+    });
+  });
+}
+
+export async function readGuardObservation(page: Page): Promise<GuardObservation> {
+  return page.evaluate(() => (window as unknown as { __guardObservation: () => GuardObservation }).__guardObservation());
+}
+
+/** 숨겨진 탭에서 타이머가 깨어나는 최소 간격(ms). Chrome 은 백그라운드 탭의 setTimeout·setInterval 을 약 1초에 한 번만 깨운다. */
+export const HIDDEN_TIMER_FLOOR_MS = 1000;
+
+/**
+ * 문서를 '숨김'으로 **흉내 낸다**. 진짜 숨김은 이 환경의 헤드리스 Chrome 에서 만들 수 없다
+ * (실측: 탭을 앞뒤로 옮기거나 창을 최소화해도 visibilityState 는 'visible' 그대로이고, 페이지마다 창이 따로 뜬다).
+ * 그래서 숨겨진 탭이 앱에 주는 조건을 페이지 안에서 만든다. 가장 불리한 쪽으로 잡는다.
+ *   (1) `document.visibilityState` = 'hidden', `document.hidden` = true, `visibilitychange` 발생,
+ *   (2) `requestAnimationFrame` 콜백이 오지 않는다(숨겨진 탭은 프레임을 그리지 않는다),
+ *   (3) `setTimeout`·`setInterval` 이 최소 1초 뒤에야 깨어난다(백그라운드 타이머 스로틀의 최악의 경우).
+ * 오디오 스레드(워클릿)와 MessagePort 는 실제 숨김에서도 그대로 도는 부분이라 건드리지 않는다.
+ * 이 흉내로 확인되는 것은 '하울링 감시와 차단 경로가 화면 상태·rAF·짧은 타이머에 기대지 않는다' 까지다.
+ * 실제로 다른 탭·화면 꺼짐 상태에서 같은지는 사람이 실기기에서 본다.
+ */
+export async function emulateHiddenDocument(page: Page, timerFloorMs = HIDDEN_TIMER_FLOOR_MS): Promise<void> {
+  await page.evaluate((floor) => {
+    const w = window as unknown as Record<string, unknown>;
+    if (w.__hiddenEmulation) return;
+    w.__hiddenEmulation = true;
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    window.requestAnimationFrame = () => 0;
+    window.cancelAnimationFrame = () => undefined;
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    const nativeSetInterval = window.setInterval.bind(window);
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => nativeSetTimeout(handler, Math.max(Number(timeout) || 0, floor), ...args)) as typeof window.setTimeout;
+    window.setInterval = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => nativeSetInterval(handler, Math.max(Number(timeout) || 0, floor), ...args)) as typeof window.setInterval;
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, timerFloorMs);
 }
 
 /**
