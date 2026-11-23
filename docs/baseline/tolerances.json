@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "description": "오디오 렌더 프로브(scripts/audio-render-probe.mjs)의 허용 오차. 위에서부터 처음 맞는 규칙을 쓴다. match 는 '프로브ID.측정값이름' 에 대한 글롭(*)이고, 규칙이 없으면 default 를 쓴다. 규칙: abs(절대 차) · rel(기준값 대비 비율) 중 큰 쪽이 허용 범위, atMost(상한만 봄), ignore(비교 안 함). 오차를 넓히거나 ignore 를 늘리려면 사람 승인이 필요하다(설계서 6.4절 기준선 규칙).",
+  "description": "오디오 렌더 프로브(scripts/audio-render-probe.mjs)의 허용 오차. 위에서부터 처음 맞는 규칙을 쓴다. match 는 '프로브ID.측정값이름' 에 대한 글롭(*)이고, 규칙이 없으면 default 를 쓴다. 규칙(rules): abs(절대 차) · rel(기준값 대비 비율) 중 큰 쪽이 허용 범위, atMost(상한만 봄), ignore(비교 안 함). 오차를 넓히거나 ignore 를 늘리려면 사람 승인이 필요하다(설계서 6.4절 기준선 규칙). criteria 는 기준선과 상관없이 지켜야 하는 절대 수용 기준(atLeast 하한·atMost 상한)이다. 기준선을 갱신해도 어길 수 없고, 어기는 값은 기준선으로 만들 수 없다. 기준을 추가하는 것은 오차를 좁히는 일이라 승인이 필요 없지만, 기준을 빼거나 낮추는 것은 승인이 필요하다.",
   "default": { "abs": 0.05 },
   "rules": [
     {
@@ -28,6 +28,20 @@
       "match": "P-17.ratio.*",
       "abs": 0.3,
       "why": "같은 기계에서 잰 시간 비율. 기계가 달라도 크게 변하지 않으므로 절대 차 0.3 으로 느슨하게 본다."
+    }
+  ],
+  "criteria": [
+    {
+      "match": "P-01.differenceDb",
+      "atLeast": 30,
+      "step": "S1.1",
+      "why": "Crunch 의 무연주 잡음(−90 dBFS)과 연주음 출력의 차(dB). 곡선이 0 에서 계단처럼 뛰면 잡음이 연주음 가까이 올라와 이 값이 10 dB 쯤으로 떨어진다(R1-6)."
+    },
+    {
+      "match": "P-02.outputDropDb",
+      "atLeast": 25,
+      "step": "S1.1",
+      "why": "입력이 약 52 dB 줄어들 때 Crunch 출력이 줄어드는 양(dB). 계단이 있으면 음이 사라져도 출력이 거의 줄지 않는다(R1-6)."
     }
   ]
 }

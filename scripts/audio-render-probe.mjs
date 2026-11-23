@@ -215,7 +215,43 @@ function differsFrom(rule, expected, actual) {
   return Object.is(expected, actual) ? null : `${JSON.stringify(actual)} (기준 ${JSON.stringify(expected)})`;
 }
 
-function compareResults(results, baseline, tolerances) {
+/**
+ * 수용 기준(criteria): 기준선과 상관없이 지켜야 하는 절대 한계. 기준선을 갱신해도 이 값은 어길 수 없다.
+ * `--only` 로 일부만 돌렸을 때는 돌리지 않은 프로브의 기준이 맞는 측정값이 없어도 경고하지 않는다.
+ */
+function checkCriteria(results, tolerances, { partial }) {
+  const failures = [];
+  const warnings = [];
+  for (const criterion of tolerances.criteria ?? []) {
+    const matcher = globToRegExp(criterion.match);
+    let matched = 0;
+    for (const [rate, probes] of Object.entries(results)) {
+      for (const [id, current] of Object.entries(probes)) {
+        if (current.error) continue;
+        for (const [key, actual] of Object.entries(current.metrics)) {
+          if (!matcher.test(`${id}.${key}`)) continue;
+          matched += 1;
+          const label = `${rate} Hz ${id}.${key}`;
+          const step = criterion.step ? `${criterion.step} ` : '';
+          if (typeof actual !== 'number' || !Number.isFinite(actual)) {
+            failures.push(`${label}: ${JSON.stringify(actual)} (${step}수용 기준은 숫자여야 함)`);
+            continue;
+          }
+          if (typeof criterion.atLeast === 'number' && !(actual >= criterion.atLeast)) {
+            failures.push(`${label}: ${formatValue(actual)} (${step}수용 기준 하한 ${criterion.atLeast})`);
+          }
+          if (typeof criterion.atMost === 'number' && !(actual <= criterion.atMost)) {
+            failures.push(`${label}: ${formatValue(actual)} (${step}수용 기준 상한 ${criterion.atMost})`);
+          }
+        }
+      }
+    }
+    if (matched === 0 && !partial) warnings.push(`수용 기준 ${criterion.match} 에 맞는 측정값이 없습니다(이름이 바뀌었는지 확인).`);
+  }
+  return { failures, warnings };
+}
+
+function compareResults(results, baseline, tolerances, options) {
   const failures = [];
   const warnings = [];
   for (const [rate, probes] of Object.entries(results)) {
@@ -239,6 +275,9 @@ function compareResults(results, baseline, tolerances) {
       }
     }
   }
+  const criteria = checkCriteria(results, tolerances, { partial: Boolean(options?.only) });
+  failures.push(...criteria.failures);
+  warnings.push(...criteria.warnings);
   return { failures, warnings };
 }
 
@@ -356,6 +395,13 @@ async function main() {
       console.error(`\n실행 오류가 있어 기준선을 갱신하지 않습니다 (${seconds}초):\n- ${errors.join('\n- ')}`);
       return 1;
     }
+    const tolerancesForUpdate = await readJson(tolerancesPath, { default: { abs: 0.05 }, rules: [] });
+    const criteria = checkCriteria(results, tolerancesForUpdate, { partial: Boolean(options.only) });
+    for (const warning of criteria.warnings) console.warn(`경고: ${warning}`);
+    if (criteria.failures.length > 0) {
+      console.error(`\n수용 기준을 어기는 값은 기준선으로 만들 수 없어 갱신하지 않습니다 (${seconds}초):\n- ${criteria.failures.join('\n- ')}`);
+      return 1;
+    }
     const existing = await readJson(baselinePath, null);
     const next = mergeBaseline(existing, results, options, { chrome: chromeVersion, node: process.version, script: 'scripts/audio-render-probe.mjs' });
     await mkdir(dirname(baselinePath), { recursive: true });
@@ -370,7 +416,7 @@ async function main() {
     return 1;
   }
   const tolerances = await readJson(tolerancesPath, { default: { abs: 0.05 }, rules: [] });
-  const { failures, warnings } = compareResults(results, baseline, tolerances);
+  const { failures, warnings } = compareResults(results, baseline, tolerances, options);
   if (baseline.generatedWith?.chrome && baseline.generatedWith.chrome !== chromeVersion) {
     warnings.push(`Chrome 버전이 기준선(${baseline.generatedWith.chrome})과 다릅니다: ${chromeVersion}`);
   }
