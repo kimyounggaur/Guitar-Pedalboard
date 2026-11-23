@@ -3277,7 +3277,10 @@
   transform: translate(-50%, -50%);
 }
 
-.vertical-fader input {
+/* F-1: 예전에는 이 규칙이 `.vertical-fader input` 이라 같은 칸의 숫자 입력(input.knob-number-input)까지 잡았다.
+   숫자 입력은 `.vertical-fader`(position 없음) 바깥의 가장 가까운 위치 지정 조상을 기준으로 inset:0 이 되어
+   투명한 상태로 화면 전체를 덮었고, 그 아래의 모든 포인터 클릭(스톰프 스위치 포함)을 가로챘다. 레일 안의 range 입력만 잡는다. */
+.vertical-fader-rail input {
   position: absolute;
   z-index: 3;
   inset: 0;
@@ -3290,10 +3293,30 @@
   writing-mode: vertical-lr;
 }
 
-.vertical-fader input:focus-visible {
+.vertical-fader-rail input:focus-visible {
   border-radius: 6px;
   outline: 2px solid #f6dc94;
   outline-offset: 3px;
+}
+
+/* F-1: 그래픽 EQ 페달 카드의 안쪽 배치를 바꾸지 않으려고 숫자 입력은 예전처럼 눈에 보이지 않게 두되,
+   자기 칸(.vertical-fader) 안에만 머물고 포인터는 받지 않는다. 키보드/스크린리더로 포커스가 오면 드러나서 쓸 수 있다. */
+.vertical-fader {
+  position: relative;
+}
+
+.vertical-fader > .knob-number-input {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vertical-fader > .knob-number-input:focus {
+  z-index: 4;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .vertical-fader output {

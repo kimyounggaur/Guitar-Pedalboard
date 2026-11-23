@@ -58,7 +58,15 @@ assert.match(cardSource, /<GraphicEQPedal/);
 assert.match(iconSource, /case 'graphicEQ':/);
 assert.match(styleSource, /\.pedal-card-graphic-eq/);
 assert.match(styleSource, /\.graphic-eq7-fader-bank/);
-assert.match(styleSource, /\.vertical-fader input:focus-visible/);
+assert.match(styleSource, /\.vertical-fader-rail input:focus-visible/);
+// F-1: 레일 안의 range 입력만 투명 오버레이로 만든다. 같은 칸의 숫자 입력(input.knob-number-input)이 화면을 덮으면 안 된다.
+assert.doesNotMatch(styleSource, /\.vertical-fader input\s*[,{]/, '`.vertical-fader input` 규칙이 숫자 입력까지 투명 오버레이로 만듭니다(F-1).');
+assert.match(styleSource, /\.vertical-fader\s*\{\s*position:\s*relative;/, '.vertical-fader 가 숫자 입력의 기준 상자가 아닙니다(F-1).');
+assert.match(
+  styleSource,
+  /\.vertical-fader > \.knob-number-input\s*\{[^}]*position:\s*absolute;[^}]*opacity:\s*0;[^}]*pointer-events:\s*none;/,
+  '그래픽 EQ 숫자 입력이 포인터를 받지 않는 칸 안의 요소여야 합니다(F-1).',
+);
 
 const effectBundle = await build({
   entryPoints: [fileURLToPath(new URL('../src/audio/nodes/GraphicEQEffect.ts', import.meta.url))],
