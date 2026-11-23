@@ -11,6 +11,7 @@ import { createRecordingFilename } from '../audio/recording';
 import type { LevelReading, TuningPresetId } from '../audio/types';
 import { TUNING_PRESETS, TUNING_PRESET_OPTIONS } from '../audio/utils/tunings';
 import { useAudioStore } from '../store/audioStore';
+import { readInputLevel, readOutputLevel } from '../store/monitorStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { WaveformCanvas, type WaveformCanvasHandle } from './WaveformCanvas';
 
@@ -148,8 +149,9 @@ export function Meter({ active = true }: MeterProps) {
       animationFrame = null;
       if (!active || !isRunning || document.visibilityState !== 'visible') return;
 
-      const inputLevel = engine.readInputLevel();
-      const outputLevel = engine.readOutputLevel();
+      // 레벨은 오디오 스레드의 level-meter 가 재서 monitorStore 에 둔 값이다. 여기서는 읽어 그리기만 한다.
+      const inputLevel = readInputLevel();
+      const outputLevel = readOutputLevel();
 
       inputLevelRef.current?.update(inputLevel);
       outputLevelRef.current?.update(outputLevel);
@@ -183,8 +185,7 @@ export function Meter({ active = true }: MeterProps) {
   // Meter readings and file position must not depend on the selected panel.
   useEffect(() => {
     if (!isRunning) return;
-    const engine = AudioEngine.getInstance();
-    const update = () => refreshMeters(engine.readInputLevel(), engine.readOutputLevel());
+    const update = () => refreshMeters(readInputLevel(), readOutputLevel());
     update();
     const timer = window.setInterval(update, STORE_REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);

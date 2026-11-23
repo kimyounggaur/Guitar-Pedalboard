@@ -8,7 +8,11 @@
 // 설계서는 스테레오 모드에서 소스를 inputTrim 에 바로 잇고 전환 때 8 ms 페이드 뒤 다시 잇는다고 했지만, 두 경로를 계속 이어 둔 채
 // 경로 문(monoGate·stereoGate)을 8 ms 로 맞바꾼다. 소리는 같고 그래프를 만지지 않아 전환 중 클릭이나 경주 상태가 없다(REFACTOR_LOG L-22).
 // 채널이 하나뿐인 장치(트랙 channelCount 1)와 파일 재생은 소스를 그대로 통과시킨다.
+//
+// 채널별 레벨은 이 클래스가 재지 않는다(S1.5). 소스 바로 뒤의 level-meter#in 워클릿이 약 30 Hz 로 채널별 RMS 를 알리고,
+// MonitorService 가 그 값을 `onChannelLevels` 로 넘기면 자동 판정이 진행된다(설계서 4.3·4.4절, REFACTOR_LOG L-45).
 import { rampParam } from '../utils/smoothing';
+import type { ChannelSelection } from '../monitor/levelReading';
 import { ChannelDecider, type ChannelDecision } from './channelDecision';
 
 export type InputChannelMode = 'auto' | 'ch1' | 'ch2' | 'stereo';
@@ -21,12 +25,6 @@ export const INPUT_CHANNEL_MODES: readonly InputChannelMode[] = ['auto', 'ch1', 
 export const CHANNEL_RAMP_SECONDS = 0.02;
 /** 모노 ↔ 스테레오 경로를 맞바꾸는 시간. */
 export const PATH_FADE_SECONDS = 0.008;
-/** 채널별 레벨을 재는 창(샘플 수)과 실시간 폴링 간격. */
-export const LEVEL_WINDOW_SAMPLES = 2048;
-export const MONITOR_INTERVAL_MS = 50;
-
-const SILENT_DB = -120;
-
 export function isInputChannelMode(value: unknown): value is InputChannelMode {
   return typeof value === 'string' && (INPUT_CHANNEL_MODES as readonly string[]).includes(value);
 }
@@ -47,13 +45,6 @@ export interface InputStageOptions {
   passthrough?: boolean;
 }
 
-function rmsDbOf(samples: Float32Array): number {
-  let sum = 0;
-  for (let i = 0; i < samples.length; i += 1) sum += samples[i] * samples[i];
-  const rms = Math.sqrt(sum / Math.max(1, samples.length));
-  return rms > 1e-6 ? 20 * Math.log10(rms) : SILENT_DB;
-}
-
 export class InputStage {
   /** 입력 트림(inputGain)에 연결할 노드. 모노 경로일 때도 2채널(양쪽에 같은 소리)로 나간다. */
   readonly output: GainNode;
@@ -67,13 +58,8 @@ export class InputStage {
   private readonly gainR: GainNode | null = null;
   private readonly monoGate: GainNode | null = null;
   private readonly stereoGate: GainNode | null = null;
-  private readonly analyserL: AnalyserNode | null = null;
-  private readonly analyserR: AnalyserNode | null = null;
-  private readonly bufferL = new Float32Array(LEVEL_WINDOW_SAMPLES);
-  private readonly bufferR = new Float32Array(LEVEL_WINDOW_SAMPLES);
   private readonly decider = new ChannelDecider();
   private readonly listeners = new Set<(decision: ChannelDecision) => void>();
-  private monitorTimer: ReturnType<typeof setInterval> | null = null;
   private currentMode: InputChannelMode;
   private currentState: InputChannelState = 'pending';
   private disposed = false;
@@ -124,16 +110,6 @@ export class InputStage {
     this.monoGate.connect(this.output);
     source.connect(this.stereoGate);
     this.stereoGate.connect(this.output);
-
-    // 채널별 레벨을 재는 분석 노드. S1.5 에서 level-meter 워클릿 값으로 바꿀 때까지 여기서 잰다.
-    this.analyserL = context.createAnalyser();
-    this.analyserR = context.createAnalyser();
-    for (const analyser of [this.analyserL, this.analyserR]) {
-      analyser.fftSize = LEVEL_WINDOW_SAMPLES;
-      analyser.smoothingTimeConstant = 0;
-    }
-    this.splitter.connect(this.analyserL, 0);
-    this.splitter.connect(this.analyserR, 1);
   }
 
   get mode(): InputChannelMode {
@@ -167,34 +143,25 @@ export class InputStage {
   }
 
   /**
-   * 채널별 RMS(dBFS)를 받아 자동 판정을 진행한다. 실시간에서는 `measure()` 가, S1.5 이후에는 MonitorService 가 부른다.
-   * 판정은 세션마다 한 번만 난다.
+   * 채널별 RMS(dBFS)를 받아 자동 판정을 진행한다. MonitorService 가 level-meter#in 의 측정마다 부른다(약 30 Hz).
+   * `timeSeconds` 는 그 측정이 끝난 오디오 시계(초)다. 판정은 세션마다 한 번만 난다.
    */
-  onChannelLevels(rmsDb: readonly [number, number]): void {
+  onChannelLevels(rmsDb: readonly [number, number], timeSeconds: number = this.context.currentTime): void {
     if (!this.selectable || this.disposed) return;
-    const decided = this.decider.push(this.context.currentTime, rmsDb);
+    const decided = this.decider.push(timeSeconds, rmsDb);
     if (decided !== null) this.applyDecision(decided);
   }
 
-  /** 분석 노드에서 지금의 채널별 RMS 를 읽어 `onChannelLevels` 로 넘긴다. */
-  measure(): void {
-    if (!this.analyserL || !this.analyserR || this.disposed) return;
-    this.analyserL.getFloatTimeDomainData(this.bufferL);
-    this.analyserR.getFloatTimeDomainData(this.bufferR);
-    this.onChannelLevels([rmsDbOf(this.bufferL), rmsDbOf(this.bufferR)]);
-  }
-
-  /** 실시간 연결에서 일정 간격으로 `measure()` 를 부른다. 오프라인 렌더는 하네스가 직접 부른다. */
-  startMonitoring(intervalMs: number = MONITOR_INTERVAL_MS): void {
-    if (!this.selectable || this.monitorTimer !== null || this.disposed) return;
-    this.monitorTimer = setInterval(() => this.measure(), intervalMs);
-    (this.monitorTimer as { unref?: () => void }).unref?.();
-  }
-
-  stopMonitoring(): void {
-    if (this.monitorTimer === null) return;
-    clearInterval(this.monitorTimer);
-    this.monitorTimer = null;
+  /**
+   * 입력 레벨 막대·클리핑 표시에 쓸 채널. 소리가 실제로 흘러 들어가는 채널만 센다
+   * (1번만 쓰는 중에 2번에 잡음이 있어도 막대가 흔들리지 않는다). 선택이 없는 입력(모노·파일)과 합치는 중에는 모두.
+   */
+  get meteredChannels(): ChannelSelection {
+    if (!this.selectable) return 'all';
+    const [left, right] = this.targetGains();
+    if (left > 0 && right === 0) return 0;
+    if (right > 0 && left === 0) return 1;
+    return 'all';
   }
 
   /** 자동 판정이 나면 부른다. 돌려받은 함수로 구독을 끊는다. */
@@ -208,7 +175,6 @@ export class InputStage {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.stopMonitoring();
     this.listeners.clear();
     const detach = (from: AudioNode, to: AudioNode | null): void => {
       if (!to) return;
@@ -223,7 +189,7 @@ export class InputStage {
     } else {
       detach(this.source, this.splitter);
       detach(this.source, this.stereoGate);
-      for (const node of [this.splitter, this.gainL, this.gainR, this.monoGate, this.stereoGate, this.analyserL, this.analyserR]) {
+      for (const node of [this.splitter, this.gainL, this.gainR, this.monoGate, this.stereoGate]) {
         try {
           node?.disconnect();
         } catch {

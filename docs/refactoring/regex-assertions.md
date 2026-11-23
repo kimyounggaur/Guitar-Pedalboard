@@ -3,16 +3,17 @@
 > `node docs/refactoring/tools/list-regex-assertions.mjs` 로 생성한 파일이다(수정하지 말고 다시 생성한다). 줄 번호는 생성한 시점의 `scripts/` 기준이므로, 시험 파일을 고친 Step 뒤에는 다시 생성한다.
 > 세는 대상은 `assert.match(` 와 `assert.doesNotMatch(` 호출이다. 보고서의 "337곳"은 기준 커밋 `4ac9cf7`에서 이 두 호출을 센 값과 같다(316 + 21).
 
-**생성 시점 합계: 336곳** (match 314 + doesNotMatch 22)
+**생성 시점 합계: 354곳** (match 327 + doesNotMatch 27)
 
 | 파일 | match | doesNotMatch | 합계 |
 |---|---:|---:|---:|
 | auto-wah-regression.mjs | 26 | 3 | 29 |
 | chorus-regression.mjs | 14 | 3 | 17 |
 | graphic-eq-regression.mjs | 27 | 4 | 31 |
+| howl-guard-regression.mjs | 9 | 5 | 14 |
 | input-stage-regression.mjs | 2 | 0 | 2 |
 | midi-regression.mjs | 21 | 1 | 22 |
-| peak-limiter-regression.mjs | 13 | 2 | 15 |
+| peak-limiter-regression.mjs | 17 | 2 | 19 |
 | preset-ab-regression.mjs | 23 | 0 | 23 |
 | pwa-regression.mjs | 4 | 0 | 4 |
 | recording-regression.mjs | 35 | 2 | 37 |
@@ -20,7 +21,7 @@
 | shortcuts-regression.mjs | 35 | 0 | 35 |
 | tap-tempo-regression.mjs | 13 | 1 | 14 |
 | tremolo-regression.mjs | 14 | 2 | 16 |
-| **합계** | **314** | **22** | **336** |
+| **합계** | **327** | **27** | **354** |
 
 ## 파일별 위치
 
@@ -116,6 +117,25 @@
 | 60 | match | `styleSource` | `/\.graphic-eq7-fader-bank/` |
 | 61 | match | `styleSource` | `/\.vertical-fader input:focus-visible/` |
 
+### howl-guard-regression.mjs
+
+| 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
+|---:|---|---|---|
+| 908 | !match | `read('src/audio/monitor/MonitorService.t` | `/from '\.\.\/\.\.\/store\|from 'zustand'\|useMonitorStore/, 'MonitorSe` |
+| 915 | !match | `code` | `forbidden, '${file}: 오디오 스레드 코드는 화면·시계 API 를 쓰지 않는다'` |
+| 920 | match | `guardCode` | `/this\.analyze\(analysis, frames\)/, '판정기는 분석 입력(입력 1)을 먹는다'` |
+| 921 | !match | `guardCode` | `/detector\.push\([^)]*program/, '프로그램(출력) 입력은 판정에 쓰지 않는다'` |
+| 925 | match | `engine` | `/connect\(this\.outputGuard, 0, GUARD_ANALYSIS_INPUT\)/, '입력 트림 뒤 → 가드` |
+| 926 | match | `engine` | `/createOutputGuard\(context, this\.currentGuardMode\(\)\)/, '가드는 만들 때 ` |
+| 927 | match | `engine` | `/createLevelMeter\(context, 'in'\)[\s\S]{0,80}createLevelMeter\(contex` |
+| 929 | match | `store` | `/audioEngine\.setHowlHandler\(\(freqHz\) => \{[\s\S]{0,400}stopSession` |
+| 930 | match | `store` | `/audioEngine\.setMonitorSink\(monitorSink\)/, '엔진의 측정 결과는 monitorStore` |
+| 932 | match | `workletModules` | `/levelMeterWorkletUrl[\s\S]*outputGuardWorkletUrl/, '오프라인 렌더에도 level-m` |
+| 933 | !match | `workletModules` | `/howl-guard\|howlGuard/, '옛 이름은 남기지 않는다'` |
+| 934 | match | `engine` | `/levelMeterWorkletUrl/, '라이브 엔진도 level-meter 를 등록한다'` |
+| 935 | match | `engine` | `/outputGuardWorkletUrl/, '라이브 엔진도 output-guard 를 등록한다'` |
+| 936 | !match | `engine` | `/howl-guard\|howlGuard/, '라이브 엔진에도 옛 이름이 없다'` |
+
 ### input-stage-regression.mjs
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
@@ -154,21 +174,25 @@
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
 |---:|---|---|---|
-| 326 | match | `urls` | `/from '\.\/limiter\.worklet\.ts\?worker&url'/, '리미터는 별도 파일을 ?worker&ur` |
-| 327 | match | `engine` | `/new OutputStage\(this\.context, \{ guard: this\.howlGuard \}\)/` |
-| 328 | match | `engine` | `/this\.outputStage\.output\.connect\(this\.context\.destination\)/` |
-| 329 | match | `engine` | `/this\.outputStage\.output\.connect\(this\.outputMeter\.input\)/` |
-| 330 | match | `engine` | `/this\.outputStage\?\.output\.connect\(this\.recorderDestination\)/, '` |
-| 331 | match | `engine` | `/limiterWorkletUrl/, '엔진이 리미터 워클릿 파일을 등록한다'` |
-| 332 | match | `modules` | `/limiterWorkletUrl/, '오프라인 렌더도 같은 파일을 등록한다'` |
-| 333 | match | `renderChain` | `/new OutputStage\(context, \{ guard: howlGuard \}\)/, '오프라인 렌더도 같은 출력 ` |
-| 335 | match | `engine` | `/to: chainEnd/, '엔진은 체인 끝을 마스터 게인이 아니라 trim 에 잇는다'` |
-| 336 | match | `engine` | `/this\.buildChainConnections\(\s*pedals,\s*nextEffects,\s*chainInput,\` |
-| 337 | match | `engine` | `/presetTrim\.gain\.value = dbToGain\(clampTrimDb\(this\.getPresetTrimD` |
-| 338 | match | `engine` | `/rampParam\(trim\.gain, dbToGain\(clampTrimDb\(db\)\), context, PRESET` |
-| 339 | match | `renderChain` | `/previous\.connect\(presetTrim\)/, '오프라인 렌더도 체인 끝을 trim 에 잇는다'` |
-| 340 | !match | `engine` | `/previous\.connect\(masterGain\)\|to: masterGain/, '체인 끝이 마스터 게인으로 곧장 ` |
-| 341 | !match | `engine + modules + renderChain` | `/peak-limiter-processor\|peakLimiterProcessorSource/, '옛 리미터는 남기지 않는다'` |
+| 341 | match | `urls` | `/from '\.\/limiter\.worklet\.ts\?worker&url'/, '리미터는 별도 파일을 ?worker&ur` |
+| 342 | match | `engine` | `/new OutputStage\(context, \{ guard: this\.outputGuard, levelMeter: th` |
+| 343 | match | `engine` | `/this\.outputStage\.output\.connect\(context\.destination\)/` |
+| 344 | match | `engine` | `/this\.outputStage\.output\.connect\(this\.outputMeter\.input\)/` |
+| 345 | match | `engine` | `/this\.outputStage\?\.output\.connect\(this\.recorderDestination\)/, '` |
+| 346 | match | `engine` | `/limiterWorkletUrl/, '엔진이 리미터 워클릿 파일을 등록한다'` |
+| 347 | match | `modules` | `/limiterWorkletUrl/, '오프라인 렌더도 같은 파일을 등록한다'` |
+| 348 | match | `renderChain` | `/new OutputStage\(context, \{ guard, levelMeter: outputTap \}\)/, '오프라` |
+| 349 | match | `engine` | `/levelMeterWorkletUrl[\s\S]*outputGuardWorkletUrl/, '엔진이 레벨 미터·출력 가드 워` |
+| 350 | match | `modules` | `/levelMeterWorkletUrl[\s\S]*outputGuardWorkletUrl/, '오프라인 렌더도 같은 파일들을 ` |
+| 351 | match | `urls` | `/level-meter\.worklet\.ts\?worker&url/` |
+| 352 | match | `urls` | `/output-guard\.worklet\.ts\?worker&url/` |
+| 354 | match | `engine` | `/to: chainEnd/, '엔진은 체인 끝을 마스터 게인이 아니라 trim 에 잇는다'` |
+| 355 | match | `engine` | `/this\.buildChainConnections\(\s*pedals,\s*nextEffects,\s*chainInput,\` |
+| 356 | match | `engine` | `/presetTrim\.gain\.value = dbToGain\(clampTrimDb\(this\.getPresetTrimD` |
+| 357 | match | `engine` | `/rampParam\(trim\.gain, dbToGain\(clampTrimDb\(db\)\), context, PRESET` |
+| 358 | match | `renderChain` | `/previous\.connect\(presetTrim\)/, '오프라인 렌더도 체인 끝을 trim 에 잇는다'` |
+| 359 | !match | `engine` | `/previous\.connect\(masterGain\)\|to: masterGain/, '체인 끝이 마스터 게인으로 곧장 ` |
+| 360 | !match | `engine + modules + renderChain` | `/peak-limiter-processor\|peakLimiterProcessorSource/, '옛 리미터는 남기지 않는다'` |
 
 ### preset-ab-regression.mjs
 

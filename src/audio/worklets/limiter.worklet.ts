@@ -3,17 +3,22 @@
 //   · 좌우를 같은 이득으로 묶는다(스테레오 이미지를 흔들지 않는다)
 //   · 이득을 곱한 뒤 천장으로 한 번 더 자른다(수치 오차 대비 안전망)
 //   · 숫자가 아닌 샘플(NaN·Infinity)은 무음으로 바꾼다
-// 화면에 내놓는 값은 없다. 톤을 만드는 도구가 아니라 보호 장치다. 값은 limiterSpec.ts 에 있다.
+// 톤을 만드는 도구가 아니라 보호 장치다. 값은 limiterSpec.ts 에 있다.
+// S1.5: 최근 100 ms 동안의 최대 이득 감소량을 포트로 알린다({type:'limiter', maxGrDb, frame}, guardSpec.ts). 감소가 없으면 보내지 않는다.
 //
 // 이 파일은 설계서 4.1절 규칙 6 에 따라 처음부터 별도 TS 파일이다. 앱은 `?worker&url` 로 이 파일의 주소를 얻어
 // `audioWorklet.addModule()` 로 불러온다(urls.ts → AudioEngine.loadWorklets, 오프라인 렌더의 registerWorklets).
 // 앱 코드는 이 파일을 import 하지 않는다(registerProcessor 는 오디오 스레드에서만 있다).
+import { LIMITER_REPORT_SECONDS, type GuardMsg } from '../engine/guardSpec';
 import {
   LIMITER_CEILING_DB,
   LIMITER_PROCESSOR_NAME,
   LIMITER_RELEASE_SECONDS,
   limiterLookaheadFrames,
 } from '../engine/limiterSpec';
+
+/** 이 값(dB) 미만의 감소는 '없음'으로 본다. 릴리즈 꼬리가 만드는 아주 작은 값으로 메시지가 계속 나가지 않게 한다. */
+const REPORT_THRESHOLD_DB = 0.05;
 
 function finiteOrZero(value: number | undefined): number {
   return value !== undefined && Number.isFinite(value) ? value : 0;
@@ -32,6 +37,11 @@ class LimiterProcessor extends AudioWorkletProcessor {
   private lineIndex = 0;
   private peakIndex = 0;
   private gain = 1;
+  /** 보고 창(100 ms) 동안의 가장 낮은 이득과 지난 보고 이후 지난 샘플 수 */
+  private readonly reportFrames = Math.max(1, Math.round(sampleRate * LIMITER_REPORT_SECONDS));
+  private reportElapsed = 0;
+  private windowMinGain = 1;
+  private lastReportedGrDb = 0;
 
   process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
     const input = inputs[0] ?? [];
@@ -54,6 +64,7 @@ class LimiterProcessor extends AudioWorkletProcessor {
       // 즉시 어택(필요한 이득으로 바로 내려간다), 릴리즈는 1 로 지수 복귀.
       const target = windowPeak > this.ceiling ? this.ceiling / windowPeak : 1;
       this.gain = target < this.gain ? target : target + (this.gain - target) * this.release;
+      if (this.gain < this.windowMinGain) this.windowMinGain = this.gain;
 
       const delayedLeft = this.lineLeft[this.lineIndex];
       const delayedRight = this.lineRight[this.lineIndex];
@@ -69,7 +80,21 @@ class LimiterProcessor extends AudioWorkletProcessor {
         output[1][i] = Math.max(-this.ceiling, Math.min(this.ceiling, limitedRight));
       }
     }
+
+    this.reportElapsed += frames;
+    if (this.reportElapsed >= this.reportFrames) this.reportReduction(currentFrame + frames);
     return true;
+  }
+
+  /** 지난 100 ms 의 최대 감소량(양수 dB)을 알린다. 줄 일이 없고 지난번에도 없었다면 보내지 않는다. */
+  private reportReduction(endFrame: number): void {
+    const grDb = Math.max(0, -20 * Math.log10(this.windowMinGain));
+    this.windowMinGain = 1;
+    this.reportElapsed = 0;
+    if (grDb < REPORT_THRESHOLD_DB && this.lastReportedGrDb < REPORT_THRESHOLD_DB) return;
+    this.lastReportedGrDb = grDb;
+    const message: GuardMsg = { type: 'limiter', maxGrDb: grDb, frame: endFrame };
+    this.port.postMessage(message);
   }
 }
 

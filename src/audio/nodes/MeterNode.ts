@@ -1,50 +1,14 @@
-import type { LevelReading } from '../types';
-import { gainToDb } from '../utils/db';
-
+// 파형 표시 전용 분석 노드. S1.5 부터 레벨(RMS·피크)과 클리핑은 level-meter 워클릿이 오디오 스레드에서 재고
+// monitorStore 가 들고 있다. 이 노드는 미터 패널의 파형 그림(rAF 에서 읽는다)만 맡는다.
 export class MeterNode {
   readonly input: AnalyserNode;
   private readonly buffer: Float32Array;
-  private consecutiveClipFrames = 0;
-  private clipHoldUntil = 0;
 
   constructor(context: BaseAudioContext) {
     this.input = context.createAnalyser();
     this.input.fftSize = 1024;
     this.input.smoothingTimeConstant = 0.72;
     this.buffer = new Float32Array(this.input.fftSize);
-  }
-
-  read(): LevelReading {
-    this.input.getFloatTimeDomainData(this.buffer);
-    let sum = 0;
-    let peak = 0;
-
-    for (let i = 0; i < this.buffer.length; i += 1) {
-      const value = this.buffer[i];
-      sum += value * value;
-      peak = Math.max(peak, Math.abs(value));
-    }
-
-    const rms = Math.sqrt(sum / this.buffer.length);
-    const now = performance.now();
-
-    if (peak >= 0.99) {
-      this.consecutiveClipFrames += 1;
-      if (this.consecutiveClipFrames >= 3) {
-        this.clipHoldUntil = now + 1500;
-      }
-    } else {
-      this.consecutiveClipFrames = 0;
-    }
-
-    return {
-      db: gainToDb(rms),
-      linear: Math.min(1, rms * 4),
-      peakDb: gainToDb(peak),
-      peakLinear: Math.min(1, peak),
-      isClipping: now < this.clipHoldUntil,
-      clipHoldUntil: this.clipHoldUntil,
-    };
   }
 
   readWaveform(size = 128): number[] {

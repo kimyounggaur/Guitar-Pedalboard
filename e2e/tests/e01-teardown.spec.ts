@@ -109,12 +109,13 @@ test.describe('E-01 정지 정리', () => {
     recordElapsed('Esc(MIDI 메뉴를 닫은 다음의 Esc)', elapsedMs);
   });
 
-  test('E-01 하울링 차단(모의): 같은 정리 + 하울링 안내', async ({ page }) => {
+  test('E-01 하울링 차단(모의): 같은 정리 + 하울링 안내(주파수 포함)', async ({ page }) => {
     await openConnected(page);
-    expect(await triggerHowl(page), 'howl-guard 노드가 만들어져 있어야 합니다').toBe(true);
+    expect(await triggerHowl(page, 1000), 'output-guard 노드가 만들어져 있어야 합니다').toBe(true);
     const { elapsedMs } = await waitForTeardown(page, LIMIT_MS);
     recordElapsed('하울링 차단(모의)', elapsedMs);
-    await expect(page.locator('.toast', { hasText: '하울링이 감지되어 정지했습니다. 스피커 음량을 줄이거나 헤드폰을 쓰세요.' })).toBeVisible();
+    // 가드가 알려 준 주파수가 안내에 들어간다(S1.5). 소리로 일으키는 진짜 차단 시험은 E-03 이 한다.
+    await expect(page.locator('.toast', { hasText: '하울링(약 1000 Hz)이 감지되어 정지했습니다. 스피커 음량을 줄이거나 헤드폰을 쓰세요.' })).toBeVisible();
   });
 
   test('E-01 연결 해제 버튼: 같은 정리, 안내 없음', async ({ page }) => {

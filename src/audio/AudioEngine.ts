@@ -21,14 +21,16 @@ import type {
   EffectNodeWrapper,
   FuzzParams,
   LatencyReading,
-  LevelReading,
   PedalState,
   PitchReading,
   TuningPresetId,
 } from './types';
 import type { ChannelDecision } from './engine/channelDecision';
+import type { GuardMode } from './engine/guardSpec';
 import { InputStage, type InputChannelMode } from './engine/InputStage';
+import { createLevelMeter, createOutputGuard, GUARD_ANALYSIS_INPUT } from './engine/monitorNodes';
 import { OutputStage } from './engine/OutputStage';
+import { MonitorService, type MonitorSink } from './monitor/MonitorService';
 import { clampTrimDb, PRESET_TRIM_RAMP_SECONDS } from './offline/loudnessSpec';
 import { clamp, dbToGain } from './utils/db';
 import { MAX_CAB_IR_BYTES, validateCabinetWav, validateDecodedCabinetIr } from './utils/cabinetIr';
@@ -37,11 +39,10 @@ import { rampParam } from './utils/smoothing';
 import { noiseGateProcessorSource } from './worklets/noise-gate-processor';
 import { envelopeFollowerProcessorSource } from './worklets/envelope-follower-processor';
 import { tunerProcessorSource } from './worklets/tuner-processor';
-import { howlGuardProcessorSource } from './worklets/howl-guard-processor';
 import { flangerProcessorSource } from './worklets/flanger-processor';
 import { phaserProcessorSource } from './worklets/phaser-processor';
 import { compressorProcessorSource } from './worklets/compressor-processor';
-import { limiterWorkletUrl } from './worklets/urls';
+import { levelMeterWorkletUrl, limiterWorkletUrl, outputGuardWorkletUrl } from './worklets/urls';
 
 type EffectNode = EffectNodeWrapper;
 
@@ -51,6 +52,14 @@ interface ChainConnection {
 }
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+/** 화면 저장소가 연결되기 전(또는 시험)에는 측정값을 버린다. audioStore 가 시작할 때 `setMonitorSink` 로 진짜 저장소를 건다. */
+const NOOP_MONITOR_SINK: MonitorSink = {
+  setInput: () => undefined,
+  setOutput: () => undefined,
+  setLimiterGr: () => undefined,
+  setGuard: () => undefined,
+  reset: () => undefined,
+};
 const CHAIN_FADE_SECONDS = 0.008;
 const CHAIN_RECONNECT_WAIT_MS = 12;
 /** 정지할 때 출력 이득을 0 으로 낮추는 시정수(초). 10 ms 면 약 −29 dB, 20 ms 면 약 −58 dB. */
@@ -71,16 +80,22 @@ export class AudioEngine {
   private audioFileUrl: string | null = null;
   private inputGain: GainNode | null = null;
   private chainInput: GainNode | null = null;
-  /** 마스터 게인 → (하울링 가드) → 리미터. 스피커·출력 미터·녹음은 리미터 출력에서 갈라진다. */
+  /** 마스터 게인 → 출력 가드 → 리미터 → level-meter#out. 스피커·파형 분석·녹음은 이 단계의 출력에서 갈라진다. */
   private outputStage: OutputStage | null = null;
-  private howlGuard: AudioWorkletNode | null = null;
+  /** 하울링 판정과 안전 무음(S1.5). 입력 0 = 프로그램, 입력 1 = 분석 전용(장치 모드만). */
+  private outputGuard: AudioWorkletNode | null = null;
+  /** level-meter#in(소스 바로 뒤)·#out(리미터 바로 뒤). 측정은 화면과 무관하게 오디오 스레드가 한다. */
+  private inputTap: AudioWorkletNode | null = null;
+  private outputTap: AudioWorkletNode | null = null;
+  private monitor = new MonitorService(NOOP_MONITOR_SINK);
   private inputStage: InputStage | null = null;
   private inputChannelMode: InputChannelMode = 'auto';
   private rememberedChannelDecision: ChannelDecision | null = null;
   private inputDecisionHandler: ((decision: ChannelDecision) => void) | null = null;
   private howlProtectionEnabled = true;
-  private howlHandler: (() => void) | null = null;
+  private howlHandler: ((freqHz: number) => void) | null = null;
   private recorderDestination: MediaStreamAudioDestinationNode | null = null;
+  /** 파형 표시 전용 분석 노드. 레벨·클리핑은 level-meter 워클릿이 잰다. */
   private inputMeter: MeterNode | null = null;
   private outputMeter: MeterNode | null = null;
   private tuner: TunerNode | null = null;
@@ -123,7 +138,14 @@ export class AudioEngine {
     return AudioEngine.instance;
   }
 
-  setHowlHandler(handler: (() => void) | null): void { this.howlHandler = handler; }
+  /** 출력 가드가 하울링 차단을 마쳤을 때 부른다. 인자는 감지한 주파수(Hz). 정지 절차는 부른 쪽이 시작한다. */
+  setHowlHandler(handler: ((freqHz: number) => void) | null): void { this.howlHandler = handler; }
+
+  /** 레벨·가드 상태를 내보낼 곳(화면 저장소). 세션 밖에서 한 번 건다. 다음 그래프부터 적용된다. */
+  setMonitorSink(sink: MonitorSink | null): void {
+    this.monitor.detach();
+    this.monitor = new MonitorService(sink ?? NOOP_MONITOR_SINK);
+  }
 
   setInputEndedHandler(handler: (() => void) | null): void { this.inputEndedHandler = handler; }
 
@@ -143,7 +165,16 @@ export class AudioEngine {
 
   setHowlProtection(enabled: boolean): void {
     this.howlProtectionEnabled = enabled;
-    this.howlGuard?.port.postMessage({ enabled: enabled && !!this.stream });
+    this.applyGuardMode();
+  }
+
+  /** 지금 가드가 가져야 할 모드. 마이크 입력만 판정하고(device), 파일 재생(file)과 사용자가 끈 경우(off)는 판정하지 않는다. */
+  private currentGuardMode(): GuardMode {
+    return !this.stream ? 'file' : this.howlProtectionEnabled ? 'device' : 'off';
+  }
+
+  private applyGuardMode(): void {
+    if (this.outputGuard) this.monitor.setGuardMode(this.currentGuardMode());
   }
 
   /** 입력 채널 모드(자동·1번·2번·스테레오). 연결 중이면 20 ms 램프로 바로 반영하고, 아니면 다음 연결에 쓴다. */
@@ -624,6 +655,7 @@ export class AudioEngine {
   releaseGraph(): void {
     this.graphGeneration += 1;
     this.panicDisconnect();
+    this.monitor.detach();
     this.reverbImpulseCache?.dispose();
     this.reverbImpulseCache = null;
 
@@ -644,7 +676,9 @@ export class AudioEngine {
     this.inputGain = null;
     this.chainInput = null;
     this.outputStage = null;
-    this.howlGuard = null;
+    this.outputGuard = null;
+    this.inputTap = null;
+    this.outputTap = null;
     this.inputStage = null;
     this.recorderDestination = null;
     this.inputMeter = null;
@@ -709,28 +743,6 @@ export class AudioEngine {
     this.effects.get(pedal.id)?.update(pedal);
   }
 
-  readInputLevel(): LevelReading {
-    return this.inputMeter?.read() ?? {
-      db: -120,
-      linear: 0,
-      peakDb: -120,
-      peakLinear: 0,
-      isClipping: false,
-      clipHoldUntil: 0,
-    };
-  }
-
-  readOutputLevel(): LevelReading {
-    return this.outputMeter?.read() ?? {
-      db: -120,
-      linear: 0,
-      peakDb: -120,
-      peakLinear: 0,
-      isClipping: false,
-      clipHoldUntil: 0,
-    };
-  }
-
   readAudioGlitchCount(): number | null {
     if (!this.context || this.context.state === 'closed') return null;
     try {
@@ -778,12 +790,13 @@ export class AudioEngine {
       this.createWorkletUrl(noiseGateProcessorSource),
       this.createWorkletUrl(envelopeFollowerProcessorSource),
       this.createWorkletUrl(tunerProcessorSource),
-      this.createWorkletUrl(howlGuardProcessorSource),
       this.createWorkletUrl(flangerProcessorSource),
       this.createWorkletUrl(phaserProcessorSource),
       this.createWorkletUrl(compressorProcessorSource),
-      // 리미터는 별도 .worklet.ts 파일이다(설계서 4.1절 규칙 6). 빌드 때 해시 이름의 파일로 나가 서비스 워커가 프리캐시한다.
+      // 리미터·레벨 미터·출력 가드는 별도 .worklet.ts 파일이다(설계서 4.1절 규칙 6). 빌드 때 해시 이름의 파일로 나가 서비스 워커가 프리캐시한다.
       limiterWorkletUrl,
+      levelMeterWorkletUrl,
+      outputGuardWorkletUrl,
     ];
 
     await Promise.all(moduleUrls.map((url) => context.audioWorklet.addModule(url)));
@@ -830,37 +843,55 @@ export class AudioEngine {
   }
 
   private createProcessingGraph(source: AudioNode): void {
-    if (!this.context) return;
+    const context = this.context;
+    if (!context) return;
 
     this.graphGeneration += 1;
     this.chainConnections.clear();
 
-    this.inputGain = this.context.createGain();
-    this.chainInput = this.context.createGain();
-    this.howlGuard = new AudioWorkletNode(this.context, 'howl-guard', { outputChannelCount: [2] });
-    this.howlGuard.port.onmessage = (event) => {
-      if (event.data?.type === 'howl') this.howlHandler?.();
-    };
-    this.howlGuard.port.postMessage({ enabled: this.howlProtectionEnabled && !!this.stream });
-    this.outputStage = new OutputStage(this.context, { guard: this.howlGuard });
+    // 설계서 4.3절의 신호 흐름:
+    //   소스 → level-meter#in → InputStage → inputGain(입력 트림) ─┬→ 체인 입력
+    //                                                              ├→ 튜너(켤 때만)
+    //                                                              └→ output-guard 입력 1(분석 전용, 장치 모드만)
+    //   체인 → presetTrim → masterGain → output-guard 입력 0 → 리미터 → level-meter#out → [스피커, 녹음, 파형 분석]
+    this.inputGain = context.createGain();
+    this.chainInput = context.createGain();
+    this.inputTap = createLevelMeter(context, 'in');
+    this.outputTap = createLevelMeter(context, 'out');
+    this.outputGuard = createOutputGuard(context, this.currentGuardMode());
+    this.outputStage = new OutputStage(context, { guard: this.outputGuard, levelMeter: this.outputTap });
     // 프리셋 음량 보정의 처음 값은 지금 스토어 값이다. 램프 없이 바로 둔다(아직 소리가 흐르기 전이다).
     this.outputStage.presetTrim.gain.value = dbToGain(clampTrimDb(this.getPresetTrimDb()));
-    this.inputMeter = new MeterNode(this.context);
-    this.outputMeter = new MeterNode(this.context);
-    this.tuner = new TunerNode(this.context, this.tuningPreset);
+    this.inputMeter = new MeterNode(context);
+    this.outputMeter = new MeterNode(context);
+    this.tuner = new TunerNode(context, this.tuningPreset);
     this.tuner.setReferenceHz(this.tuningReferenceHz);
     this.tunerConnected = false;
 
-    rampParam(this.inputGain.gain, dbToGain(this.inputGainDb), this.context, 0.02);
+    rampParam(this.inputGain.gain, dbToGain(this.inputGainDb), context, 0.02);
     this.outputStage.input.gain.value = 0;
 
-    this.inputStage = this.createInputStage(source);
+    source.connect(this.inputTap);
+    this.inputStage = this.createInputStage(this.inputTap);
     this.inputStage.output.connect(this.inputGain);
     this.inputGain.connect(this.inputMeter.input);
     this.inputGain.connect(this.chainInput);
-    // 마스터 게인 → 하울링 가드 → 리미터 는 OutputStage 가 이어 두었다. 스피커와 출력 미터는 리미터 출력을 받는다.
+    // 하울링 분석은 마이크 입력일 때만 한다. 파일 재생은 입력 1 을 잇지 않는다(가드도 file 모드로 판정을 끈다).
+    if (this.stream) this.inputGain.connect(this.outputGuard, 0, GUARD_ANALYSIS_INPUT);
+    // 마스터 게인 → 가드 → 리미터 → level-meter#out 은 OutputStage 가 이어 두었다. 스피커·파형 분석·녹음은 그 출력을 받는다.
     this.outputStage.output.connect(this.outputMeter.input);
-    this.outputStage.output.connect(this.context.destination);
+    this.outputStage.output.connect(context.destination);
+
+    this.monitor.attach(
+      { inputTap: this.inputTap, outputTap: this.outputTap, guard: this.outputGuard, limiter: this.outputStage.limiter },
+      {
+        onInputLevels: (rmsDb, timeSeconds) => this.inputStage?.onChannelLevels(rmsDb, timeSeconds),
+        inputSelection: () => this.inputStage?.meteredChannels ?? 'all',
+        onHowlCut: (freqHz) => this.howlHandler?.(freqHz),
+      },
+      context.sampleRate,
+    );
+    this.applyGuardMode();
     this.syncTunerConnection();
   }
 
@@ -875,7 +906,6 @@ export class AudioEngine {
       passthrough: !this.stream,
     });
     stage.onDecision((decision) => this.inputDecisionHandler?.(decision));
-    stage.startMonitoring();
     return stage;
   }
 
@@ -1064,7 +1094,9 @@ export class AudioEngine {
     this.source?.disconnect();
     this.inputStage?.dispose();
     this.inputStage = null;
-    this.howlGuard?.disconnect();
+    this.inputTap?.disconnect();
+    this.outputGuard?.disconnect();
+    this.outputTap?.disconnect();
     this.inputGain?.disconnect();
     this.chainInput?.disconnect();
     this.outputStage?.dispose();
