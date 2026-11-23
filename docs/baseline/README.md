@@ -19,6 +19,7 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 ```
 
 - 기준선을 갱신하는 커밋의 메시지는 `baseline: {Step ID} {이유}` 로 쓴다. 이유 없이 갱신하지 않는다.
+- `tolerances.json` 의 `criteria` 는 기준선과 상관없는 **절대 수용 기준**(하한 `atLeast`·상한 `atMost`)이다. 매번 비교할 때 함께 검사하고, 어기는 값은 `--update` 로도 기준선이 되지 못한다. 지금 걸린 것: P-01 `differenceDb ≥ 30`, P-02 `outputDropDb ≥ 25`(S1.1). Step 이 수용 기준을 맞출 때마다 여기에 더한다.
 - `npm test` 가 `test:probe` 로 이 비교를 함께 돈다. 시험 제한 시간만 900초로 늘려 두었다(`scripts/run-all-tests.mjs`).
 - Chrome 이 없으면 로컬에서는 건너뛰고(종료 코드 0, 경고 출력) CI(`CI=true`)에서는 실패한다. `CHROME_PATH` 로 Chrome 을 지정할 수 있다.
 - 기준선을 만든 환경: Chrome/153.0.8010.12, Linux x64, Node v22. 브라우저 버전이 다르면 비교 때 경고가 나온다. 값이 흔들리면 Chrome 버전을 고정하고 별도 PR 로 기준선을 갱신한다(설계서 6.4절).

@@ -30,6 +30,7 @@
     "test:howl": "node scripts/howl-guard-regression.mjs",
     "test": "node scripts/run-all-tests.mjs",
     "test:compressor-phase": "node scripts/compressor-phase-regression.mjs",
+    "test:crunch-curve": "node scripts/crunch-curve-regression.mjs",
     "test:output-device": "node scripts/output-device-regression.mjs",
     "test:history": "node scripts/history-regression.mjs",
     "test:cabinet-ir": "node scripts/cabinet-ir-regression.mjs",
