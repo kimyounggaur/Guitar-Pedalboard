@@ -249,7 +249,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
             checked={howlProtectionEnabled}
             onChange={setHowlProtectionEnabled}
           />
-          <span>일정하게 지속되는 큰 소리를 감지하면 차단합니다. 기타의 긴 지속음에도 반응하거나 일부 피드백을 놓칠 수 있으므로 헤드폰을 사용하세요.</span>
+          <span>입력에서 같은 높이의 소리가 줄지 않고 1초 넘게 이어지면 하울링으로 보고 차단합니다. 기타의 긴 서스테인에 반응하거나 일부 피드백을 놓칠 수 있으므로 헤드폰을 사용하세요.</span>
         </div>
       </div>
 
