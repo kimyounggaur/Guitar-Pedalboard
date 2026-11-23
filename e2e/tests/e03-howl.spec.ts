@@ -86,7 +86,8 @@ test.describe('E-03 하울링 차단', () => {
     { id: 'preset', label: '프리셋' },
   ] as const;
   for (const tab of phoneTabs) {
-    // 예전에는 '미터' 탭이 보일 때만 하울링을 감시했다(감시가 미터 그리기에 묶여 있었다). 이제는 어느 탭이든 같아야 한다.
+    // 설계서 C1: 설계서 기준 커밋에서는 감시가 미터 그리기(rAF)에 묶여 '미터' 탭이 보일 때만 돌았다. 이 저장소의 HEAD 는 이미 오디오 스레드 워클릿이라
+    // 탭과 무관했지만, 새 감시(입력 쪽 판정)도 어느 탭에서든 같은 시간에 끊어야 한다 — 그 회귀를 지킨다.
     test(`E-03 휴대폰 '${tab.label}' 탭: H-1 이 1.5초 안에 차단된다`, async ({ launchWithMic }) => {
       const { page } = await launchWithMic('h-1.wav', PHONE);
       await openForHowl(page);
