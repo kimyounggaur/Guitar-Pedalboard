@@ -1,7 +1,9 @@
 import { notifyStorageFailure } from './storageNotice';
 import { create } from 'zustand';
 import { AudioEngine } from '../audio/AudioEngine';
+import { clampTrimDb } from '../audio/offline/loudnessSpec';
 import type { PedalParamValue, PedalState, Preset } from '../audio/types';
+import factoryTrims from '../presets/factoryTrims.json';
 import {
   clonePedals,
   initialPedals,
@@ -13,6 +15,9 @@ import { useAudioStore } from './audioStore';
 
 const STORAGE_KEY = 'web-guitar-pedalboard-presets';
 const FACTORY_TIMESTAMP = 1767225600000;
+
+/** 팩토리 프리셋의 음량 보정(dB, S1.4c). `npm run trims` 가 만든 파일이고, 목록에 없는 프리셋은 보정 없음(0)이다(M6). */
+const factoryTrimById: Readonly<Record<string, number>> = factoryTrims.trims;
 
 type PresetExport = {
   version: number;
@@ -82,6 +87,7 @@ function createPreset(
   overrides: PresetOverrides,
 ): PresetListItem {
   const library = libraryById.get(libraryId);
+  const trimDb = factoryTrimById[id];
 
   return {
     id,
@@ -91,6 +97,7 @@ function createPreset(
     description,
     tags,
     isFactory: true,
+    ...(trimDb === undefined ? {} : { trimDb: clampTrimDb(trimDb) }),
     updatedAt: FACTORY_TIMESTAMP,
     pedals: clonePedals(initialPedals).map((pedal) =>
       overrides[pedal.id] ? withPedalOverrides(pedal, overrides[pedal.id]) : pedal,
@@ -390,8 +397,16 @@ function normalizeImportedPreset(preset: Preset, version: number): Preset {
     description: typeof preset.description === 'string' ? preset.description : undefined,
     tags: Array.isArray(preset.tags) ? preset.tags.filter((tag) => typeof tag === 'string') : undefined,
     pedals: migratePedalCollection(preset.pedals, version),
+    // 음량 보정이 없거나 숫자가 아니면 필드를 두지 않는다(= 0, M6). 이전 버전이 내보낸 파일에는 이 필드가 없다.
+    ...normalizeTrimField(preset.trimDb),
     updatedAt: typeof preset.updatedAt === 'number' ? preset.updatedAt : Date.now(),
   };
+}
+
+/** 0 이 아닌 음량 보정만 필드로 남긴다. 저장·내보내기·불러오기가 같은 모양을 쓴다. */
+function normalizeTrimField(value: unknown): { trimDb?: number } {
+  const trimDb = clampTrimDb(value);
+  return trimDb === 0 ? {} : { trimDb };
 }
 
 export function parsePresetJson(json: string): Preset[] {
@@ -471,8 +486,12 @@ interface PresetStore {
   presets: PresetListItem[];
   slotA: PedalState[] | null;
   slotB: PedalState[] | null;
+  /** 슬롯에 담아 둔 프리셋 음량 보정(dB). 페달 스냅샷과 짝이라 슬롯을 바꿔도 음량이 따라간다. */
+  slotATrimDb: number;
+  slotBTrimDb: number;
   activeSlot: PresetComparisonSlot;
-  savePreset: (name: string, pedals: PedalState[]) => void;
+  /** `trimDb` 를 주지 않으면 지금 쓰는 음량 보정을 함께 저장한다. */
+  savePreset: (name: string, pedals: PedalState[], trimDb?: number) => void;
   deletePreset: (id: string) => void;
   reloadPresets: () => void;
   exportPresets: () => string;
@@ -481,11 +500,14 @@ interface PresetStore {
   activateSlot: (slot: PresetComparisonSlot) => boolean;
 }
 
-/** Apply a complete preset snapshot. Session-only cabinet IRs are never part of snapshots. */
-export function applyPresetPedals(pedals: PedalState[]): void {
+/**
+ * Apply a complete preset snapshot. Session-only cabinet IRs are never part of snapshots.
+ * `trimDb` 는 그 프리셋의 음량 보정이다. 없으면 0 으로 적용한다(보정 없는 프리셋을 불러오면 앞 프리셋의 보정이 남지 않는다).
+ */
+export function applyPresetPedals(pedals: PedalState[], trimDb?: number): void {
   const engine = AudioEngine.getInstance();
   engine.clearAllCabinetIrs();
-  usePedalStore.getState().setPedals(clonePedals(pedals));
+  usePedalStore.getState().setPedals(clonePedals(pedals), clampTrimDb(trimDb));
   useAudioStore.getState().adoptTempoFromPedals();
   engine.rebuildChain();
 }
@@ -494,9 +516,11 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
   presets: toPresetList(readUserPresets()),
   slotA: null,
   slotB: null,
+  slotATrimDb: 0,
+  slotBTrimDb: 0,
   activeSlot: 'A',
 
-  savePreset: (name, pedals) => {
+  savePreset: (name, pedals, trimDb = usePedalStore.getState().presetTrimDb) => {
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
@@ -510,6 +534,7 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
       description: '사용자가 저장한 페달 체인',
       tags: ['user', 'custom'],
       pedals: clonePedals(pedals),
+      ...normalizeTrimField(trimDb),
       updatedAt: Date.now(),
     };
 
@@ -563,18 +588,20 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
 
   captureCurrentToSlot: (slot) => {
     const capturedPedals = clonePedals(usePedalStore.getState().pedals);
+    const capturedTrimDb = usePedalStore.getState().presetTrimDb;
     set(
       slot === 'A'
-        ? { slotA: capturedPedals, activeSlot: slot }
-        : { slotB: capturedPedals, activeSlot: slot },
+        ? { slotA: capturedPedals, slotATrimDb: capturedTrimDb, activeSlot: slot }
+        : { slotB: capturedPedals, slotBTrimDb: capturedTrimDb, activeSlot: slot },
     );
   },
 
   activateSlot: (slot) => {
     const storedPedals = slot === 'A' ? get().slotA : get().slotB;
     if (!storedPedals) return false;
+    const storedTrimDb = slot === 'A' ? get().slotATrimDb : get().slotBTrimDb;
 
-    applyPresetPedals(storedPedals);
+    applyPresetPedals(storedPedals, storedTrimDb);
     set({ activeSlot: slot });
     return true;
   },

@@ -6,7 +6,8 @@ import { useAudioStore } from './audioStore';
 
 const MAX_HISTORY = 50;
 const COALESCE_MS = 350;
-type Snapshot = PedalState[];
+// 실행 취소·다시 실행은 페달과 프리셋 음량 보정(S1.4c)을 함께 되돌린다. 보정이 따로 남으면 되돌린 프리셋의 음량이 틀어진다.
+type Snapshot = { pedals: PedalState[]; presetTrimDb: number };
 interface HistoryStore {
   past: Snapshot[];
   future: Snapshot[];
@@ -19,7 +20,7 @@ let lastParameterKey: string | null = null;
 let lastChangeAt = 0;
 
 // Group consecutive moves of the same knob as one edit, while keeping unrelated edits separate.
-function changedParameterKey(before: Snapshot, after: Snapshot): string | null {
+function changedParameterKey(before: PedalState[], after: PedalState[]): string | null {
   if (before.length !== after.length) return null;
   let key: string | null = null;
   for (let i = 0; i < before.length; i++) {
@@ -36,10 +37,19 @@ function changedParameterKey(before: Snapshot, after: Snapshot): string | null {
   return key;
 }
 
-function restore(pedals: Snapshot) {
+function snapshotOf(pedals: PedalState[], presetTrimDb: number): Snapshot {
+  return { pedals: clonePedals(pedals), presetTrimDb };
+}
+
+function currentSnapshot(): Snapshot {
+  const { pedals, presetTrimDb } = usePedalStore.getState();
+  return snapshotOf(pedals, presetTrimDb);
+}
+
+function restore(snapshot: Snapshot) {
   restoring = true;
   try {
-    usePedalStore.getState().setPedals(clonePedals(pedals));
+    usePedalStore.getState().setPedals(clonePedals(snapshot.pedals), snapshot.presetTrimDb);
     useAudioStore.getState().adoptTempoFromPedals();
     AudioEngine.getInstance().rebuildChain();
   } finally {
@@ -59,7 +69,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     const { past, future } = get();
     const previous = past.at(-1);
     if (!previous) return;
-    const current = clonePedals(usePedalStore.getState().pedals);
+    const current = currentSnapshot();
     restore(previous);
     set({ past: past.slice(0, -1), future: [...future, current].slice(-MAX_HISTORY) });
   },
@@ -67,20 +77,24 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     const { past, future } = get();
     const next = future.at(-1);
     if (!next) return;
-    const current = clonePedals(usePedalStore.getState().pedals);
+    const current = currentSnapshot();
     restore(next);
     set({ past: [...past, current].slice(-MAX_HISTORY), future: future.slice(0, -1) });
   },
 }));
 
 usePedalStore.subscribe((state, previous) => {
-  if (restoring || state.pedals === previous.pedals) return;
-  if (JSON.stringify(state.pedals) === JSON.stringify(previous.pedals)) return;
-  const key = changedParameterKey(previous.pedals, state.pedals);
+  if (restoring) return;
+  const trimChanged = state.presetTrimDb !== previous.presetTrimDb;
+  const pedalsChanged =
+    state.pedals !== previous.pedals && JSON.stringify(state.pedals) !== JSON.stringify(previous.pedals);
+  if (!pedalsChanged && !trimChanged) return;
+  // 노브 하나를 계속 돌리는 편집만 한 단계로 묶는다. 음량 보정이 함께 바뀐 편집(프리셋 불러오기, 음량 맞추기)은 항상 한 단계다.
+  const key = trimChanged ? null : changedParameterKey(previous.pedals, state.pedals);
   const now = Date.now();
   const coalesce = key !== null && key === lastParameterKey && now - lastChangeAt <= COALESCE_MS;
   useHistoryStore.setState((history) => ({
-    past: coalesce ? history.past : [...history.past, clonePedals(previous.pedals)].slice(-MAX_HISTORY),
+    past: coalesce ? history.past : [...history.past, snapshotOf(previous.pedals, previous.presetTrimDb)].slice(-MAX_HISTORY),
     future: [],
   }));
   lastParameterKey = key;

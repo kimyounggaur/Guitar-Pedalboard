@@ -369,7 +369,7 @@ CabEffect ─▶ ConvolverNode(IR) ─▶ convolvedGain(= 10^(makeupDb/20)) ─�
 | P-23 최대 클릭 비율(44.1 / 48 kHz) | +1.01 / +1.22 dB | +0.97 / +1.18 dB. 48 kHz 의 '컴프레서 켬' 항목(−2.16 → −2.10 dB)이 허용 폭 ±0.05 를 넘어 기준선을 갱신했다(Cab 레벨 +0.2 dB 가 이 항목의 비선형 구간에 닿는 정도를 바꾼 것으로 *추정*, 추적하지 않음). 새 노드 0개는 그대로 |
 
 - 새 시험: `test:cabinet-response` 확장 — ① 보정표의 키가 모델 목록과 같고 |값| ≤ 1 dB ② 200개 조합(샘플레이트 2 × 모델 5 × 마이크 5곳 × 거리 4곳)에서 `IR 기준 음량 + 부족분 = 0 dB(±0.02)`, 부족분 ≥ 0, 보충 ≤ 6 dB, `off` 는 0, 상한에 걸리는 조합이 실제로 있음(77개가 0.05 dB 넘는 보충 필요, 최대 4.54 dB — 표 포함). P-04 는 `tolerances.json` 판정 기준으로 `npm test` 의 `test:probe` 가 지킨다.
-- 검증: `npx tsc -b --noEmit`, `npm run lint`, `npm run build`, `npm test` 29/29(165초) 통과. `npm run e2e` 는 화면·저장 형식을 바꾸지 않아 S1.4c 와 함께 병합 뒤 한 번 더 돌린다(아래 결과 참고).
+- 검증: `npx tsc -b --noEmit`, `npm run lint`, `npm run build`, `npm test` 29/29(165초) 통과. 병합 뒤 `npm run e2e` 56/56(2.6분) 통과(화면·저장 형식은 바꾸지 않았다).
 - 만난 문제
   - TS2416 — `CabEffect` 의 새 필드 `makeupGain` 이 `BaseEffect.makeupGain: GainNode` 와 이름이 겹쳐 `cabinetMakeup` 으로 바꿨다.
   - 처음 계획한 Σh² = 1 정규화는 측정해 보고 접었다: 기준 보정 뒤 IR 에너지가 조합마다 6.5 dB 흩어져 있어(L-34) 켬/끔 차가 마이크·거리에 따라 같은 폭으로 흔들린다.
@@ -382,5 +382,106 @@ CabEffect ─▶ ConvolverNode(IR) ─▶ convolvedGain(= 10^(makeupDb/20)) ─�
   - 체인 단위 켬/끔 차(왜곡 뒤 Cab)는 측정하지 않았다. P-04 는 REF-PC 를 Cab 만 지나게 한다.
   - P-05 음량 폭은 약 21.3 dB 로 그대로다 — S1.4c(프리셋 음량 맞춤)에서 줄인다. S1.4b 만 배포하면 안 된다(S1.4c 와 같은 배포 원칙 유지).
   - 보정표 값은 모델 5개 기준이다. IR 모델이 늘면(S3.2·S5.4) 같은 방식으로 다시 재야 한다(`test:cabinet-response` 가 표의 키가 모델 목록과 같은지 확인한다).
+
+---
+
+## S1.4c 프리셋 음량 정렬
+
+- 브랜치·병합: `refactor/s1-4c-preset-trims` → `phase/1`. **S1.4b 와 같은 배포에 넣는다**(둘 다 `phase/1` 에 모여 Phase 1 배포 때 함께 나간다).
+- 해결 항목: R1-5 중 '프리셋 사이 음량 차이'(D6). 시작 시점의 폭은 설계서의 27 dB 가 아니라 **21.3 dB**(−33.4 ~ −12.1 dBFS)였다 — S1.4a·S1.4b 가 이미 일부 줄여 놓았다.
+- 변경 파일: `src/audio/offline/{loudnessSpec,measureLoudness,referenceSignal}.ts`(새 파일 3개 — 기준값·공식, 빠른 렌더 측정, REF-PC 생성기), `src/presets/factoryTrims.json`(새 파일 — 팩토리 40개 trim), `src/audio/engine/OutputStage.ts`·`src/audio/AudioEngine.ts`·`src/audio/offline/renderChain.ts`(trim 노드와 연결), `src/store/{pedalStore,presetStore,historyStore}.ts`·`src/main.tsx`·`src/audio/types.ts`(보정값 저장·복원·실행 취소), `src/components/{PresetPanel,MidiAdvancedControls}.tsx`·`src/styles/panels.css`(표시와 '음량 맞추기' 버튼), `src/audio/testing/{probes,signals}.ts`·`scripts/audio-render-probe.mjs`(P-05), `scripts/compute-preset-trims.mjs`(새 파일, `npm run trims`), `scripts/preset-loudness-regression.mjs`(새 시험), `e2e/tests/s1-4c-preset-loudness.spec.ts`(새 시험), `scripts/{peak-limiter,preset-ab}-regression.mjs`(구조 단언 갱신), `docs/baseline/{tolerances.json,audio-probe.json,README.md}`, `docs/REFACTOR_LOG.md`(L-38~L-43), `docs/refactoring/regex-assertions.md`, `package.json`.
+
+**동작**
+
+```text
+REF-PC ─▶ 프리셋 체인 ─▶ presetTrim(trimDb) ─▶ 마스터 게인 ─▶ 하울 가드 ─▶ 리미터(−1 dBFS) ─▶ 스피커·미터·녹음
+trimDb = min( 목표(−20 dBFS) − 평균 RMS ,  0 dBFS − 피크 )     ← 오프라인 렌더(보정·리미터 없음)로 잰 값, 0.1 dB 단위, ±24 dB
+```
+
+- 팩토리 40개의 trim 은 `npm run trims` 가 계산해 `src/presets/factoryTrims.json` 에 쓴다(P-05 를 44.1·48 kHz 로 렌더해 평균 RMS 는 평균하고 피크는 큰 쪽을 쓴다). 기준값(목표 −20, 허용 ±2, D6 예외, 리미터 허용 감소량 1 dB)은 `loudnessSpec.ts` 한 곳에만 있고, 바꾸면 이 스크립트를 다시 돌린다. `test:preset-loudness` 가 JSON 과 상수가 어긋나면 실패한다.
+- 사용자 프리셋은 '음량 맞추기' 버튼이 같은 코드로 현재 체인에 REF-PC 4초를 오프라인으로 흘려 보내 보정값을 정한다(스피커로는 소리가 나가지 않는다). 보정값은 프리셋·페달 저장본·내보내기 JSON 에 `trimDb`(없으면 0)로 함께 저장되고, A/B 슬롯과 실행 취소·다시 실행도 페달과 한 쌍으로 따라간다.
+- 목표까지 올리면 리미터가 1 dB 넘게 눌러야 하는 프리셋은 피크가 0 dBFS 에 닿는 곳에서 멈춘다(GS-7 우선, L-40). 버튼을 눌렀을 때 그렇게 멈추면 화면 글이 이유를 알려 준다.
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| P-05: 팩토리 40개 REF-PC 출력 RMS −20 ± 2 dBFS(D6 예외 프리셋은 그 목표) | 충족(예외 1개) | 프리셋 목표에서 최대 0.53 / 0.96 dB(44.1 / 48 kHz). 표준 목표(−20)에서는 'Acoustic Room' 만 −2.7 / −2.4 dB 로 ±2 밖(피크 여유와 맞바꿈, L-40). 'Headphone Safe Start' 는 D6 예외로 −26 dBFS(L-38) |
+| 클린 ↔ 드라이브 전환 RMS 변화 ≤ 4 dB ★(보정 전 약 21 dB) | 충족 | 최대 3.20 / 2.66 dB(Acoustic Room ↔ Post Rock Wash / Vintage Fuzz). Acoustic Room 을 빼면 약 1.7 dB. D6 예외 프리셋은 이 판정에서 뺀다 |
+| REF-PC 에서 리미터 최대 감소량 ≤ 1 dB(GS-7) ★ | 충족 | 최대 0.95 / 0.98 dB. **평균만 −20 에 맞췄을 때는 7개 프리셋이 1.0 ~ 3.4 dB 로 못 지켰다**(L-40) |
+| '음량 맞추기' 가 사용자 프리셋을 −20 ± 1 dBFS 에 맞춘다 | 충족(피크 제한 프리셋 제외) | 4초 렌더가 8초 렌더와 최대 0.43 / 0.53 dB 차이(`quickMeasureErrorDb.*`). 2초는 1.5 dB 까지 어긋나 4초로 늘렸다(L-39). e2e: 'Texas Push' 에서 버튼 값이 팩토리 값과 ±1 dB. 피크 제한(순간 피크가 큰 클린)은 −20 까지 못 올라간다 |
+| 'Headphone Safe Start' ↔ 'Texas Push' 전환에서 음량이 크게 튀지 않는다 | 부분 충족 | 5.9 / 6.1 dB(보정 전 약 27 dB). D6 예외(−26 dBFS)를 둔 대가이며 예외를 지우면 약 0 dB(L-38) |
+| 보정값이 저장·복원·내보내기·가져오기·A/B·실행 취소에서 유지된다 | 충족 | `test:preset-loudness`, e2e 4개(L-42) |
+
+**전후** — P-05 프리셋별 REF-PC 출력 RMS(dBFS), trim(dB), 리미터 감소량(dB). 전 = S1.4b 까지의 소리(보정 없음 + 리미터, 이전 기준선), 후 = 팩토리 보정 + 리미터. † 피크 여유 때문에 −20 에 못 미침, ‡ D6 예외(−26 dBFS)
+
+| 프리셋 | 전 RMS (44.1 / 48 kHz) | trim | 후 RMS (44.1 / 48 kHz) | 리미터 감소 후 (44.1 / 48 kHz) |
+|---|---|---|---|---|
+| Clean Practice | −23.2 / −23.2 | +3.2 dB | −20.0 / −20.0 | 0.70 / 0.66 |
+| Studio Clean † | −24.8 / −25.0 | +4.8 dB | −20.1 / −20.3 | 0.94 / 0.96 |
+| Warm Jazz Clean | −23.8 / −24.5 | +4.1 dB | −19.7 / −20.4 | 0.22 / 0.18 |
+| Bright Pop Clean † | −26.0 / −26.2 | +5.4 dB | −20.6 / −20.8 | 0.75 / 0.93 |
+| Funk Comp † | −33.4 / −33.5 | +12.7 dB | −20.7 / −20.8 | 0.93 / 0.97 |
+| Country Twang † | −29.0 / −29.0 | +8.4 dB | −20.6 / −20.6 | 0.88 / 0.98 |
+| Edge Breakup | −13.0 / −12.9 | −9.3 dB | −20.1 / −20.0 | 0.00 / 0.00 |
+| Acoustic Room † | −27.1 / −26.8 | +4.4 dB | −22.7 / −22.4 | 0.88 / 0.91 |
+| Blues Lead | −14.4 / −14.4 | −8.9 dB | −19.9 / −20.1 | 0.00 / 0.00 |
+| Texas Push | −14.4 / −14.3 | −10.9 dB | −20.1 / −19.9 | 0.00 / 0.00 |
+| Chicago Blues | −12.5 / −12.5 | −10.5 dB | −20.0 / −20.0 | 0.00 / 0.00 |
+| Delta Slap | −12.6 / −12.5 | −10.5 dB | −20.1 / −20.0 | 0.00 / 0.00 |
+| Soulful Neck | −14.0 / −14.2 | −6.9 dB | −19.8 / −20.1 | 0.00 / 0.00 |
+| Classic Rock | −12.6 / −12.6 | −10.1 dB | −20.1 / −19.9 | 0.00 / 0.00 |
+| British Crunch | −13.2 / −13.4 | −7.1 dB | −19.9 / −20.1 | 0.00 / 0.00 |
+| Plexi Lead | −13.6 / −13.3 | −6.9 dB | −20.1 / −19.8 | 0.00 / 0.00 |
+| Arena Solo | −13.8 / −13.8 | −12.8 dB | −20.0 / −20.0 | 0.00 / 0.00 |
+| Punk Rhythm | −13.2 / −13.3 | −12.3 dB | −20.0 / −20.0 | 0.00 / 0.00 |
+| Indie Jangle | −19.3 / −19.2 | −0.8 dB | −20.1 / −20.0 | 0.89 / 0.87 |
+| Tight Modern Metal | −13.6 / −13.7 | −11.5 dB | −20.0 / −20.0 | 0.00 / 0.00 |
+| Thrash Rhythm | −14.1 / −14.1 | −6.2 dB | −20.0 / −20.0 | 0.00 / 0.00 |
+| Djent Gate | −14.0 / −14.0 | −10.5 dB | −20.0 / −19.9 | 0.00 / 0.00 |
+| Liquid Metal Lead | −13.1 / −13.9 | −12.5 dB | −20.0 / −20.1 | 0.00 / 0.00 |
+| Doom Wall | −12.3 / −12.4 | −7.8 dB | −19.9 / −20.1 | 0.00 / 0.00 |
+| Ambient Delay | −27.2 / −26.1 | +6.7 dB | −20.5 / −19.4 | 0.05 / 0.06 |
+| Tape Swell † | −32.2 / −29.9 | +10.9 dB | −21.3 / −19.0 | 0.92 / 0.93 |
+| Post Rock Wash | −13.8 / −14.7 | −6.0 dB | −19.5 / −20.5 | 0.00 / 0.00 |
+| Dotted Eighth | −20.8 / −20.3 | +0.5 dB | −20.3 / −19.8 | 0.00 / 0.00 |
+| Dream Clean | −27.6 / −28.0 | +7.8 dB | −19.9 / −20.3 | 0.39 / 0.40 |
+| Fuzz Experiment † | −20.8 / −21.5 | +0.3 dB | −20.5 / −21.2 | 0.95 / 0.98 |
+| Vintage Fuzz | −13.8 / −13.5 | −8.4 dB | −20.2 / −19.7 | 0.00 / 0.00 |
+| Gated Velcro | −17.9 / −17.9 | −2.1 dB | −20.0 / −20.0 | 0.00 / 0.00 |
+| Broken Speaker | −18.2 / −18.2 | −1.8 dB | −20.0 / −20.0 | 0.00 / 0.00 |
+| Stoner Fuzz | −12.1 / −12.1 | −8.4 dB | −20.0 / −19.9 | 0.00 / 0.00 |
+| Direct Clean | −26.8 / −26.8 | +6.8 dB | −20.0 / −20.0 | 0.00 / 0.00 |
+| Headphone Safe Start ‡ | −29.9 / −30.0 | +3.9 dB | −26.0 / −26.1 | 0.00 / 0.00 |
+| Low Noise Gate | −26.3 / −26.3 | +6.3 dB | −20.0 / −20.0 | 0.72 / 0.68 |
+| Solo Boost | −13.8 / −13.4 | −9.0 dB | −20.3 / −19.8 | 0.00 / 0.00 |
+| Dark Room | −25.0 / −25.1 | +5.1 dB | −19.9 / −20.0 | 0.04 / 0.06 |
+| Bright Cut | −24.0 / −24.2 | +4.1 dB | −19.9 / −20.1 | 0.46 / 0.47 |
+
+| 요약 | 전 | 후 |
+|---|---|---|
+| 40개 프리셋의 RMS 범위(44.1 / 48 kHz) | −33.4 ~ −12.1 · −33.5 ~ −12.1 (폭 21.3 / 21.4 dB, 중앙값 −16.2 / −16.3) | −26.0 ~ −19.5 · −26.1 ~ −19.0 (폭 6.4 / 7.0 dB, 중앙값 −20.0 / −20.0) |
+| 클린↔드라이브 전환 최대(44.1 / 48 kHz) | 21.3 / 21.4 dB | 3.20 / 2.66 dB |
+| REF-PC 에서 리미터가 눌러야 하는 최대 양(44.1 / 48 kHz) | 8.4 / 8.5 dB(보정 없이 가장 큰 프리셋 — 리미터가 소리를 크게 깎고 있었다. 리미터 없이는 −33.4 ~ −7.2 dBFS, 폭 26.2 dB) | 0.95 / 0.98 dB |
+| '음량 맞추기' 4초 vs 8초 최대 오차(44.1 / 48 kHz) | 2초 렌더: 1.09 / 1.51 dB | 4초 렌더: 0.43 / 0.53 dB |
+
+전환 폭이 가장 큰 5쌍(D6 예외 프리셋 제외) — 44.1 kHz: Acoustic Room ↔ Post Rock Wash 3.20, ↔ Soulful Neck 2.88, ↔ Doom Wall 2.83, ↔ Blues Lead 2.78, ↔ British Crunch 2.78 dB. 48 kHz: Acoustic Room ↔ Vintage Fuzz 2.66, ↔ Solo Boost 2.64, ↔ Dotted Eighth 2.61, ↔ Plexi Lead 2.60, ↔ Classic Rock 2.51 dB. 가장 큰 쌍이 모두 Acoustic Room 이라 이 프리셋만 빼면 최대 약 1.7 dB 다.
+
+- 새 시험: `test:preset-loudness`(30번째 시험) — 공식(반올림·한도·피크 여유·무작위 2,000회 확인)·REF-PC 해시 4개 고정·`factoryTrims.json` 과 상수·프리셋 목록의 일치·페달 저장본(저장·복원·이전 형식·이상한 값)·프리셋 저장/내보내기/가져오기·A/B 슬롯·실행 취소/다시 실행·엔진 램프(30 ms). e2e `s1-4c-preset-loudness.spec.ts` 4개 — 보정값 표시, '음량 맞추기'(팩토리 값과 ±1 dB), 새로고침 뒤 유지, 실행 취소. `tolerances.json` 에 P-05 판정 기준 10개를 더했다.
+- 검증: `npx tsc -b --noEmit`, `npm run lint`, `npm run build` 통과. `npm test` 30/30(282초, `test:probe` 262초 포함 — 새 기준선과 판정 기준 10개로 비교) 통과. `npm run e2e` 60/60(2.5분, 새 4개 포함) 통과.
+- 만난 문제
+  - 2초 렌더는 시간계열 프리셋(Ambient Delay·Tape Swell·Post-Rock Wash)에서 8초 렌더와 최대 1.5 dB 어긋났다 → 4초(L-39).
+  - 평균만 맞추면 리미터가 1 dB 를 넘게 눌렀다(GS-2 와 GS-7 의 충돌) → 피크 여유 규칙(L-40).
+  - 처음 e2e 에서 '기본 페달 설정' 이 `window.confirm` 으로 막혀 보정값이 0 으로 안 돌아왔다 → 시험에서 대화상자를 확인 처리했다(앱 문제 아님).
+- 사람 확인 필요
+  - **D6 값(−20 dBFS)을 실제 기타로 들어 확정**(상수 하나 `PRESET_TARGET_RMS_DBFS`, 바꾸면 `npm run trims`).
+  - **'Headphone Safe Start' −26 dBFS 예외를 유지할지**, 'Headphone Safe Start' ↔ 'Texas Push' 전환(6 dB)이 괜찮은지, 'Solo Boost' 가 표준 목표(−20)로 충분한지(L-38).
+  - 피크 제한을 받은 프리셋(Acoustic Room −2.7 / −2.4, Fuzz Experiment −0.5 / −1.2, Tape Swell −1.3 / +1.0 dB 등)이 귀로 너무 작지 않은지 — 작다면 평균을 우선하는 쪽으로 바꿀지(L-40).
+  - 실제 기타·헤드폰으로 프리셋을 오가며(클린 ↔ 드라이브) 음량이 튀지 않는지, Cab 켬/끔 때도 거슬리지 않는지.
+  - 휴대폰에서 '음량 맞추기' 가 끝나기까지 걸리는 시간(4초 렌더), 화면 글이 이해되는지.
+  - 사용자가 올린 캐비닛 IR 을 켠 상태에서 '음량 맞추기' 결과(오프라인 측정은 내장 IR 만 쓴다, L-43).
+- 남은 위험
+  - REF-PC 는 합성 신호라 실제 기타의 피크·평균 비(crest)와 다르다. 실제 연주에서는 리미터 감소량·평균이 표와 다를 수 있다(D6 청취 확정 전까지 잠정).
+  - Tape Swell(2.2 dB)·Ambient Delay(1.2)·Post-Rock Wash(1.0)·Solo Boost(0.5)는 샘플레이트에 따라 음량이 다르다. trim 은 두 샘플레이트의 평균이라 한쪽에서 최대 약 1.1 dB 어긋난다(표의 †/후 값 참고). 샘플레이트에 따라 소리가 달라지는 원인은 조사하지 않았다(S3 이후 후보).
+  - 사용자 프리셋의 '음량 맞추기' 는 빠른 렌더가 8초 렌더 피크보다 최대 0.46 dB 낮게 재서 리미터 감소량이 1.5 dB 쯤까지 갈 수 있다. 다른 샘플레이트·사용자 IR 은 반영되지 않는다.
+  - 이후 Step 이 소리를 바꾸면(S3.x 의 DSP 수정) 팩토리 trim 을 다시 계산하고 P-05 기준선을 같은 Step 에서 갱신해야 한다(S3.8 에서 재확인).
 
 ---

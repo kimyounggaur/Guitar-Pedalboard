@@ -2,13 +2,26 @@
 // 난수는 고정 시드의 PRNG만 쓰므로 같은 인자로 부르면 항상 같은 신호가 나온다.
 // 브라우저 의존이 없어서 Node(scripts/make-fixture-wavs.mjs)와 브라우저(probe.html)에서 모두 쓴다.
 
-export type Samples = Float32Array;
+import {
+  addSawtoothVoice,
+  allocate,
+  dbToLinear,
+  normalizePeak,
+  peakOf,
+  refPc,
+  REF_PC_NOTES_HZ,
+  REF_PC_PEAK_DB,
+  type Samples,
+} from '../offline/referenceSignal';
+
+// REF-PC 와 그 재료는 앱도 쓰므로 src/audio/offline/referenceSignal.ts 로 옮겼다(S1.4c). 이 파일이 그대로 다시 내보낸다.
+export { dbToLinear, normalizePeak, peakOf, refPc, REF_PC_NOTES_HZ, REF_PC_PEAK_DB };
+export type { Samples };
 export type Channels = Float32Array[];
 
 /** 신호를 만들 때 쓰는 고정 시드(바꾸면 모든 기준선이 달라진다). */
 export const SIGNAL_SEED = 0x5eed0001;
 
-export const dbToLinear = (db: number): number => 10 ** (db / 20);
 export const linearToDb = (value: number): number => 20 * Math.log10(Math.max(value, 1e-12));
 
 /** mulberry32. 같은 시드면 같은 수열이다. */
@@ -23,30 +36,12 @@ export function createRng(seed: number): () => number {
   };
 }
 
-export function peakOf(samples: Samples): number {
-  let peak = 0;
-  for (let i = 0; i < samples.length; i += 1) {
-    const value = Math.abs(samples[i]);
-    if (value > peak) peak = value;
-  }
-  return peak;
-}
-
 export function rmsOf(samples: Samples, start = 0, end = samples.length): number {
   let sum = 0;
   const from = Math.max(0, start);
   const to = Math.min(samples.length, end);
   for (let i = from; i < to; i += 1) sum += samples[i] * samples[i];
   return to > from ? Math.sqrt(sum / (to - from)) : 0;
-}
-
-/** 피크가 peakDb(dBFS)가 되도록 크기를 맞춘다(제자리 변경). */
-export function normalizePeak(samples: Samples, peakDb: number): Samples {
-  const peak = peakOf(samples);
-  if (peak === 0) return samples;
-  const scale = dbToLinear(peakDb) / peak;
-  for (let i = 0; i < samples.length; i += 1) samples[i] *= scale;
-  return samples;
 }
 
 export function toStereo(left: Samples, right: Samples | null = left): Channels {
@@ -62,10 +57,6 @@ export function rightOnly(mono: Samples): Channels {
   return [new Float32Array(mono.length), mono];
 }
 
-function allocate(sampleRate: number, seconds: number): Float32Array {
-  return new Float32Array(Math.round(sampleRate * seconds));
-}
-
 /** 시작 부분에 아주 짧은 선형 페이드인을 건다(클릭 방지). */
 function fadeIn(samples: Samples, sampleRate: number, seconds: number): void {
   const count = Math.min(samples.length, Math.round(sampleRate * seconds));
@@ -75,49 +66,6 @@ function fadeIn(samples: Samples, sampleRate: number, seconds: number): void {
 function fadeOut(samples: Samples, sampleRate: number, seconds: number): void {
   const count = Math.min(samples.length, Math.round(sampleRate * seconds));
   for (let i = 0; i < count; i += 1) samples[samples.length - 1 - i] *= i / count;
-}
-
-/** 배음 amplitude 1/n(톱니파 근사)을 가진 음. 나이퀴스트의 45%를 넘는 배음은 뺀다. */
-function addSawtoothVoice(
-  target: Samples,
-  sampleRate: number,
-  fundamental: number,
-  harmonics: number,
-  envelope: (time: number) => number,
-): void {
-  const usable = Math.min(harmonics, Math.floor((sampleRate * 0.45) / fundamental));
-  // 배음마다 같은 포락선을 쓰므로 한 번만 계산해 둔다.
-  const shape = new Float64Array(target.length);
-  for (let i = 0; i < shape.length; i += 1) shape[i] = envelope(i / sampleRate);
-  for (let harmonic = 1; harmonic <= usable; harmonic += 1) {
-    const step = (2 * Math.PI * fundamental * harmonic) / sampleRate;
-    const amplitude = 1 / harmonic;
-    for (let i = 0; i < target.length; i += 1) {
-      target[i] += amplitude * Math.sin(step * i) * shape[i];
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------------------------
-// REF-PC — 합성 파워코드
-// E2·B2·E3, 각 성분은 amplitude 1/n 인 배음 20개, 피크 −12 dBFS, 시정수 1.2초 지수 감쇠, 2초마다 다시 침, 8초.
-// 다시 칠 때 소리가 끊기지 않게 2 ms 선형 어택을 둔다(설계서는 어택을 정하지 않았다).
-// ---------------------------------------------------------------------------------------------
-export const REF_PC_NOTES_HZ = [82.41, 123.47, 164.81] as const;
-export const REF_PC_PEAK_DB = -12;
-const REF_PC_STRIKE_SECONDS = 2;
-const REF_PC_TIME_CONSTANT = 1.2;
-const REF_PC_ATTACK_SECONDS = 0.002;
-
-export function refPc(sampleRate: number, seconds = 8): Samples {
-  const out = allocate(sampleRate, seconds);
-  const envelope = (time: number): number => {
-    const sinceStrike = time - Math.floor(time / REF_PC_STRIKE_SECONDS) * REF_PC_STRIKE_SECONDS;
-    const attack = Math.min(1, sinceStrike / REF_PC_ATTACK_SECONDS);
-    return attack * Math.exp(-sinceStrike / REF_PC_TIME_CONSTANT);
-  };
-  for (const note of REF_PC_NOTES_HZ) addSawtoothVoice(out, sampleRate, note, 20, envelope);
-  return normalizePeak(out, REF_PC_PEAK_DB);
 }
 
 // ---------------------------------------------------------------------------------------------

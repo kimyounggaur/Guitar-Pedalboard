@@ -3,7 +3,7 @@
 > `node docs/refactoring/tools/list-regex-assertions.mjs` 로 생성한 파일이다(수정하지 말고 다시 생성한다). 줄 번호는 생성한 시점의 `scripts/` 기준이므로, 시험 파일을 고친 Step 뒤에는 다시 생성한다.
 > 세는 대상은 `assert.match(` 와 `assert.doesNotMatch(` 호출이다. 보고서의 "337곳"은 기준 커밋 `4ac9cf7`에서 이 두 호출을 센 값과 같다(316 + 21).
 
-**생성 시점 합계: 330곳** (match 309 + doesNotMatch 21)
+**생성 시점 합계: 336곳** (match 314 + doesNotMatch 22)
 
 | 파일 | match | doesNotMatch | 합계 |
 |---|---:|---:|---:|
@@ -12,7 +12,7 @@
 | graphic-eq-regression.mjs | 27 | 4 | 31 |
 | input-stage-regression.mjs | 2 | 0 | 2 |
 | midi-regression.mjs | 21 | 1 | 22 |
-| peak-limiter-regression.mjs | 8 | 1 | 9 |
+| peak-limiter-regression.mjs | 13 | 2 | 15 |
 | preset-ab-regression.mjs | 23 | 0 | 23 |
 | pwa-regression.mjs | 4 | 0 | 4 |
 | recording-regression.mjs | 35 | 2 | 37 |
@@ -20,7 +20,7 @@
 | shortcuts-regression.mjs | 35 | 0 | 35 |
 | tap-tempo-regression.mjs | 13 | 1 | 14 |
 | tremolo-regression.mjs | 14 | 2 | 16 |
-| **합계** | **309** | **21** | **330** |
+| **합계** | **314** | **22** | **336** |
 
 ## 파일별 위치
 
@@ -154,15 +154,21 @@
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
 |---:|---|---|---|
-| 322 | match | `urls` | `/from '\.\/limiter\.worklet\.ts\?worker&url'/, '리미터는 별도 파일을 ?worker&ur` |
-| 323 | match | `engine` | `/new OutputStage\(this\.context, \{ guard: this\.howlGuard \}\)/` |
-| 324 | match | `engine` | `/this\.outputStage\.output\.connect\(this\.context\.destination\)/` |
-| 325 | match | `engine` | `/this\.outputStage\.output\.connect\(this\.outputMeter\.input\)/` |
-| 326 | match | `engine` | `/this\.outputStage\?\.output\.connect\(this\.recorderDestination\)/, '` |
-| 327 | match | `engine` | `/limiterWorkletUrl/, '엔진이 리미터 워클릿 파일을 등록한다'` |
-| 328 | match | `modules` | `/limiterWorkletUrl/, '오프라인 렌더도 같은 파일을 등록한다'` |
-| 329 | match | `renderChain` | `/new OutputStage\(context, \{ guard: howlGuard \}\)/, '오프라인 렌더도 같은 출력 ` |
-| 330 | !match | `engine + modules + renderChain` | `/peak-limiter-processor\|peakLimiterProcessorSource/, '옛 리미터는 남기지 않는다'` |
+| 326 | match | `urls` | `/from '\.\/limiter\.worklet\.ts\?worker&url'/, '리미터는 별도 파일을 ?worker&ur` |
+| 327 | match | `engine` | `/new OutputStage\(this\.context, \{ guard: this\.howlGuard \}\)/` |
+| 328 | match | `engine` | `/this\.outputStage\.output\.connect\(this\.context\.destination\)/` |
+| 329 | match | `engine` | `/this\.outputStage\.output\.connect\(this\.outputMeter\.input\)/` |
+| 330 | match | `engine` | `/this\.outputStage\?\.output\.connect\(this\.recorderDestination\)/, '` |
+| 331 | match | `engine` | `/limiterWorkletUrl/, '엔진이 리미터 워클릿 파일을 등록한다'` |
+| 332 | match | `modules` | `/limiterWorkletUrl/, '오프라인 렌더도 같은 파일을 등록한다'` |
+| 333 | match | `renderChain` | `/new OutputStage\(context, \{ guard: howlGuard \}\)/, '오프라인 렌더도 같은 출력 ` |
+| 335 | match | `engine` | `/to: chainEnd/, '엔진은 체인 끝을 마스터 게인이 아니라 trim 에 잇는다'` |
+| 336 | match | `engine` | `/this\.buildChainConnections\(\s*pedals,\s*nextEffects,\s*chainInput,\` |
+| 337 | match | `engine` | `/presetTrim\.gain\.value = dbToGain\(clampTrimDb\(this\.getPresetTrimD` |
+| 338 | match | `engine` | `/rampParam\(trim\.gain, dbToGain\(clampTrimDb\(db\)\), context, PRESET` |
+| 339 | match | `renderChain` | `/previous\.connect\(presetTrim\)/, '오프라인 렌더도 체인 끝을 trim 에 잇는다'` |
+| 340 | !match | `engine` | `/previous\.connect\(masterGain\)\|to: masterGain/, '체인 끝이 마스터 게인으로 곧장 ` |
+| 341 | !match | `engine + modules + renderChain` | `/peak-limiter-processor\|peakLimiterProcessorSource/, '옛 리미터는 남기지 않는다'` |
 
 ### preset-ab-regression.mjs
 
@@ -174,11 +180,11 @@
 | 20 | match | `presetStoreSource` | `/captureCurrentToSlot: \(slot: PresetComparisonSlot\) => void/` |
 | 21 | match | `presetStoreSource` | `/activateSlot: \(slot: PresetComparisonSlot\) => boolean/` |
 | 22 | match | `presetStoreSource` | `/const capturedPedals = clonePedals\(usePedalStore\.getState\(\)\.peda` |
-| 27 | match | `activateSource` | `/applyPresetPedals\(storedPedals\)/` |
+| 27 | match | `activateSource` | `/applyPresetPedals\(storedPedals, storedTrimDb\)/, '슬롯을 켜면 슬롯에 담긴 음량 보` |
 | 28 | match | `presetStoreSource` | `/clearAllCabinetIrs\(\` |
-| 29 | match | `panelSource` | `/applyPresetPedals\(preset\.pedals\)/` |
+| 29 | match | `panelSource` | `/applyPresetPedals\(preset\.pedals, preset\.trimDb\)/` |
 | 30 | match | `panelSource` | `/clearAllCabinetIrs\(\` |
-| 32 | match | `midiSource` | `/applyPresetPedals\(preset\.pedals\)/` |
+| 32 | match | `midiSource` | `/applyPresetPedals\(preset\.pedals, preset\.trimDb\)/` |
 | 35 | match | `panelSource` | `/className="preset-ab-buttons"/` |
 | 43 | match | `abButtonsSource` | `/disabled=\{!slotA\}/` |
 | 44 | match | `abButtonsSource` | `/disabled=\{!slotB\}/` |

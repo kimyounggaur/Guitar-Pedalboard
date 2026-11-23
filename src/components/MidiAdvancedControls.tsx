@@ -36,7 +36,7 @@ export function MidiAdvancedControls() {
       program: (id) => {
         const preset = usePresetStore.getState().presets.find((item) => item.id === id);
         if (!preset) { setNotice('지정된 프리셋을 찾을 수 없습니다. 매핑을 다시 설정하세요.'); return; }
-        applyPresetPedals(preset.pedals);
+        applyPresetPedals(preset.pedals, preset.trimDb);
         setNotice(`MIDI: ${preset.name} 프리셋을 불러왔습니다.`);
       },
       volume: (value) => {

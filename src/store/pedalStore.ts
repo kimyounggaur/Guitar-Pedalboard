@@ -1,6 +1,7 @@
 import { notifyStorageFailure } from './storageNotice';
 import { create } from 'zustand';
 import type { PedalParamValue, PedalParams, PedalState, PedalType } from '../audio/types';
+import { clampTrimDb, roundTrimDb } from '../audio/offline/loudnessSpec';
 
 const STORAGE_KEY = 'guitar-pedalboard:pedals';
 
@@ -16,6 +17,11 @@ export type StoredPedal = {
 export type StoredState = {
   version: number;
   pedals: StoredPedal[];
+  /**
+   * 지금 프리셋의 음량 보정(dB, S1.4c). 0 이면 쓰지 않는다 — 없으면 0 으로 읽는다(M6).
+   * 선택 필드라서 스키마 버전은 올리지 않았다: 이전 버전은 이 필드를 몰라서 무시하고, 이전 저장본에는 없어서 0 이 된다.
+   */
+  presetTrimDb?: number;
 };
 
 export const initialPedals: PedalState[] = [
@@ -320,14 +326,24 @@ function toStoredPedals(pedals: PedalState[]): StoredPedal[] {
 
 let pendingPedalSave: ReturnType<typeof setTimeout> | undefined;
 let pendingPedals: PedalState[] | undefined;
-function savePedals(pedals: PedalState[]): void {
-  if (pendingPedalSave !== undefined) clearTimeout(pendingPedalSave);
-  pendingPedalSave = undefined;
-  pendingPedals = undefined;
+let pendingTrimDb = 0;
+
+/** 저장본을 만든다. 음량 보정이 0 이면 필드를 쓰지 않아, 보정이 없는 저장본은 이전 버전과 똑같은 모양이다. */
+function buildStoredState(pedals: PedalState[], presetTrimDb: number): StoredState {
   const storedState: StoredState = {
     version: SCHEMA_VERSION,
     pedals: toStoredPedals(pedals),
   };
+  const trimDb = clampTrimDb(presetTrimDb);
+  if (trimDb !== 0) storedState.presetTrimDb = trimDb;
+  return storedState;
+}
+
+function savePedals(pedals: PedalState[], presetTrimDb: number): void {
+  if (pendingPedalSave !== undefined) clearTimeout(pendingPedalSave);
+  pendingPedalSave = undefined;
+  pendingPedals = undefined;
+  const storedState = buildStoredState(pedals, presetTrimDb);
   try {
     if (!canUseStorage()) throw new Error('Storage unavailable');
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(storedState));
@@ -336,17 +352,18 @@ function savePedals(pedals: PedalState[]): void {
   }
 }
 
-function schedulePedalSave(pedals: PedalState[]): void {
+function schedulePedalSave(pedals: PedalState[], presetTrimDb: number): void {
   if (pendingPedalSave !== undefined) clearTimeout(pendingPedalSave);
   pendingPedals = pedals;
+  pendingTrimDb = presetTrimDb;
   pendingPedalSave = setTimeout(() => {
-    if (pendingPedals) savePedals(pendingPedals);
+    if (pendingPedals) savePedals(pendingPedals, pendingTrimDb);
   }, 300);
 }
 
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener('pagehide', () => {
-    if (pendingPedals) savePedals(pendingPedals);
+    if (pendingPedals) savePedals(pendingPedals, pendingTrimDb);
   });
 }
 
@@ -398,10 +415,14 @@ function normalizeStoredState(value: unknown): StoredState {
     throw new Error('저장된 페달 데이터 형식이 올바르지 않습니다.');
   }
 
-  return {
+  const state: StoredState = {
     version,
     pedals: rawPedals.map(toStoredPedal).filter((pedal): pedal is StoredPedal => pedal !== null),
   };
+  // 음량 보정은 숫자일 때만 받는다(M6: 없거나 이상한 값이면 0 = 필드 없음).
+  const trimDb = Array.isArray(value) ? 0 : clampTrimDb((candidate as { presetTrimDb?: unknown })?.presetTrimDb);
+  if (trimDb !== 0) state.presetTrimDb = trimDb;
+  return state;
 }
 
 function normalizePercent(value: PedalParamValue | undefined, fallback: number): number {
@@ -836,7 +857,9 @@ export function migrateStoredState(input: StoredState): StoredState {
     state = nextState;
   }
 
-  return state;
+  // 마이그레이션 함수는 페달만 다시 만든다. 페달과 무관한 음량 보정은 그대로 이어 붙인다.
+  const trimDb = clampTrimDb(input.presetTrimDb);
+  return trimDb === 0 ? state : { ...state, presetTrimDb: trimDb };
 }
 
 function readStoredState(): StoredState | null {
@@ -911,6 +934,8 @@ function movePedal(pedals: PedalState[], oldIndex: number, newIndex: number): Pe
 
 interface PedalStore {
   pedals: PedalState[];
+  /** 지금 프리셋의 음량 보정(dB). 프리셋을 불러올 때 따라 들어오고, 페달 상태와 함께 저장된다. 기본 0. */
+  presetTrimDb: number;
   activePedalId: string | null;
   draggingPedalId: string | null;
   reorderPedals: (oldIndex: number, newIndex: number) => void;
@@ -922,19 +947,25 @@ interface PedalStore {
   loadPedalsFromStorage: () => void;
   savePedalsToStorage: () => void;
   resetPedalOrder: () => void;
-  setPedals: (pedals: PedalState[]) => void;
+  /** 페달 전체를 바꾼다. `presetTrimDb` 를 주면 음량 보정도 같이 바꾸고, 안 주면 지금 값을 그대로 둔다. */
+  setPedals: (pedals: PedalState[], presetTrimDb?: number) => void;
+  /** 음량 보정만 바꾼다('음량 맞추기'). 0.1 dB 단위·±24 dB 로 정리하고 바로 저장한다. */
+  setPresetTrimDb: (presetTrimDb: number) => void;
   updatePedal: (pedal: PedalState) => void;
 }
 
+const restoredState = readStoredState();
+
 export const usePedalStore = create<PedalStore>((set, get) => ({
-  pedals: mergeStoredPedals(readStoredState()?.pedals ?? null),
+  pedals: mergeStoredPedals(restoredState?.pedals ?? null),
+  presetTrimDb: clampTrimDb(restoredState?.presetTrimDb),
   activePedalId: null,
   draggingPedalId: null,
 
   reorderPedals: (oldIndex, newIndex) =>
     set((state) => {
       const pedals = movePedal(state.pedals, oldIndex, newIndex);
-      savePedals(pedals);
+      savePedals(pedals, state.presetTrimDb);
       return { pedals };
     }),
 
@@ -943,7 +974,7 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
       const pedals = state.pedals.map((pedal) =>
         pedal.id === id ? { ...clonePedal(pedal), enabled: true, bypassed: pedal.enabled && !pedal.bypassed } : clonePedal(pedal),
       );
-      savePedals(pedals);
+      savePedals(pedals, state.presetTrimDb);
       return { pedals };
     }),
 
@@ -952,7 +983,7 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
       const pedals = state.pedals.map((pedal) =>
         pedal.id === id ? clonePedal({ ...pedal, enabled: true, bypassed }) : clonePedal(pedal),
       );
-      savePedals(pedals);
+      savePedals(pedals, state.presetTrimDb);
       return { pedals };
     }),
 
@@ -976,7 +1007,7 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
         });
       });
 
-      schedulePedalSave(pedals);
+      schedulePedalSave(pedals, state.presetTrimDb);
       return { pedals };
     }),
 
@@ -985,26 +1016,39 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
   setDraggingPedal: (id) => set({ draggingPedalId: id }),
 
   loadPedalsFromStorage: () => {
-    const pedals = mergeStoredPedals(readStoredState()?.pedals ?? null);
-    set({ pedals });
+    const stored = readStoredState();
+    set({
+      pedals: mergeStoredPedals(stored?.pedals ?? null),
+      presetTrimDb: clampTrimDb(stored?.presetTrimDb),
+    });
   },
 
-  savePedalsToStorage: () => savePedals(get().pedals),
+  savePedalsToStorage: () => savePedals(get().pedals, get().presetTrimDb),
 
   resetPedalOrder: () => {
     const pedals = clonePedals(initialPedals);
-    savePedals(pedals);
+    // 초기 보드는 보정 없이(0 dB) 시작한다.
+    savePedals(pedals, 0);
     set({
       pedals,
+      presetTrimDb: 0,
       activePedalId: null,
       draggingPedalId: null,
     });
   },
 
-  setPedals: (pedals) => {
+  setPedals: (pedals, presetTrimDb) => {
     const nextPedals = clonePedals(pedals);
-    savePedals(nextPedals);
-    set({ pedals: nextPedals });
+    const nextTrimDb = presetTrimDb === undefined ? get().presetTrimDb : clampTrimDb(presetTrimDb);
+    savePedals(nextPedals, nextTrimDb);
+    set({ pedals: nextPedals, presetTrimDb: nextTrimDb });
+  },
+
+  setPresetTrimDb: (presetTrimDb) => {
+    const nextTrimDb = roundTrimDb(clampTrimDb(presetTrimDb));
+    // 대기 중이던 페달 저장도 이 시점의 페달로 함께 쓴다(저장본에서 페달과 보정이 어긋나지 않게).
+    savePedals(get().pedals, nextTrimDb);
+    set({ presetTrimDb: nextTrimDb });
   },
 
   updatePedal: (pedal) =>
@@ -1013,7 +1057,7 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
       const pedals = state.pedals.map((current) =>
         current.id === pedal.id ? nextPedal : clonePedal(current),
       );
-      savePedals(pedals);
+      savePedals(pedals, state.presetTrimDb);
       return { pedals };
     }),
 

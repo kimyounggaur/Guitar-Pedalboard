@@ -36,7 +36,7 @@ const HEADLINES = {
   'P-02': ['inputDropDb', 'outputDropDb'],
   'P-03': ['peakWithLimiterDb', 'peakWithoutLimiterDb', 'defaultCabOffPeakDb', 'defaultCabOffPeakWithoutLimiterDb'],
   'P-04': ['defaultDiffDb', 'maxAbsDiffDb'],
-  'P-05': ['minDb', 'maxDb', 'medianDb', 'spreadDb'],
+  'P-05': ['rawMinDb', 'rawMaxDb', 'minDb', 'maxDb', 'spreadDb', 'maxAbsDeviationDb', 'maxLimiterReductionDb', 'cleanDrive.maxDiffDb', 'quick.maxAbsErrorDb'],
   'P-06': ['auto.left.decision', 'auto.left.lrDiffDb', 'auto.left.lossDb', 'auto.left.decisionSeconds', 'auto.right.lrDiffDb', 'auto.both.lossDb'],
   'P-08': ['mix75.rippleDb', 'mix45.rippleDb'],
   'P-09': ['maxAbsLrDiffDb'],
@@ -57,12 +57,12 @@ const HEADLINES = {
 
 function usage(message) {
   if (message) console.error(`오류: ${message}`);
-  console.error('사용법: npm run probe -- [--only P-01,P-04] [--rates 44100,48000] [--update] [--verbose] [--skip-build] [--out 파일.json]');
+  console.error('사용법: npm run probe -- [--only P-01,P-04] [--rates 44100,48000] [--update] [--verbose] [--skip-build] [--no-compare] [--out 파일.json]');
   process.exit(2);
 }
 
 function parseArgs(argv) {
-  const options = { update: false, only: null, rates: SAMPLE_RATES, skipBuild: false, verbose: false, out: null };
+  const options = { update: false, only: null, rates: SAMPLE_RATES, skipBuild: false, verbose: false, out: null, noCompare: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     const value = () => {
@@ -73,12 +73,14 @@ function parseArgs(argv) {
     if (argument === '--update') options.update = true;
     else if (argument === '--verbose') options.verbose = true;
     else if (argument === '--skip-build') options.skipBuild = true;
+    else if (argument === '--no-compare') options.noCompare = true;
     else if (argument === '--only') options.only = value().split(',').map((id) => id.trim().toUpperCase()).filter(Boolean);
     else if (argument === '--rates') options.rates = value().split(',').map((rate) => Number(rate.trim()));
     else if (argument === '--out') options.out = value();
     else usage(`알 수 없는 옵션: ${argument}`);
   }
   if (options.rates.some((rate) => !Number.isInteger(rate) || rate < 8000)) usage('--rates 는 정수 샘플레이트여야 합니다.');
+  if (options.noCompare && options.update) usage('--no-compare 와 --update 는 함께 쓸 수 없습니다.');
   return options;
 }
 
@@ -389,6 +391,16 @@ async function main() {
   const errors = Object.entries(results).flatMap(([rate, probes]) =>
     Object.values(probes).filter((probe) => probe.error).map((probe) => `${rate} Hz ${probe.id}: ${probe.error}`));
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+
+  // 측정값만 필요할 때(scripts/compute-preset-trims.mjs). 기준선·수용 기준과 비교하지 않는다. 실행 오류만 실패로 본다.
+  if (options.noCompare) {
+    if (errors.length > 0) {
+      console.error(`\n실행 오류 ${errors.length}건 (${seconds}초):\n- ${errors.join('\n- ')}`);
+      return 1;
+    }
+    console.log(`\n측정만 했습니다(기준선과 비교하지 않음) (${seconds}초)`);
+    return 0;
+  }
 
   if (options.update) {
     if (errors.length > 0) {

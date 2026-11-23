@@ -3,6 +3,15 @@
 // docs/baseline/audio-probe.json 과 tolerances.json 의 허용 오차로 비교한다.
 // 측정만 한다. 목표값(설계서의 '목표' 열)을 넘는지 판정하는 일은 각 Step 의 수용 기준이 맡는다.
 import { CompressorEffect } from '../nodes/CompressorEffect';
+import {
+  achievableTargetDbfs,
+  isHeadroomLimited,
+  limiterReductionDb,
+  PRESET_TARGET_OFFSETS_DB,
+  PRESET_TARGET_RMS_DBFS,
+  targetRmsDbfsFor,
+} from '../offline/loudnessSpec';
+import { computeTrimForChain, QUICK_MEASURE_SECONDS } from '../offline/measureLoudness';
 import { registerWorklets } from '../offline/workletModules';
 import {
   renderChain,
@@ -11,7 +20,7 @@ import {
   type OfflineRender,
   type RenderChainOptions,
 } from '../offline/renderChain';
-import type { PedalParamValue, PedalParams, PedalState } from '../types';
+import type { PedalParamValue, PedalParams, PedalState, PedalType } from '../types';
 import type { ImpulseCache } from '../utils/impulseCache';
 import { clonePedals, initialPedals } from '../../store/pedalStore';
 import { defaultPresets } from '../../store/presetStore';
@@ -242,28 +251,106 @@ const p04: ProbeDefinition = {
 };
 
 // ---------------------------------------------------------------------------------------------
-// P-05 — 프리셋 40개 출력 RMS
+// P-05 — 프리셋 40개 출력 RMS (S1.4c: 팩토리 음량 보정을 적용한 소리를 판정한다)
 // ---------------------------------------------------------------------------------------------
+/** 드라이브 계열: 이 페달이 하나라도 켜져 있으면 '드라이브 프리셋', 없으면 '클린 프리셋'으로 본다. */
+const DRIVE_FAMILY: ReadonlySet<PedalType> = new Set<PedalType>(['drive', 'crunch', 'fuzz']);
+
+interface PresetLevel {
+  id: string;
+  name: string;
+  levelDb: number;
+  isDrive: boolean;
+}
+
+/** 클린 프리셋과 드라이브 프리셋 사이를 오갈 때 소리 크기가 얼마나 달라지는지(설계서 S1.4c 수용 기준, 표준 목표를 쓰는 프리셋만). */
+function switchingSpread(levels: PresetLevel[]): { maxDiffDb: number; cleanCount: number; driveCount: number; top: string[] } {
+  const clean = levels.filter((level) => !level.isDrive);
+  const drive = levels.filter((level) => level.isDrive);
+  const pairs: { a: PresetLevel; b: PresetLevel; diff: number }[] = [];
+  for (const a of clean) for (const b of drive) pairs.push({ a, b, diff: Math.abs(a.levelDb - b.levelDb) });
+  pairs.sort((x, y) => y.diff - x.diff);
+  return {
+    maxDiffDb: pairs[0]?.diff ?? 0,
+    cleanCount: clean.length,
+    driveCount: drive.length,
+    top: pairs.slice(0, 5).map(({ a, b, diff }) => `${a.name}(클린) ↔ ${b.name}(드라이브): ${m.round(diff, 2)} dB`),
+  };
+}
+
 const p05: ProbeDefinition = {
   id: 'P-05',
   title: '프리셋 출력 RMS',
   describe:
-    '공장 프리셋마다 REF-PC(8초) 출력의 스테레오 RMS(dBFS)를 잰다. spread = 최대 − 최소. 시간을 줄이려고 꺼진 페달은 체인에서 뺀다(꺼진 페달이 소리를 바꾸지 않음은 첫 프리셋을 15개 전체로 한 번 더 렌더해 bypassTransparent 로 확인한다).',
+    '공장 프리셋마다 REF-PC(8초)를 두 번 렌더한다. ① 보정 없이·리미터 없이(rawDb: 계산 스크립트가 쓰는 원래 음량) ② 앱이 실제로 내보내는 소리(팩토리 음량 보정 + 리미터, preset 키). ' +
+    '② 가 프리셋마다 목표(표준 −20 dBFS, D6 예외 프리셋은 따로) ± 2 안인지(deviationDb), 리미터가 눌러야 하는 양(limiterReductionDb)과 클린↔드라이브 전환의 음량 차를 본다. ' +
+    '순간 피크가 커서 목표까지 올리면 리미터가 1 dB 넘게 눌러야 하는 프리셋은 피크가 0 dBFS 에 닿는 곳(achievableTargetDb)까지만 올리므로, deviationDb 는 그 도달 가능한 목표에서 잰다(offTargetDb 는 표준 목표에서 잰 참고값). ' +
+    "'음량 맞추기' 버튼이 쓰는 빠른 렌더(quick.seconds 초)가 8초 렌더와 얼마나 다른지(quickMeasureErrorDb)도 잰다. 시간을 줄이려고 꺼진 페달은 체인에서 뺀다(꺼진 페달이 소리를 바꾸지 않음은 첫 프리셋을 15개 전체로 한 번 더 렌더해 bypassTransparent 로 확인한다).",
   steps: 'S1.4c, S3.8',
   async run(ctx) {
     const input = signals.refPc(ctx.sampleRate);
     const values: Record<string, MetricValue> = {};
     const levels: number[] = [];
-    let firstRender: OfflineRender | null = null;
+    const rawLevels: number[] = [];
+    const deviations: number[] = [];
+    const offTargets: number[] = [];
+    const headroomLimitedIds: string[] = [];
+    const reductions: number[] = [];
+    const quickErrors: number[] = [];
+    const quickPeakErrors: number[] = [];
+    const standard: PresetLevel[] = [];
+    const levelById = new Map<string, number>();
+    let firstFinal: OfflineRender | null = null;
     for (const preset of defaultPresets) {
-      const render = await ctx.render({ input: [input], pedals: activePedals(clonePedals(preset.pedals)) });
-      firstRender ??= render;
-      const level = bodyLevelDb(render);
+      const pedals = activePedals(clonePedals(preset.pedals));
+      const trimDb = preset.trimDb ?? 0;
+      // ① 보정도 리미터도 없는 원래 음량. 보정값은 이 값에서 계산한다.
+      const raw = await ctx.render({ input: [input], pedals, limiter: false, presetTrimDb: 0 });
+      const rawDb = bodyLevelDb(raw);
+      const rawPeakDb = Math.max(m.peakDb(raw.output[0]), m.peakDb(raw.output[1]));
+      // ② 사용자가 듣는 소리: 팩토리 보정과 마스터 리미터를 모두 거친다.
+      const final = await ctx.render({ input: [input], pedals, presetTrimDb: trimDb });
+      firstFinal ??= final;
+      const level = bodyLevelDb(final);
+      const target = targetRmsDbfsFor(preset.id);
+      // 피크 여유(GS-7) 때문에 목표까지 못 올린 프리셋은 도달 가능한 목표에서 어긋남을 본다.
+      const achievable = achievableTargetDbfs(rawDb, rawPeakDb, target);
+      const deviation = level - achievable;
+      // 리미터는 천장을 넘는 피크만 천장까지 내린다. 보정을 거친 원래 피크가 천장을 얼마나 넘는지가 필요한 감소량이다.
+      const reduction = limiterReductionDb(rawPeakDb + trimDb);
       values[`preset.${preset.id}`] = level;
+      values[`rawDb.${preset.id}`] = rawDb;
+      values[`rawPeakDb.${preset.id}`] = rawPeakDb;
+      values[`trimDb.${preset.id}`] = trimDb;
+      values[`deviationDb.${preset.id}`] = deviation;
+      values[`offTargetDb.${preset.id}`] = level - target;
+      values[`achievableTargetDb.${preset.id}`] = achievable;
+      values[`headroomLimited.${preset.id}`] = isHeadroomLimited(rawDb, rawPeakDb, target);
+      values[`peakDb.${preset.id}`] = Math.max(m.peakDb(final.output[0]), m.peakDb(final.output[1]));
+      values[`limiterReductionDb.${preset.id}`] = reduction;
       levels.push(level);
+      rawLevels.push(rawDb);
+      deviations.push(deviation);
+      offTargets.push(level - target);
+      if (isHeadroomLimited(rawDb, rawPeakDb, target)) headroomLimitedIds.push(preset.id);
+      reductions.push(reduction);
+      levelById.set(preset.id, level);
+      if (!(preset.id in PRESET_TARGET_OFFSETS_DB)) {
+        standard.push({ id: preset.id, name: preset.name, levelDb: level, isDrive: pedals.some((candidate) => DRIVE_FAMILY.has(candidate.type)) });
+      }
+      // '음량 맞추기' 버튼과 같은 코드(computeTrimForChain)로 빠른 렌더를 하고, 8초 렌더와 얼마나 다른지 본다.
+      const quick = await computeTrimForChain(pedals, { sampleRate: ctx.sampleRate });
+      const quickError = quick.loudness.rmsDb - rawDb;
+      values[`quickMeasureErrorDb.${preset.id}`] = quickError;
+      quickErrors.push(quickError);
+      // 피크 여유 판정도 빠른 렌더로 한다. 8초 렌더의 피크보다 낮게 재면 리미터가 그만큼 더 누른다.
+      const quickPeakError = quick.loudness.peakDb - rawPeakDb;
+      values[`quickPeakErrorDb.${preset.id}`] = quickPeakError;
+      quickPeakErrors.push(quickPeakError);
     }
-    const fullChain = await ctx.render({ input: [input], pedals: clonePedals(defaultPresets[0].pedals) });
-    const transparencyDb = firstRender ? residualDb(fullChain, firstRender) : 0;
+    const first = defaultPresets[0];
+    const fullChain = await ctx.render({ input: [input], pedals: clonePedals(first.pedals), presetTrimDb: first.trimDb ?? 0 });
+    const transparencyDb = firstFinal ? residualDb(fullChain, firstFinal) : 0;
     values.bypassNullDb = transparencyDb;
     values.bypassTransparent = transparencyDb < -90;
     values.count = levels.length;
@@ -271,7 +358,34 @@ const p05: ProbeDefinition = {
     values.maxDb = Math.max(...levels);
     values.medianDb = m.median(levels);
     values.spreadDb = Math.max(...levels) - Math.min(...levels);
-    return { metrics: metrics(values) };
+    values.targetDb = PRESET_TARGET_RMS_DBFS;
+    values.maxAbsDeviationDb = Math.max(...deviations.map(Math.abs));
+    values.maxAbsOffTargetDb = Math.max(...offTargets.map(Math.abs));
+    values.headroomLimitedCount = headroomLimitedIds.length;
+    values.rawMinDb = Math.min(...rawLevels);
+    values.rawMaxDb = Math.max(...rawLevels);
+    values.rawMedianDb = m.median(rawLevels);
+    values.rawSpreadDb = Math.max(...rawLevels) - Math.min(...rawLevels);
+    values.maxLimiterReductionDb = Math.max(...reductions);
+    values['quick.seconds'] = QUICK_MEASURE_SECONDS;
+    values['quick.maxAbsErrorDb'] = Math.max(...quickErrors.map(Math.abs));
+    values['quick.maxPeakUnderestimateDb'] = Math.max(0, ...quickPeakErrors.map((error) => -error));
+    const switching = switchingSpread(standard);
+    values['cleanDrive.maxDiffDb'] = switching.maxDiffDb;
+    values['cleanDrive.cleanCount'] = switching.cleanCount;
+    values['cleanDrive.driveCount'] = switching.driveCount;
+    // 설계서가 따로 적어 둔 전환(Headphone Safe Start ↔ Texas Push). D6 예외라 위 판정에는 넣지 않고 숫자만 남긴다.
+    const safeStart = levelById.get('factory-headphone-safe-start');
+    const texasPush = levelById.get('factory-texas-push');
+    if (safeStart !== undefined && texasPush !== undefined) values['switch.headphoneSafeToTexasPushDb'] = texasPush - safeStart;
+    return {
+      metrics: metrics(values),
+      notes: [
+        `피크 여유(GS-7) 때문에 평균 목표에 못 미치는 프리셋 ${headroomLimitedIds.length}개: ${headroomLimitedIds.map((id) => id.replace(/^factory-/, '')).join(', ') || '없음'}`,
+        '클린↔드라이브 전환이 가장 큰 5쌍(D6 예외 프리셋 제외):',
+        ...switching.top,
+      ],
+    };
   },
 };
 

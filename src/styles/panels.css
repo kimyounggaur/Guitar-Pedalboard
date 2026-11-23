@@ -937,6 +937,24 @@ select,
   gap: 6px;
 }
 
+/* 프리셋 음량 보정(S1.4c): 지금 보정값과 '음량 맞추기' 버튼 */
+.preset-tools .preset-loudness {
+  display: grid;
+  gap: 6px;
+}
+
+.preset-loudness-value {
+  margin: 0;
+  color: #c7c2d0;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.preset-loudness-value strong {
+  color: #55e7ff;
+  font-variant-numeric: tabular-nums;
+}
+
 .preset-tools input,
 .preset-tools textarea,
 .sidebar .preset-search input {

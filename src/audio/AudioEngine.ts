@@ -29,6 +29,7 @@ import type {
 import type { ChannelDecision } from './engine/channelDecision';
 import { InputStage, type InputChannelMode } from './engine/InputStage';
 import { OutputStage } from './engine/OutputStage';
+import { clampTrimDb, PRESET_TRIM_RAMP_SECONDS } from './offline/loudnessSpec';
 import { clamp, dbToGain } from './utils/db';
 import { MAX_CAB_IR_BYTES, validateCabinetWav, validateDecodedCabinetIr } from './utils/cabinetIr';
 import { ImpulseCache } from './utils/impulseCache';
@@ -93,6 +94,8 @@ export class AudioEngine {
   private chainConnections = new Map<string, ChainConnection>();
   private reverbImpulseCache: ImpulseCache | null = null;
   private getPedals: () => PedalState[] = () => [];
+  /** 지금 프리셋의 음량 보정(dB)을 읽는 함수. 그래프를 새로 만들 때 처음 값으로 쓴다. */
+  private getPresetTrimDb: () => number = () => 0;
   private rebuildQueue: Promise<void> = Promise.resolve();
   private graphGeneration = 0;
   private sessionGeneration = 0;
@@ -103,9 +106,14 @@ export class AudioEngine {
   private playbackEndedHandler: (() => void) | null = null;
   private closePending: Promise<void> = Promise.resolve();
 
-  /** 출력 단계의 입력(마스터 게인). 체인 끝이 여기로 들어온다. */
+  /** 출력 단계의 마스터 게인. 사용자가 움직이는 마스터 볼륨이 여기에 걸린다. */
   private get masterGain(): GainNode | null {
     return this.outputStage?.input ?? null;
+  }
+
+  /** 체인 끝이 들어가는 프리셋 음량 보정 노드. 마스터 게인 바로 앞에 있다. */
+  private get presetTrimNode(): GainNode | null {
+    return this.outputStage?.presetTrim ?? null;
   }
 
   static getInstance(): AudioEngine {
@@ -173,6 +181,22 @@ export class AudioEngine {
 
   setPedalsProvider(provider: () => PedalState[]): void {
     this.getPedals = provider;
+  }
+
+  /** 지금 프리셋의 음량 보정(dB)을 읽는 함수. 그래프를 만들 때 처음 값으로 쓴다. */
+  setPresetTrimProvider(provider: () => number): void {
+    this.getPresetTrimDb = provider;
+  }
+
+  /**
+   * 프리셋 음량 보정을 바꾼다(GS-2). 프리셋을 바꿀 때 소리가 튀지 않도록 30 ms 램프로 옮긴다.
+   * 오디오가 꺼져 있으면 할 일이 없다. 다음에 그래프를 만들 때 provider 값을 처음 값으로 쓴다.
+   */
+  setPresetTrimDb(db: number): void {
+    const trim = this.presetTrimNode;
+    const context = this.context;
+    if (!trim || !context || context.state === 'closed') return;
+    rampParam(trim.gain, dbToGain(clampTrimDb(db)), context, PRESET_TRIM_RAMP_SECONDS);
   }
 
   get isRunning(): boolean {
@@ -819,6 +843,8 @@ export class AudioEngine {
     };
     this.howlGuard.port.postMessage({ enabled: this.howlProtectionEnabled && !!this.stream });
     this.outputStage = new OutputStage(this.context, { guard: this.howlGuard });
+    // 프리셋 음량 보정의 처음 값은 지금 스토어 값이다. 램프 없이 바로 둔다(아직 소리가 흐르기 전이다).
+    this.outputStage.presetTrim.gain.value = dbToGain(clampTrimDb(this.getPresetTrimDb()));
     this.inputMeter = new MeterNode(this.context);
     this.outputMeter = new MeterNode(this.context);
     this.tuner = new TunerNode(this.context, this.tuningPreset);
@@ -882,11 +908,13 @@ export class AudioEngine {
     const context = this.context;
     const chainInput = this.chainInput;
     const masterGain = this.masterGain;
+    const presetTrim = this.presetTrimNode;
 
     if (
       !context ||
       !chainInput ||
       !masterGain ||
+      !presetTrim ||
       generation !== this.graphGeneration
     ) {
       return;
@@ -922,7 +950,7 @@ export class AudioEngine {
         pedals,
         nextEffects,
         chainInput,
-        masterGain,
+        presetTrim,
       );
       const removedConnections: ChainConnection[] = [];
       const addedConnections: ChainConnection[] = [];
@@ -988,7 +1016,7 @@ export class AudioEngine {
     pedals: PedalState[],
     effects: Map<string, EffectNode>,
     chainInput: AudioNode,
-    masterGain: AudioNode,
+    chainEnd: AudioNode,
   ): Map<string, ChainConnection> {
     const connections = new Map<string, ChainConnection>();
     let previousId = 'chain-input';
@@ -1007,9 +1035,10 @@ export class AudioEngine {
       previousOutput = effect.output;
     });
 
-    connections.set(`${previousId}->master-output`, {
+    // 체인 끝은 프리셋 음량 보정(trim)으로 들어가고, trim 은 OutputStage 안에서 마스터 게인에 이어져 있다.
+    connections.set(`${previousId}->preset-trim`, {
       from: previousOutput,
-      to: masterGain,
+      to: chainEnd,
     });
     return connections;
   }

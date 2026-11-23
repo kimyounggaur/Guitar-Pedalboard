@@ -24,12 +24,12 @@ assert.match(presetStoreSource, /const capturedPedals = clonePedals\(usePedalSto
 const activateStart = presetStoreSource.indexOf('activateSlot: (slot) => {');
 assert.ok(activateStart >= 0, '슬롯 활성화 action을 찾을 수 없습니다.');
 const activateSource = presetStoreSource.slice(activateStart);
-assert.match(activateSource, /applyPresetPedals\(storedPedals\)/);
-assert.match(presetStoreSource, /clearAllCabinetIrs\(\);[\s\S]*setPedals\(clonePedals\(pedals\)\);[\s\S]*adoptTempoFromPedals\(\);[\s\S]*rebuildChain\(\)/);
-assert.match(panelSource, /applyPresetPedals\(preset\.pedals\)/);
+assert.match(activateSource, /applyPresetPedals\(storedPedals, storedTrimDb\)/, '슬롯을 켜면 슬롯에 담긴 음량 보정(S1.4c)도 함께 적용한다');
+assert.match(presetStoreSource, /clearAllCabinetIrs\(\);[\s\S]*setPedals\(clonePedals\(pedals\), clampTrimDb\(trimDb\)\);[\s\S]*adoptTempoFromPedals\(\);[\s\S]*rebuildChain\(\)/);
+assert.match(panelSource, /applyPresetPedals\(preset\.pedals, preset\.trimDb\)/);
 assert.match(panelSource, /clearAllCabinetIrs\(\);[\s\S]*resetPedalOrder\(\)/);
 const midiSource = await readFile(new URL('../src/components/MidiAdvancedControls.tsx', import.meta.url), 'utf8');
-assert.match(midiSource, /applyPresetPedals\(preset\.pedals\)/);
+assert.match(midiSource, /applyPresetPedals\(preset\.pedals, preset\.trimDb\)/);
 
 
 assert.match(panelSource, /className="preset-ab-buttons"/);
