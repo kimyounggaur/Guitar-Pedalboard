@@ -128,6 +128,9 @@ export class HowlSpectrum {
     }
     const meanSquare = sumSquares / size;
     const levelDb = meanSquare > 1e-12 ? 10 * Math.log10(meanSquare) : LEVEL_SILENT_DB;
+    // 레벨 하한(부록 B) 아래의 프레임은 후보가 될 수 없고 HowlDetector 도 어차피 버린다. FFT·피크 탐색을 건너뛰어
+    // 연주 사이의 침묵과 소리가 사그라드는 구간에는 비용이 들지 않게 한다. 판정 결과는 그대로다.
+    if (levelDb < HOWL_LEVEL_FLOOR_DB) return { levelDb, peakHz: 0, tonal: 0 };
 
     // half 점 복소 FFT(제자리, 비트 반전 입력)
     for (let length = 2; length <= half; length <<= 1) {
