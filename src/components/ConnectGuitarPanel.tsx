@@ -43,8 +43,6 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
   const isFilePaused = useAudioStore((state) => state.isFilePaused);
   const isLoading = useAudioStore((state) => state.isLoading);
   const error = useAudioStore((state) => state.error);
-  const inputChannelMode = useAudioStore((state) => state.inputChannelMode);
-  const setInputChannelMode = useAudioStore((state) => state.setInputChannelMode);
   const inputLevel = useAudioStore((state) => state.inputLevel);
   const inputGainDb = useAudioStore((state) => state.inputGainDb);
   const howlProtectionEnabled = useAudioStore((state) => state.howlProtectionEnabled);
@@ -117,14 +115,6 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
 
       <DeviceSelector />
       <MidiAdvancedControls />
-      <label className="io-slider-control">
-        <span>입력 채널</span>
-        <select value={inputChannelMode} onChange={(event) => setInputChannelMode(event.currentTarget.value as '1' | '2' | 'stereo')}>
-          <option value="1">1번 입력 (모노)</option>
-          <option value="2">2번 입력 (모노)</option>
-          <option value="stereo">스테레오</option>
-        </select>
-      </label>
 
       {inputMode !== 'file' && (
         <div className="connect-actions">

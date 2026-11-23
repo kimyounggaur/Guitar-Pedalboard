@@ -7,6 +7,13 @@ import {
   type StopReason,
   type StopResult,
 } from '../audio/engine/AudioSession';
+import type { ChannelDecision } from '../audio/engine/channelDecision';
+import {
+  isChannelDecision,
+  isInputChannelMode,
+  type InputChannelMode,
+  type InputChannelState,
+} from '../audio/engine/InputStage';
 import type {
   CrunchParams,
   DelayParams,
@@ -46,11 +53,20 @@ const initialOutputDevice = readOutputDevice();
 const RECORDING_TIMER_INTERVAL_MS = 250;
 const RECORDING_STOP_FALLBACK_MS = 1000;
 
+/** 장치별로 기억하는 입력 채널 설정(S1.3). 키는 `inputChannelKey` 가 만든다. */
+interface StoredInputChannel {
+  mode: InputChannelMode;
+  /** 지난 세션에서 자동 판정이 낸 결과. 아직 없으면 null */
+  decision: ChannelDecision | null;
+}
+
 interface IoSettings {
   inputGainDb: number;
   masterVolume: number;
   howlProtectionEnabled: boolean;
   tuningReferenceHz: number;
+  /** S1.3 에서 추가한 필드. 기존 저장값에는 없고, 없으면 빈 객체로 읽는다. */
+  inputChannels: Record<string, StoredInputChannel>;
 }
 
 const defaultIoSettings: IoSettings = {
@@ -58,7 +74,29 @@ const defaultIoSettings: IoSettings = {
   masterVolume: 0.9,
   howlProtectionEnabled: true,
   tuningReferenceHz: 440,
+  inputChannels: {},
 };
+
+/** 기억해 두는 장치 수의 상한. 넘으면 가장 오래 전에 쓴 것부터 잊는다. */
+const MAX_REMEMBERED_INPUT_DEVICES = 20;
+const DEFAULT_INPUT_CHANNEL_KEY = 'default';
+
+function inputChannelKey(deviceId: string): string {
+  return deviceId || DEFAULT_INPUT_CHANNEL_KEY;
+}
+
+function readInputChannels(value: unknown): Record<string, StoredInputChannel> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  const result: Record<string, StoredInputChannel> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>).slice(-MAX_REMEMBERED_INPUT_DEVICES)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { mode, decision } = entry as Record<string, unknown>;
+    if (!isInputChannelMode(mode)) continue;
+    result[key] = { mode, decision: isChannelDecision(decision) ? decision : null };
+  }
+  return result;
+}
 
 const silentLevel: LevelReading = {
   db: -120,
@@ -107,6 +145,7 @@ function readIoSettings(): IoSettings {
         typeof stored.tuningReferenceHz === 'number' && Number.isFinite(stored.tuningReferenceHz)
           ? Math.round(clamp(stored.tuningReferenceHz, 400, 480))
           : defaultIoSettings.tuningReferenceHz,
+      inputChannels: readInputChannels(stored.inputChannels),
     };
   } catch {
     return { ...defaultIoSettings };
@@ -645,8 +684,15 @@ interface AudioStore {
   inputGainDb: number;
   masterVolume: number;
   howlProtectionEnabled: boolean;
-  inputChannelMode: '1' | '2' | 'stereo';
-  setInputChannelMode: (mode: '1' | '2' | 'stereo') => void;
+  /** 선택한 입력 장치의 채널 모드(자동·1번·2번·스테레오). 장치별로 기억한다. */
+  inputChannelMode: InputChannelMode;
+  /** 자동 모드가 정한 입력. 'pending' 은 기타 소리가 들어오기를 기다리는 중이다. */
+  inputChannelDecision: InputChannelState;
+  /** 연결된 입력이 채널을 고를 수 있는지: true/false, 아직 연결 전이면 null(메뉴를 보인다). 파일 재생은 false. */
+  inputChannelSelectable: boolean | null;
+  /** 장치별로 기억한 입력 채널 설정(키: 장치 id, 기본 장치는 'default') */
+  inputChannels: Record<string, StoredInputChannel>;
+  setInputChannelMode: (mode: InputChannelMode) => void;
   chainGainWarning: string | null;
   estimatedChainGainDb: number;
   tapTempo: { taps: number[]; bpm: number };
@@ -719,6 +765,48 @@ function resetReadings() {
   };
 }
 
+/** 이 장치에 기억된 채널 모드·판정을 엔진과 화면 상태에 올린다. 장치를 고를 때와 연결을 시작하기 직전에 부른다. */
+function loadInputChannels(deviceId: string): void {
+  const stored = useAudioStore.getState().inputChannels[inputChannelKey(deviceId)];
+  const mode = stored?.mode ?? 'auto';
+  const decision = stored?.decision ?? null;
+  audioEngine.setInputChannelMode(mode);
+  audioEngine.setRememberedChannelDecision(decision);
+  useAudioStore.setState({
+    inputChannelMode: mode,
+    inputChannelDecision: decision ?? 'pending',
+    inputChannelSelectable: null,
+  });
+}
+
+/** 지금 선택한 장치의 채널 모드와 자동 판정을 `guitar-pedalboard:io` 의 `inputChannels` 에 남긴다. */
+function rememberInputChannels(): void {
+  const state = useAudioStore.getState();
+  const key = inputChannelKey(state.selectedDeviceId);
+  const entry: StoredInputChannel = {
+    mode: state.inputChannelMode,
+    decision: state.inputChannelDecision === 'pending' ? null : state.inputChannelDecision,
+  };
+  const previous = state.inputChannels[key];
+  if (previous && previous.mode === entry.mode && previous.decision === entry.decision) return;
+
+  // 최근에 쓴 장치가 뒤로 가게 다시 넣고, 상한을 넘으면 앞(가장 오래된 것)부터 잊는다.
+  const next = { ...state.inputChannels };
+  delete next[key];
+  next[key] = entry;
+  const keys = Object.keys(next);
+  for (const stale of keys.slice(0, Math.max(0, keys.length - MAX_REMEMBERED_INPUT_DEVICES))) delete next[stale];
+
+  useAudioStore.setState({ inputChannels: next });
+  persistIoSettings({
+    inputGainDb: state.inputGainDb,
+    masterVolume: state.masterVolume,
+    howlProtectionEnabled: state.howlProtectionEnabled,
+    tuningReferenceHz: state.tuningReferenceHz,
+    inputChannels: next,
+  });
+}
+
 /**
  * 화면을 곧바로 '연결 안 됨'으로 돌린 뒤 하나뿐인 정리 절차를 지난다. 이미 아무것도 없으면 화면은 건드리지 않는다.
  * isLoading 은 '연결 중'일 때만 쓴다: 정지 중에 눌린 '기타 연결하기'는 AudioSession.start 가 정지가 끝나기를 기다린다.
@@ -733,6 +821,7 @@ function stopSession(reason: StopReason, detail: StopDetail = {}): Promise<StopR
       uploadedFileName: null,
       isLoading: false,
       error: null,
+      inputChannelSelectable: null,
       ...resetReadings(),
     });
   }
@@ -765,8 +854,15 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   inputGainDb: initialIoSettings.inputGainDb,
   masterVolume: initialIoSettings.masterVolume,
   howlProtectionEnabled: initialIoSettings.howlProtectionEnabled,
-  inputChannelMode: '1',
-  setInputChannelMode: (mode) => { audioEngine.setInputChannelMode(mode); set({ inputChannelMode: mode }); },
+  inputChannelMode: initialIoSettings.inputChannels[DEFAULT_INPUT_CHANNEL_KEY]?.mode ?? 'auto',
+  inputChannelDecision: initialIoSettings.inputChannels[DEFAULT_INPUT_CHANNEL_KEY]?.decision ?? 'pending',
+  inputChannelSelectable: null,
+  inputChannels: initialIoSettings.inputChannels,
+  setInputChannelMode: (mode) => {
+    audioEngine.setInputChannelMode(mode);
+    set({ inputChannelMode: mode });
+    rememberInputChannels();
+  },
   chainGainWarning: null,
   estimatedChainGainDb: 0,
   tapTempo: { taps: [], bpm: readInitialTempoBpm() },
@@ -792,6 +888,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       masterVolume: get().masterVolume,
       howlProtectionEnabled: get().howlProtectionEnabled,
       tuningReferenceHz: get().tuningReferenceHz,
+      inputChannels: get().inputChannels,
     });
   },
 
@@ -804,6 +901,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       masterVolume,
       howlProtectionEnabled: get().howlProtectionEnabled,
       tuningReferenceHz: get().tuningReferenceHz,
+      inputChannels: get().inputChannels,
     });
   },
 
@@ -816,6 +914,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       masterVolume: get().masterVolume,
       howlProtectionEnabled: enabled,
       tuningReferenceHz: get().tuningReferenceHz,
+      inputChannels: get().inputChannels,
     });
   },
 
@@ -839,6 +938,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       masterVolume: get().masterVolume,
       howlProtectionEnabled: get().howlProtectionEnabled,
       tuningReferenceHz: value,
+      inputChannels: get().inputChannels,
     });
   },
 
@@ -896,6 +996,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   setSelectedDevice: async (deviceId) => {
     const wasRunning = get().isRunning;
     set({ selectedDeviceId: deviceId, error: null });
+    loadInputChannels(deviceId);
 
     if (!wasRunning || get().inputMode !== 'device') return;
 
@@ -917,6 +1018,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         isFilePaused: true,
         isLoading: false,
         error: null,
+        inputChannelSelectable: audioEngine.getInputInfo()?.selectable ?? null,
       });
     } catch (error) {
       set({
@@ -933,6 +1035,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     const { selectedDeviceId } = get();
     resetHowlWatch();
     set({ isLoading: true, error: null });
+    loadInputChannels(selectedDeviceId);
 
     try {
       await finishActiveRecording('finalize');
@@ -949,6 +1052,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         isFilePaused: true,
         isLoading: false,
         error: null,
+        inputChannelSelectable: audioEngine.getInputInfo()?.selectable ?? null,
       });
     } catch (error) {
       set({
@@ -978,6 +1082,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         isFilePaused: playback.isPaused,
         isLoading: false,
         error: null,
+        inputChannelSelectable: false,
       });
     } catch (error) {
       set({
@@ -1268,6 +1373,17 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 if (initialOutputDevice && audioEngine.supportsOutputSelection) {
   void audioEngine.setOutputDevice(initialOutputDevice);
 }
+
+// 자동 입력 채널 판정이 나면(세션마다 한 번) 화면에 보이고 이 장치의 기억에 남긴다.
+const initialChannelState = useAudioStore.getState();
+audioEngine.setInputChannelMode(initialChannelState.inputChannelMode);
+audioEngine.setRememberedChannelDecision(
+  initialChannelState.inputChannelDecision === 'pending' ? null : initialChannelState.inputChannelDecision,
+);
+audioEngine.setInputDecisionHandler((decision) => {
+  useAudioStore.setState({ inputChannelDecision: decision });
+  rememberInputChannels();
+});
 
 audioEngine.setInputEndedHandler(() => {
   const state = useAudioStore.getState();

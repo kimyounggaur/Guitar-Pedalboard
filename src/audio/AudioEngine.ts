@@ -26,6 +26,8 @@ import type {
   PitchReading,
   TuningPresetId,
 } from './types';
+import type { ChannelDecision } from './engine/channelDecision';
+import { InputStage, type InputChannelMode } from './engine/InputStage';
 import { clamp, dbToGain } from './utils/db';
 import { MAX_CAB_IR_BYTES, validateCabinetWav, validateDecodedCabinetIr } from './utils/cabinetIr';
 import { ImpulseCache } from './utils/impulseCache';
@@ -70,8 +72,10 @@ export class AudioEngine {
   private masterGain: GainNode | null = null;
   private limiter: AudioWorkletNode | null = null;
   private howlGuard: AudioWorkletNode | null = null;
-  private inputSplitter: ChannelSplitterNode | null = null;
-  private inputChannelMode: '1' | '2' | 'stereo' = '1';
+  private inputStage: InputStage | null = null;
+  private inputChannelMode: InputChannelMode = 'auto';
+  private rememberedChannelDecision: ChannelDecision | null = null;
+  private inputDecisionHandler: ((decision: ChannelDecision) => void) | null = null;
   private howlProtectionEnabled = true;
   private howlHandler: (() => void) | null = null;
   private recorderDestination: MediaStreamAudioDestinationNode | null = null;
@@ -128,9 +132,37 @@ export class AudioEngine {
     this.howlGuard?.port.postMessage({ enabled: enabled && !!this.stream });
   }
 
-  setInputChannelMode(mode: '1' | '2' | 'stereo'): void {
+  /** 입력 채널 모드(자동·1번·2번·스테레오). 연결 중이면 20 ms 램프로 바로 반영하고, 아니면 다음 연결에 쓴다. */
+  setInputChannelMode(mode: InputChannelMode): void {
     this.inputChannelMode = mode;
-    if (this.inputSplitter && this.source && this.inputGain) this.connectInput(this.source);
+    this.inputStage?.setMode(mode);
+  }
+
+  /** 다음 연결에서 자동 모드가 시작할 판정(지난 세션에서 이 장치에 내린 것). 판정은 이번 세션에서도 한 번 더 한다. */
+  setRememberedChannelDecision(decision: ChannelDecision | null): void {
+    this.rememberedChannelDecision = decision;
+  }
+
+  /** 자동 판정이 날 때 부른다(세션마다 한 번). */
+  setInputDecisionHandler(handler: ((decision: ChannelDecision) => void) | null): void {
+    this.inputDecisionHandler = handler;
+  }
+
+  /** 지금 연결된 입력 장치의 식별자·채널 수. 장치별 기억과 채널 메뉴 표시에 쓴다. 입력이 없으면(파일·미연결) null. */
+  getInputInfo(): { deviceId: string; channelCount: number; selectable: boolean } | null {
+    // 설정을 읽지 못하는 입력이어도 연결 자체는 계속 쓸 수 있어야 하므로, 읽기 실패는 '모름(null)'으로 돌려 준다.
+    try {
+      const track = this.stream?.getAudioTracks?.()[0];
+      const settings = track?.getSettings?.();
+      if (!track || !settings) return null;
+      return {
+        deviceId: settings.deviceId ?? '',
+        channelCount: settings.channelCount ?? 2,
+        selectable: this.inputStage?.selectable ?? false,
+      };
+    } catch {
+      return null;
+    }
   }
 
   setPedalsProvider(provider: () => PedalState[]): void {
@@ -583,7 +615,7 @@ export class AudioEngine {
     this.masterGain = null;
     this.limiter = null;
     this.howlGuard = null;
-    this.inputSplitter = null;
+    this.inputStage = null;
     this.recorderDestination = null;
     this.inputMeter = null;
     this.outputMeter = null;
@@ -790,7 +822,8 @@ export class AudioEngine {
     rampParam(this.inputGain.gain, dbToGain(this.inputGainDb), this.context, 0.02);
     this.masterGain.gain.value = 0;
 
-    this.connectInput(source);
+    this.inputStage = this.createInputStage(source);
+    this.inputStage.output.connect(this.inputGain);
     this.inputGain.connect(this.inputMeter.input);
     this.inputGain.connect(this.chainInput);
     this.masterGain.connect(this.howlGuard);
@@ -800,19 +833,19 @@ export class AudioEngine {
     this.syncTunerConnection();
   }
 
-  private connectInput(source: AudioNode): void {
-    if (!this.context || !this.inputGain) return;
-    source.disconnect();
-    this.inputSplitter?.disconnect();
-    this.inputSplitter = null;
-    if (!this.stream || this.inputChannelMode === 'stereo') {
-      source.connect(this.inputGain);
-      return;
-    }
-    this.inputSplitter = this.context.createChannelSplitter(2);
-    source.connect(this.inputSplitter);
-    // An individual output of a splitter is mono; Web Audio duplicates it to stereo downstream.
-    this.inputSplitter.connect(this.inputGain, this.inputChannelMode === '1' ? 0 : 1);
+  /** 소스와 입력 트림 사이에 둘 InputStage 를 만든다. 파일 재생(스트림 없음)은 그대로 통과시킨다. */
+  private createInputStage(source: AudioNode): InputStage {
+    if (!this.context) throw new Error('AudioContext가 아직 준비되지 않았습니다.');
+
+    const track = this.stream?.getAudioTracks()[0];
+    const stage = new InputStage(this.context, source, track ? (track.getSettings().channelCount ?? 2) : 1, {
+      mode: this.inputChannelMode,
+      rememberedDecision: this.rememberedChannelDecision,
+      passthrough: !this.stream,
+    });
+    stage.onDecision((decision) => this.inputDecisionHandler?.(decision));
+    stage.startMonitoring();
+    return stage;
   }
 
   private syncTunerConnection(): void {
@@ -995,7 +1028,8 @@ export class AudioEngine {
     this.tuner?.setActive(false);
     this.tunerConnected = false;
     this.source?.disconnect();
-    this.inputSplitter?.disconnect();
+    this.inputStage?.dispose();
+    this.inputStage = null;
     this.howlGuard?.disconnect();
     this.limiter?.disconnect();
     this.inputGain?.disconnect();
