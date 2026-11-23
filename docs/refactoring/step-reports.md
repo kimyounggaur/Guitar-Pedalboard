@@ -369,7 +369,7 @@ CabEffect ─▶ ConvolverNode(IR) ─▶ convolvedGain(= 10^(makeupDb/20)) ─�
 | P-23 최대 클릭 비율(44.1 / 48 kHz) | +1.01 / +1.22 dB | +0.97 / +1.18 dB. 48 kHz 의 '컴프레서 켬' 항목(−2.16 → −2.10 dB)이 허용 폭 ±0.05 를 넘어 기준선을 갱신했다(Cab 레벨 +0.2 dB 가 이 항목의 비선형 구간에 닿는 정도를 바꾼 것으로 *추정*, 추적하지 않음). 새 노드 0개는 그대로 |
 
 - 새 시험: `test:cabinet-response` 확장 — ① 보정표의 키가 모델 목록과 같고 |값| ≤ 1 dB ② 200개 조합(샘플레이트 2 × 모델 5 × 마이크 5곳 × 거리 4곳)에서 `IR 기준 음량 + 부족분 = 0 dB(±0.02)`, 부족분 ≥ 0, 보충 ≤ 6 dB, `off` 는 0, 상한에 걸리는 조합이 실제로 있음(77개가 0.05 dB 넘는 보충 필요, 최대 4.54 dB — 표 포함). P-04 는 `tolerances.json` 판정 기준으로 `npm test` 의 `test:probe` 가 지킨다.
-- 검증: `npx tsc -b --noEmit`, `npm run lint`, `npm run build`, `npm test` 29/29(165초) 통과. `npm run e2e` 는 화면·저장 형식을 바꾸지 않아 S1.4c 와 함께 병합 뒤 한 번 더 돌린다(아래 결과 참고).
+- 검증: `npx tsc -b --noEmit`, `npm run lint`, `npm run build`, `npm test` 29/29(165초) 통과. 병합 뒤 `npm run e2e` 56/56(2.6분) 통과(화면·저장 형식은 바꾸지 않았다).
 - 만난 문제
   - TS2416 — `CabEffect` 의 새 필드 `makeupGain` 이 `BaseEffect.makeupGain: GainNode` 와 이름이 겹쳐 `cabinetMakeup` 으로 바꿨다.
   - 처음 계획한 Σh² = 1 정규화는 측정해 보고 접었다: 기준 보정 뒤 IR 에너지가 조합마다 6.5 dB 흩어져 있어(L-34) 켬/끔 차가 마이크·거리에 따라 같은 폭으로 흔들린다.
