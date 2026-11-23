@@ -1,0 +1,10 @@
+{
+  "name": "03-corrupt-json",
+  "description": "세 키가 모두 깨진 JSON이다(잘린 문자열, 빈 문자열이 아닌 쓰레기, 닫히지 않은 객체). 앱은 흰 화면 없이 기본값으로 떠야 한다.",
+  "source": "handcrafted (실제 저장 값을 중간에서 자름)",
+  "storage": {
+    "guitar-pedalboard:pedals": "{\"version\":11,\"pedals\":[{\"id\":\"noise-gate\",\"enabled\":true,\"bypassed\":false,\"params\":{\"mix\":100,\"level\":100,\"thresholdDb\":-54,\"reductionDb\":-80,\"attackMs\":6,\"holdMs\":70,\"releaseMs\":180,\"hysteresisDb\":4}},{\"id\":\"compressor\",\"enabled\":true,\"bypassed\":false,\"params\":{\"mix\":75,\"level\":100,\"threshold\":-24,\"ratio\":4,\"attack\":0.006,\"release\":0.18,\"knee\":18,\"sustain\":35}},{\"id\":\"auto-wah\",\"enabled\":true,\"bypassed\":true,\"params\":{\"mix\":100,\"level\":100,\"sensitivity\":55,\"range\":60,\"resonance\":45,\"mode\":\"auto\",\"manual\":50}},{\"id\":\"drive\",\"enabled\":true,\"bypassed\":false,\"params\":{\"mix\":88,\"level\":95,\"mode\":\"overdrive\",\"drive\":42,\"tone\":55,\"bias\":0.08}},{\"id\":\"crunch\",\"enabled\":true,\"bypassed\":true,\"params\":{\"mix\":85,\"level\":90,\"volume\":80,\"gain\":55,\"tone\":55,\"presence\":45,\"lowCut\":80,\"mode\":\"crunch\"}},{\"id\":\"fuzz\",\"enabled\":true,\"bypassed\":true,\"params\":{\"mix\":90,\"level\":90,\"fuzz\":60,\"tone\":55,\"mode\":\"classic\",\"bias\":50,\"gate\":15,\"lowCut\":70}},{\"id\":\"graphic-eq\",\"enabled\":true,\"bypassed\":true,\"params\":{\"mix\":100,\"level\":100,\"band100\":0,\"band200\":0,\"band400\":0,\"band800\":0,\"band1600\":0,\"band3200\":0,\"band6400\":0}},{\"id\":\"eq\",\"enabled\":true,\"bypassed\":false,\"params\":{\"mix\":100,",
+    "web-guitar-pedalboard-presets": "{\"version\":11,\"presets\":[{\"id\":\"x\",\"name\":\"broken\",\"pedals\":[",
+    "guitar-pedalboard:io": "not json at all"
+  }
+}
