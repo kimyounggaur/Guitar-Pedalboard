@@ -2,6 +2,7 @@
 // 각 프로브는 평평한 metrics(점으로 이은 키 → 숫자·문자·불리언·null)를 돌려주고, scripts/audio-render-probe.mjs 가
 // docs/baseline/audio-probe.json 과 tolerances.json 의 허용 오차로 비교한다.
 // 측정만 한다. 목표값(설계서의 '목표' 열)을 넘는지 판정하는 일은 각 Step 의 수용 기준이 맡는다.
+import type { MonitorMsg } from '../engine/guardSpec';
 import { CompressorEffect } from '../nodes/CompressorEffect';
 import {
   achievableTargetDbfs,
@@ -469,6 +470,140 @@ const p06: ProbeDefinition = {
 };
 
 // ---------------------------------------------------------------------------------------------
+// P-07 — 하울링 판정 매트릭스(S1.5)
+// ---------------------------------------------------------------------------------------------
+/**
+ * 렌더가 끝난 직후에도 워클릿 포트 메시지가 조금 늦게 도착한다. 끝 쪽 메시지를 놓치지 않도록,
+ * 메시지 수가 이 간격(ms)을 연달아 세 번 지켜볼 동안 늘지 않을 때까지 기다린다(최대 MONITOR_FLUSH_MAX_MS).
+ */
+const MONITOR_FLUSH_POLL_MS = 20;
+const MONITOR_FLUSH_MAX_MS = 1000;
+
+type CutMessage = Extract<MonitorMsg, { type: 'howl-cut' }>;
+type SuspectMessage = Extract<MonitorMsg, { type: 'howl-suspect' }>;
+
+interface GuardRender {
+  render: OfflineRender;
+  messages: MonitorMsg[];
+}
+
+/** 렌더하고 가드·미터·리미터가 보낸 메시지를 모두 모아 돌려준다. */
+async function renderWithMonitor(ctx: ProbeContext, request: ChainRequest): Promise<GuardRender> {
+  let messages: MonitorMsg[] = [];
+  const render = await ctx.render({
+    ...request,
+    async afterRender(handle) {
+      let stable = 0;
+      let seen = -1;
+      for (let waited = 0; stable < 3 && waited < MONITOR_FLUSH_MAX_MS; waited += MONITOR_FLUSH_POLL_MS) {
+        await new Promise((resolve) => setTimeout(resolve, MONITOR_FLUSH_POLL_MS));
+        stable = handle.monitorMessages.length === seen ? stable + 1 : 0;
+        seen = handle.monitorMessages.length;
+      }
+      messages = [...handle.monitorMessages];
+    },
+  });
+  return { render, messages };
+}
+
+interface HowlCase {
+  name: string;
+  samples: (sampleRate: number) => Float32Array;
+  /** 입력 이득(dB). H-4 의 '입력 한계 +20 dB 상당'은 신호가 아니라 이 설정으로 준다. */
+  inputGainDb?: number;
+  /** 하울링이어야 하는 신호인가(H) 아니면 오차단을 시험하는 신호인가(G). */
+  howl: boolean;
+  /** H 는 앱 기본 구성(보고서 재현 조건), G 는 판정이 체인과 무관하므로 빈 체인(60초 렌더 시간을 아낀다). */
+  pedals: () => PedalState[];
+}
+
+const P07_CASES: HowlCase[] = [
+  { name: 'H-1', samples: signals.howl1, howl: true, pedals: () => clonePedals(initialPedals) },
+  { name: 'H-2', samples: signals.howl2, howl: true, pedals: () => clonePedals(initialPedals) },
+  { name: 'H-3', samples: signals.howl3, howl: true, pedals: () => clonePedals(initialPedals) },
+  { name: 'H-4', samples: signals.howl4, inputGainDb: 20, howl: true, pedals: () => clonePedals(initialPedals) },
+  { name: 'G-1', samples: (rate) => signals.sustainLead(rate), howl: false, pedals: () => [] },
+  { name: 'G-2', samples: (rate) => signals.strumming(rate), howl: false, pedals: () => [] },
+  { name: 'G-3', samples: (rate) => signals.noiseFloor(rate), howl: false, pedals: () => [] },
+];
+
+/** 한 신호를 가드에 넣고 차단 여부·시각·무음 유지를 values 에 기록한다. 돌려주는 값은 무음 완료 시각(차단이 없으면 null). */
+function recordGuardResult(values: Record<string, MetricValue>, name: string, result: GuardRender): number | null {
+  const { render, messages } = result;
+  const cuts = messages.filter((message): message is CutMessage => message.type === 'howl-cut');
+  const suspects = messages.filter((message): message is SuspectMessage => message.type === 'howl-suspect');
+  values[`${name}.cutCount`] = cuts.length;
+  values[`${name}.suspectCount`] = suspects.length;
+  values[`${name}.maxSuspectMs`] = suspects.reduce((longest, suspect) => Math.max(longest, suspect.heldMs), 0);
+  const rate = render.sampleRate;
+  const length = render.output[0].length;
+  values[`${name}.tailRmsDb`] = m.stereoRmsDb(render.output, Math.max(0, length - rate), length);
+  if (cuts.length === 0) {
+    values[`${name}.mutedSeconds`] = null;
+    values[`${name}.cutHz`] = null;
+    values[`${name}.silentAfterCut`] = null;
+    return null;
+  }
+  const cut = cuts[0];
+  // frame 은 10 ms 램프가 끝나 출력이 완전히 0 이 된 양자의 끝 오디오 시계다. 신호가 시작한 때부터 잰다.
+  const mutedSeconds = (cut.frame - render.leadFrames) / rate;
+  values[`${name}.mutedSeconds`] = mutedSeconds;
+  values[`${name}.cutHz`] = cut.freqHz;
+  const leftover = Math.max(...render.output.map((channel) => m.peakLinear(channel, cut.frame, channel.length)));
+  values[`${name}.silentAfterCut`] = leftover === 0 ? 1 : 0;
+  return mutedSeconds;
+}
+
+const p07: ProbeDefinition = {
+  id: 'P-07',
+  title: '하울링 판정 매트릭스',
+  describe:
+    '설계서 부록 A 의 시험 신호를 장치 모드 가드(output-guard)에 넣고 차단 여부·무음 완료 시각(신호 시작부터)·차단 주파수·차단 뒤 출력이 완전히 0 인지를 잰다. H-1~H-3 는 앱 기본 구성에, H-4 는 입력 이득 +20 dB(보고서 재현 조건)로 넣는다. G-1~G-3(60초)은 빈 체인으로 오차단 여부만 본다(판정은 체인 앞에서 하므로 체인과 무관하다). 파일 모드와 보호 끔에서는 H-1 이 차단되지 않는지도 본다. 판정은 출력 레벨을 보지 않는다(D9).',
+  steps: 'S1.5',
+  async run(ctx) {
+    const rate = ctx.sampleRate;
+    const values: Record<string, MetricValue> = {};
+    const howlMuted: number[] = [];
+    let hits = 0;
+    let falseCuts = 0;
+    let silentFailures = 0;
+    for (const item of P07_CASES) {
+      const result = await renderWithMonitor(ctx, {
+        input: [item.samples(rate)],
+        pedals: item.pedals(),
+        inputGainDb: item.inputGainDb ?? 0,
+        guardMode: 'device',
+      });
+      const muted = recordGuardResult(values, item.name, result);
+      if (item.howl) {
+        if (muted !== null) {
+          hits += 1;
+          howlMuted.push(muted);
+          if (values[`${item.name}.silentAfterCut`] !== 1) silentFailures += 1;
+        }
+      } else if (muted !== null) {
+        falseCuts += 1;
+      }
+    }
+    values.hits = hits;
+    values.maxMutedSeconds = howlMuted.length > 0 ? Math.max(...howlMuted) : null;
+    values.minMutedSeconds = howlMuted.length > 0 ? Math.min(...howlMuted) : null;
+    values.falseCuts = falseCuts;
+    values.silentFailures = silentFailures;
+
+    // 판정이 꺼지는 두 경우: 파일 재생(마이크가 없으면 되먹임도 없다)과 사용자가 보호를 끈 경우. 소리는 그대로 나와야 한다.
+    const h1 = signals.howl1(rate);
+    const fileMode = await renderWithMonitor(ctx, { input: [h1], pedals: [], source: 'file', guardMode: 'device' });
+    recordGuardResult(values, 'fileMode.H-1', fileMode);
+    const protectionOff = await renderWithMonitor(ctx, { input: [h1], pedals: [], source: 'device', guardMode: 'off' });
+    recordGuardResult(values, 'protectionOff.H-1', protectionOff);
+    values.disabledModeCuts = Number(values['fileMode.H-1.cutCount']) + Number(values['protectionOff.H-1.cutCount']);
+    values.disabledModeSoundDb = Math.min(Number(values['fileMode.H-1.tailRmsDb']), Number(values['protectionOff.H-1.tailRmsDb']));
+    return { metrics: metrics(values) };
+  },
+};
+
+// ---------------------------------------------------------------------------------------------
 // P-08 — Compressor Mix 리플
 // ---------------------------------------------------------------------------------------------
 const p08: ProbeDefinition = {
@@ -821,27 +956,32 @@ const p17: ProbeDefinition = {
   id: 'P-17',
   title: '렌더 시간(CPU 대용 지표)',
   describe:
-    'REF-PC 6초를 구성마다 3번 렌더해 가장 빠른 시간을 쓴다. cpuShare = 렌더 시간 ÷ 오디오 길이. 시간 자체(time.*)는 기계마다 달라 비교하지 않고, 비율(ratio.*)만 기준선과 견준다.',
+    'REF-PC 6초를 구성마다 5번(구성을 돌려가며) 렌더해 가장 빠른 시간을 쓴다. cpuShare = 렌더 시간 ÷ 오디오 길이. 시간 자체(time.*)는 기계마다 달라 비교하지 않고, 비율(ratio.*)만 기준선과 견준다. 처음 다섯 구성은 레벨 미터·출력 가드를 뺀 그래프(S1.5 이전 모양)로 재서 예전 기준선과 이어지고, 미터 둘과 장치 모드 가드(하울링 판정)를 넣은 빈 체인(emptyMonitored)과 15개를 모두 켠 체인(allOnMonitored)의 시간 차이를 따로 잰다. monitorOverheadOverPedals = 가드·미터가 더한 시간 ÷ 15개 페달이 쓰는 시간(설계서 S1.5 수용 기준 ≤ 5%).',
   steps: 'S1.5, S3.4, S4.2',
   async run(ctx) {
     const input = signals.refPc(ctx.sampleRate, 6);
-    const configurations: Array<[string, () => PedalState[]]> = [
-      ['empty', () => []],
-      ['allOff', allPedalsBypassed],
-      ['allOn', () => allPedalsOn()],
-      ['phaserOff', () => [pedal('phaser', {}, { bypassed: true })]],
-      ['phaserOn', () => [pedal('phaser')]],
+    // 처음 다섯 구성은 S1.5 이전과 같은 그래프(monitoring: false)로 잰다. 기준선 값이 의미를 바꾸지 않는다.
+    const configurations: Array<[string, () => ChainRequest]> = [
+      ['empty', () => ({ input: [input], pedals: [], monitoring: false })],
+      ['allOff', () => ({ input: [input], pedals: allPedalsBypassed(), monitoring: false })],
+      ['allOn', () => ({ input: [input], pedals: allPedalsOn(), monitoring: false })],
+      ['phaserOff', () => ({ input: [input], pedals: [pedal('phaser', {}, { bypassed: true })], monitoring: false })],
+      ['phaserOn', () => ({ input: [input], pedals: [pedal('phaser')], monitoring: false })],
+      // 레벨 미터 둘 + 출력 가드(장치 모드: 하울링 판정이 FFT 를 돌린다)
+      ['emptyMonitored', () => ({ input: [input], pedals: [], monitoring: true, guardMode: 'device' })],
+      ['allOnMonitored', () => ({ input: [input], pedals: allPedalsOn(), monitoring: true, guardMode: 'device' })],
     ];
-    const best: Record<string, number> = {};
+    // 구성을 돌려가며(라운드마다 모든 구성을 한 번씩) 잰다. 한 구성을 몰아서 재면 그 시간대의 기계 잡음(다른 프로세스·클럭)이 한 구성에만 실려
+    // 구성 사이 비율이 흔들린다. 라운드를 섞으면 모든 구성이 조용한 순간을 한 번은 만나고, 구성마다 가장 빠른 값이 그 순간의 값이 된다.
+    const ATTEMPTS = 5;
+    const best: Record<string, number> = Object.fromEntries(configurations.map(([name]) => [name, Number.POSITIVE_INFINITY]));
     let audioSeconds = 0;
-    for (const [name, build] of configurations) {
-      let fastest = Number.POSITIVE_INFINITY;
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        const render = await ctx.render({ input: [input], pedals: build() });
-        fastest = Math.min(fastest, render.renderMilliseconds);
+    for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
+      for (const [name, build] of configurations) {
+        const render = await ctx.render(build());
+        best[name] = Math.min(best[name], render.renderMilliseconds);
         audioSeconds = (render.leadFrames + render.signalFrames) / render.sampleRate;
       }
-      best[name] = fastest;
     }
     const values: Record<string, MetricValue> = {};
     for (const [name, milliseconds] of Object.entries(best)) {
@@ -851,6 +991,9 @@ const p17: ProbeDefinition = {
     values['ratio.allOffOverAllOn'] = best.allOff / best.allOn;
     values['ratio.phaserOffContribution'] = (best.phaserOff - best.empty) / best.allOn;
     values['ratio.phaserOnContribution'] = (best.phaserOn - best.empty) / best.allOn;
+    // 가드·미터가 더한 시간을 15개 페달이 쓰는 시간(켠 체인 − 빈 체인)으로 나눈다. 두 가지 체인에서 각각 잰다.
+    values['ratio.monitorOverheadOverPedals'] = (best.emptyMonitored - best.empty) / (best.allOn - best.empty);
+    values['ratio.monitorOverheadInAllOn'] = (best.allOnMonitored - best.allOn) / (best.allOn - best.empty);
     return { metrics: metrics(values) };
   },
 };
@@ -1107,7 +1250,7 @@ const p23: ProbeDefinition = {
 };
 
 export const probes: ProbeDefinition[] = [
-  p01, p02, p03, p04, p05, p06, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p20, p21, p22, p23,
+  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p20, p21, p22, p23,
 ];
 
 // ---------------------------------------------------------------------------------------------
