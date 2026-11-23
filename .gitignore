@@ -10,3 +10,9 @@ assets/
 
 dist-probe/
 /e2e/fixtures/*.wav
+
+# Playwright (S0.4)
+test-results/
+playwright-report/
+blob-report/
+/playwright/.cache/
