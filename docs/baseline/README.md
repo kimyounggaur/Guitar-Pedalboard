@@ -6,6 +6,7 @@
 |---|---|
 | `audio-probe.json` | 기준선. 프로브 21개 × 샘플레이트 2개(44.1·48 kHz), 측정값 490개 |
 | `tolerances.json` | 항목별 허용 오차. 넓히거나 `ignore` 를 늘리려면 사람 승인이 필요하다(설계서 6.4절) |
+| `e2e.json`, `screenshots/` | 브라우저 시나리오(E-04·E-06) 기준선. 설명은 `README-e2e.md` |
 
 ## 쓰는 법
 
