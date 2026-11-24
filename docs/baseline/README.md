@@ -72,7 +72,7 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 - 체인 구성: 소스 → 입력 레벨 미터(`monitoring`) → (장치 모드면 `InputStage`: 채널 선택 `inputChannelMode`·자동 판정. 2채널 입력은 렌더 도중 50 ms 마다 입력 샘플에서 직접 채널 레벨을 재서 판정한다) → 입력 게인 → 이펙트(페달 순서) → `OutputStage`(프리셋 보정 → 마스터 0.9 → 출력 가드 → 리미터) → 출력 레벨 미터 → 출력. 실제 앱의 `AudioEngine` 과 같은 클래스를 쓴다. 레벨 미터·가드는 `monitoring: false` 로 뺄 수 있고(S1.5 이전 모양), 가드는 기본 `guardMode: 'off'` 라 소리를 건드리지 않는다. P-07·P-17 만 `'device'` 로 하울링 판정을 켠다(L-46). 리미터는 소리를 룩어헤드 1 ms 늦추는데, 입력과 출력을 같은 시각으로 맞춰 비교하는 측정(전달함수 P-11·P-12, 클릭 창 P-23, RMS 창)이 어긋나지 않도록 렌더는 이 고정 지연을 걷어 낸다(`alignOutput`, 기본 켬, REFACTOR_LOG L-30). 처리 지연을 재는 P-16 만 걷어 내지 않아 리미터의 1 ms 까지 읽는다.
 - 렌더 앞에 0.5초 무음을 붙인다(`BaseEffect` 의 파라미터 스무딩 τ≈12 ms 가 안정되도록). 모든 측정은 이 구간 뒤에서 한다.
 - 꺼진 페달은 신호를 그대로 통과시키므로 P-05 는 체인에서 뺀 채 렌더해 시간을 줄이고, 첫 프리셋을 15개 전체로 한 번 더 렌더해 같음을 확인한다(`bypassTransparent`).
-- 신호는 모두 고정 시드로 만든다(`src/audio/testing/signals.ts`). WAV 는 `node scripts/make-fixture-wavs.mjs` 가 `e2e/fixtures/` 에 만든다(S0.4 가짜 마이크용, git 에는 넣지 않음).
+- 신호는 모두 고정 시드로 만든다(`src/audio/testing/signals.ts`). WAV 는 `node scripts/make-fixture-wavs.mjs` 가 `e2e/fixtures/` 에 만든다(S0.4 가짜 마이크용, git 에는 넣지 않음). S2.5 가 입력 레벨 경고 시험(E-09)용 신호 4종을 더했다: `lvl-small`(REF-PC 의 모든 타건 피크 −40 dBFS)·`lvl-hot`(0 dBFS)·`lvl-silent`(10초 무음)·`lvl-stop`(한 번 치고 멈춤, 14초). 부록 A 의 기준 신호가 아니고 오디오 프로브(P-xx)는 쓰지 않는다(REFACTOR_LOG L-126).
 - 프로브 페이지(`probe.html`)는 `vite build --mode test` 에서만 빌드되고 `dist-probe/`(gitignore)에 나온다. 일반 빌드와 GitHub Pages 배포에는 들어가지 않는다.
 
 

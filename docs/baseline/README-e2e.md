@@ -11,7 +11,7 @@
 
 ```bash
 npm run build                         # 시험은 빌드 결과(dist/)를 vite preview 로 서비스한다
-npm run e2e                           # 빌드까지 알아서 한다. 전체 158개, 약 5분
+npm run e2e                           # 빌드까지 알아서 한다. 전체 176개, 약 8분
 E2E_SKIP_BUILD=1 npm run e2e          # dist/ 가 이미 있을 때(CI 는 앞 단계에서 빌드해 이렇게 돌린다)
 npm run e2e -- --grep "E-23"          # 일부만
 E2E_UPDATE_BASELINE=1 npm run e2e     # 기준선(e2e.json)과 대표 스크린샷 갱신 (의도한 변화일 때만)
@@ -27,7 +27,7 @@ E2E_UPDATE_BASELINE=1 E2E_SKIP_BUILD=1 npx playwright test e2e/tests/e04-phone-r
 
 - 기준선을 갱신하는 커밋의 메시지는 `baseline: {Step ID} {이유}` 로 쓴다. 이유 없이 갱신하지 않는다.
 - 시험 결과(`test-results/`)와 보고서(`playwright-report/`)는 git 에 넣지 않는다. CI 에서 실패하면 두 폴더를 `e2e-report` 이름으로 올린다(7일 보관).
-- 가짜 마이크용 WAV 는 `node scripts/make-fixture-wavs.mjs` 가 `e2e/fixtures/*.wav` 로 만든다(git 제외). `e2e/global-setup.ts` 가 없으면 만든다.
+- 가짜 마이크용 WAV 는 `node scripts/make-fixture-wavs.mjs` 가 `e2e/fixtures/*.wav` 로 만든다(git 제외). `e2e/global-setup.ts` 가 `--missing` 으로 **빠진 것만** 만든다(있는 파일은 건드리지 않는다. 신호가 늘어난 뒤 옛 WAV 만 가진 환경이 새 신호 없이 시험을 시작하지 않는다 — S2.5 에서 `ref-pc.wav` 하나만 확인하던 것을 고쳤다). 입력 레벨 경고용 신호 4종(`lvl-small`·`lvl-hot`·`lvl-silent`·`lvl-stop`)은 부록 A 에 없는 신호라 `README.md` 의 신호 표와 REFACTOR_LOG L-126 에 적었다.
 
 ## 하네스 구성
 
@@ -39,6 +39,7 @@ E2E_UPDATE_BASELINE=1 E2E_SKIP_BUILD=1 npx playwright test e2e/tests/e04-phone-r
   - `app.ts` — 앱 조작(`connectGuitar`, 도크 탭 고르기 `selectMobileTab`, 도크 펼침·접힘 `setMobileDock`: `--dock-h` 가 실제 높이를 따라올 때까지 기다림).
   - `storage.ts` — 저장소 시험 도우미(S2.4): 저장 키 이름, 페달 15개 표(`PEDALS`)와 기본으로 켜진 다섯, `seedStorage`(픽스처를 `localStorage` 에 한 번만 넣기), 저장된 v2 보드·프리셋 읽기, `toastOf`, 옛 저장본 픽스처 읽기(`loadV1Fixture`).
   - `dist-server.ts` — `dist/` 를 서비스하는 작은 서버(S2.4). 시험 도중에 `sw.js` 의 바이트를 바꿔 내려 줘서 새 버전 배포를 흉내 낸다(실제 서비스 워커가 필요한 새 버전 알림 시험용). `node:http` 선언은 `types/node-shim.d.ts` 에 있다.
+  - `level-notice.ts` — 입력 레벨 경고 관찰(S2.5, E-09). 앱 코드보다 먼저(`page.goto` 전에) 심는다. 입력 쪽 `level-meter` 의 보고를 엿보아 **오디오 시계**(보고의 frame / sampleRate — 판정이 쓰는 시간과 같은 기준)를 알고, 화면의 경고 요소(`data-level-warning`)가 바뀔 때마다 그때의 오디오 시각과 함께 기록한다. `waitForAudioClock(page, 초)` 는 오디오 시계가 그 시각에 이를 때까지 기다린다(벽시계에는 마이크를 여는 시간·Playwright 왕복이 섞여 4.12 표의 초 단위 기준을 잴 수 없다). S2.5 이전 앱의 입력 경고(속성 없음)는 'legacy' 로 기록해 옛 코드에서 같은 시험을 돌려 볼 수 있다.
   - `touch.ts` — CDP `Input.dispatchTouchEvent` 로 손가락 드래그를 보내고 스크롤이 가라앉기를 기다린다(Playwright 의 `touchscreen` 은 탭뿐이다).
   - `mocks.ts` — 저장소 차단·가득 참, Web MIDI, 문서 숨김 흉내, `getUserMedia` 오류 7종, `AudioContext` 추적, 출력 가드 관찰.
   - `teardown.ts`(정지 정리 관찰, E-01), `screens.ts`(화면 프로필 11종), `fixtures.ts`·`env.ts`(브라우저 띄우기·환경 상수), `record.ts`(측정값 기록).
@@ -52,6 +53,7 @@ E2E_UPDATE_BASELINE=1 E2E_SKIP_BUILD=1 npx playwright test e2e/tests/e04-phone-r
 - 스위치 통합·저장 형식 시험은 `e08-active-led.spec.ts`(E-08, 12개, S2.4) — 발스위치는 카드마다 하나이고 첫 화면의 켜진 LED 가 기본 5개(Noise Gate·Compressor·Drive·EQ·Cab)임, 기타를 연결하면 미터의 이펙트 수 '5개' = LED 수이고 스위치·단축키·프리셋으로 바꿔도 LED·미터·저장된 상태가 함께 바뀜(2개). 옛 저장본 픽스처 6종(`e2e/fixtures/storage-v1`)마다 LED 수 = 저장돼 있던 켜진 페달 수(5/2/5/5/6/5), v1 키 원문은 변환 뒤·스위치·노브·새로고침 뒤에도 그대로(깨진 값을 담은 03 은 원래 키가 보관 사본으로 옮겨지고 원문이 사본에 남음), 새로고침해도 v2 에서 읽음(6개). 옛 사용자 프리셋(02)의 `enabled`·`bypassed` 조합이 켜짐 하나로 불러와지고 프리셋을 더 가져와도 v1 프리셋 키는 그대로(1개). `schema` 3(더 새로운 앱)은 옛 방식 모드로 v1 에서 읽고 v1 키에 쓰며 v2 키를 만들지 않음(2개). 도우미의 페달 표가 화면과 같음(1개). 소리가 같은지는 P-19 가 잰다.
 - 두 탭 경고 시험은 `s2-4-cross-tab.spec.ts`(5개, S2.4) — 다른 탭이 v1 키 둘 중 어느 쪽에 값을 쓰든 경고 알림 한 장(문구는 설계서 4.7 그대로, 닫을 때까지 남음, 2개), 이 앱끼리의 v2 키 쓰기(스위치·노브)·v1 키 삭제·저장소 비우기에는 없음, 닫은 뒤 5분 안에는 다시 안 뜸, 옛 방식 모드로 연 탭은 알리지 않음. 옛 탭은 같은 키에 값을 쓰는 것으로 흉내 낸다.
 - 새 버전 알림 시험은 `s2-4-update-notice.spec.ts`(4개, S2.4) — 진짜 서비스 워커와 `helpers/dist-server.ts` 로 배포를 흉내 낸다: 처음 설치의 제어권 획득은 알림이 없고, 새 서비스 워커가 활성화되면 알림 한 장(버튼을 눌러야만 새로고침), 기타를 연결한 채로도 연결이 안 끊기고 새로고침이 없음, 새로고침한 뒤의 탭도 다음 새 버전을 알림, 바이트가 같으면 알림 없음. 이 시험은 서비스 워커를 막지 않는다(E-05 와 달리).
+- 입력 레벨 경고 시험은 `e09-level-warning.spec.ts`(E-09, 18개, S2.5) — 가짜 마이크로 신호를 흘려 실제 브라우저의 오디오 스레드가 재고 `MonitorService` 가 판정한 경고가 설계서 4.12 표의 시간대로 화면에 뜨는지 본다(시각은 오디오 시계). 데스크톱 신호 4종: 정상(REF-PC)은 7초까지 경고 없음, 작은 신호(LVL-SMALL, 모든 타건 −40 dBFS)는 '입력이 작습니다'(5초쯤), 큰 신호(LVL-HOT, 0 dBFS)는 '입력이 너무 큽니다'(2초쯤, 미터의 클리핑 표시도 같이), 무음(LVL-SILENT)은 '입력 신호가 없습니다'(6초쯤). 휴대폰 390×844: 큰 신호를 네 탭(페달·입력·미터·프리셋)에서 각각 선택한 채 같은 시각에 판정하고, 정상·작음·무음은 가장 불리한 '페달' 탭(도크 접힘)에서 판정시킨 뒤 네 탭을 돌며 입력·미터 탭에만 보이는지 확인한다(L-125·L-128). R2-8: 한 번 치고 멈춘 연주(LVL-STOP)는 12초까지 어떤 경고도 없고, 파일 모드는 0 dBFS·−40 dBFS·무음 파일을 재생해도 재생하다 일시정지해도 경고하지 않는다(L-120). 연결을 끊으면 경고가 바로 사라지고 다시 연결하면 새 시계로 처음부터 판정한다. 문턱값(−70·−60·−36·−30·−0.5 dBFS 와 1·3·5초)을 따지는 쪽은 Node 시험 `npm run test:level-warning` 이고, 여기서는 '실제 브라우저에서 그 시간대로 뜬다' 만 본다. 기준선(`e2e.json`)에는 기록하지 않는다. **옛 코드(S2.5 이전)에 돌리면 18개 중 13개가 실패한다**(오경고·깜박임·무음 무경고 — 옛 경고는 'legacy' 로 읽힌다).
 - 타입: `tsconfig.e2e.json` 이 `e2e/` 와 `playwright.config.ts` 를 검사한다(`npx tsc -p tsconfig.e2e.json --noEmit`). `@types/node` 는 앱의 `setTimeout` 반환형을 바꿔 `AutoWahEffect.ts` 를 깨뜨려서 넣지 않고, 쓰는 Node API 만 `e2e/types/node-shim.d.ts` 에 직접 선언했다.
 
 ## E-04 와 E-06 (둘 다 정식 단언)
@@ -174,4 +176,5 @@ E2E_UPDATE_BASELINE=1 E2E_SKIP_BUILD=1 npx playwright test e2e/tests/e04-phone-r
 - S1.8: 연결 전 첫 화면에는 페달이 하나도 보이지 않는다(1280×800 에서 첫 카드 윗선 770 px, L-76). 이 입력 패널을 접거나 옆으로 옮길지, 카드 속에서 스위치를 위로 올릴지(L-71)는 디자인 결정이라 사람이 정한다.
 - S1.7: 실제 브라우저에서 사이트 데이터를 막은 상태(Safari 비공개 모드, Chrome 의 쿠키·사이트 데이터 차단)와 정말 가득 찬 저장 공간에서 알림 문구·동작이 맞는지, 오류 화면이 실제 휴대폰에서 어떻게 보이는지, 배포 사이트에서 '설정을 초기화하고 다시 시작' 흐름이 되는지(자세한 목록은 `docs/refactoring/step-reports.md` 의 S1.7).
 - S2.4: 실제 브라우저에서 옛 데이터를 가진 채로 새 버전을 열었을 때 LED·노브·프리셋이 그대로인지, 실제 옛 빌드 탭이 v1 키에 쓸 때 경고가 뜨는지(e2e 는 같은 키에 값을 써서 흉내 냈다), 실제 GitHub Pages 배포에서 열려 있는 탭에 새 서비스 워커가 들어올 때 알림이 뜨는지(`dist-server` 는 배포를 흉내 낸 것이다). 이 알림이 처음 들어가는 배포 전부터 열려 있던 탭에는 알림이 없다. 자세한 것은 `docs/refactoring/step-reports.md` 의 S2.4 절.
+- S2.5: 실제 기타·인터페이스로 경고 문턱과 시간(설계서 6.5 — 표의 모든 수치와 보강 2초는 초기값), 잡음 바닥이 −70~−60 dBFS 인 인터페이스에서 케이블을 뽑아도 '신호 없음' 이 안 뜨는 구간(L-122), 타건 간격이 2초보다 긴 아주 느린 연주에서 '작음' 이 늦거나 안 뜨는 것(L-119), 휴대폰 '페달'·'프리셋' 탭에서는 경고가 보이지 않는 것(L-128)과 파일 재생 중 안내가 없는 것(L-120)을 받아들일지, 실제 휴대폰에서 같은 시각에 뜨는지(가짜 마이크는 44.1 kHz·일정한 보고 간격이다).
 - GitHub Actions 에서 실제로 돌려 본 적이 없다. 처음 PR 을 올릴 때 `Install Playwright Chromium` 단계가 CI 러너에서 통과하는지 확인한다.
