@@ -818,7 +818,7 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
 
 ## S2.1 꺼진 페달의 Mix 0% 바로잡기
 
-- 브랜치·병합: `refactor/s2-1-off-pedal-mix` → `phase/2`. 커밋 `9830de0`(코드·시험) · 문서 커밋 · `baseline: S2.1`(P-18 기준선만) 커밋.
+- 브랜치·병합: `refactor/s2-1-off-pedal-mix` → `phase/2`. 커밋 `9830de0`(코드·시험) · `a46c9fa`(문서와 **P-18 기준선 `audio-probe.json`** — 기준선 변경분이 14줄(새 지표 5개 추가, 기존 값 변동 없음)이라 따로 떼어 `baseline:` 커밋으로 만들었어야 했는데 문서와 함께 스테이징해 한 커밋에 들어갔다. 역사를 고쳐 쓰지 않으려고 그대로 두었고, 기준선 변경은 `git show a46c9fa -- docs/baseline/audio-probe.json` 로 따로 볼 수 있다).
 - 해결 항목: R2-2. **설계서의 '현재'(팩토리 프리셋 40개에 Mix 0% 로 꺼 둔 페달)는 데이터에서 재현되지 않았다**(L-78). 꺼진 페달 368개의 Mix 는 전부 그 페달의 기본값이고, 설계서가 든 수(Crunch 37·Fuzz 35·Drive 23·Delay 23·Reverb 6·Compressor 2)는 그 페달이 **꺼져 있는** 프리셋의 수와 정확히 같다. 그래서 이 Step 은 '이미 저장돼 있거나 가져온 옛 데이터를 불러올 때 바로잡기'와 '다시 생기지 않게 지키는 시험·측정 기준'으로 줄었다.
 - 변경 파일(9개, 신규 3개, +525 / −10줄): 제품 — `src/presets/normalize.ts`(신규, `restoreMixOfOffPedals`·`isPedalOff`)·`src/store/pedalStore.ts`(`mergeStoredPedals` 끝에서 호출)·`src/store/presetStore.ts`(`off()` 가 Mix 를 받지 않음, 호출 4곳 정리). 측정·시험 — `src/audio/testing/probes.ts`(P-18 확장)·`docs/baseline/tolerances.json`(규칙 1·기준 3)·`scripts/audio-render-probe.mjs`(요약 항목)·`scripts/preset-normalize-regression.mjs`(신규, `npm run test:preset-normalize`)·`e2e/tests/s2-1-off-pedal-mix.spec.ts`(신규)·`package.json`(시험 스크립트 1개).
 
