@@ -99,7 +99,7 @@ globalThis.AudioWorkletNode = class extends Node {
   }
 };
 const context = { currentTime: 0, createGain() { const node = new Node(); graph.push(node); return node; } };
-const pedal = { id: 'phaser', type: 'phaser', enabled: true, bypassed: false,
+const pedal = { id: 'phaser', type: 'phaser', active: true,
   params: { mix: 45, level: 100, rate: .5, depth: 70, stages: 6, feedback: 40 } };
 const effect = new PhaserEffect(context, pedal);
 const processorNode = graph.at(-1);
@@ -107,7 +107,7 @@ effect.update({ ...pedal, params: { ...pedal.params, stages: 12, feedback: 90 } 
 assert.equal(processorNode.parameters.get('stages').value, 12);
 assert.equal(processorNode.parameters.get('feedback').value, .9);
 const bypass = [...effect.input.connections].find((node) => node.connections.has(effect.output));
-effect.update({ ...pedal, bypassed: true });
+effect.update({ ...pedal, active: false });
 assert.equal(bypass.gain.value, 1);
 effect.dispose(); effect.dispose();
 assert.deepEqual(processorNode.port.messages, [{ type: 'dispose' }]);

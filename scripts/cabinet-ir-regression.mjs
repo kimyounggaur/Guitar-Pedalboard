@@ -51,7 +51,7 @@ const context = {
     return { numberOfChannels: count, getChannelData: (ch) => data[ch] };
   },
 };
-const pedal = { id: 'cab', type: 'cab', enabled: true, bypassed: false,
+const pedal = { id: 'cab', type: 'cab', active: true,
   params: { mix: 100, level: 100, model: 'v30-4x12', micPosition: 55, distance: 30, lowCut: 85, highCut: 5400, presence: 1.5 } };
 const effect = new CabEffect(context, pedal);
 const builtIn = convolver.buffer;

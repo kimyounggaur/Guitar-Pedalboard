@@ -21,7 +21,7 @@ export function ChainText() {
               <PedalIcon type={pedal.type} color={pedal.color} />
               {pedal.name}
             </strong>
-            {pedal.bypassed && <em>꺼짐</em>}
+            {!pedal.active && <em>꺼짐</em>}
           </li>
         ))}
       </ol>

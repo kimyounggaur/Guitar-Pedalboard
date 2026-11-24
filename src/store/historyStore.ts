@@ -26,7 +26,7 @@ function changedParameterKey(before: PedalState[], after: PedalState[]): string 
   for (let i = 0; i < before.length; i++) {
     const oldPedal = before[i];
     const newPedal = after[i];
-    if (oldPedal.id !== newPedal.id || oldPedal.enabled !== newPedal.enabled || oldPedal.bypassed !== newPedal.bypassed) return null;
+    if (oldPedal.id !== newPedal.id || oldPedal.active !== newPedal.active) return null;
     for (const param of new Set([...Object.keys(oldPedal.params), ...Object.keys(newPedal.params)])) {
       if (oldPedal.params[param] !== newPedal.params[param]) {
         if (key) return null;

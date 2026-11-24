@@ -41,7 +41,7 @@ const harnessBundle = await build({
       "export { clampPedalsToSchema } from './presets/normalize.ts';",
       "export { STORAGE_KEYS } from './persistence/index.ts';",
       "export { clonePedals, initialPedals, migratePedalCollection, usePedalStore } from './store/pedalStore.ts';",
-      "export { defaultPresets, parsePresetJson, usePresetStore } from './store/presetStore.ts';",
+      "export { defaultPresets, parsePresetJson, serializePresetPayload, usePresetStore } from './store/presetStore.ts';",
     ].join('\n'),
     resolveDir: fileURLToPath(new URL('../src', import.meta.url)),
     sourcefile: 'param-schema-harness.ts',
@@ -57,7 +57,7 @@ const {
   FUZZ_GATE_MAX_THRESHOLD_DB, FUZZ_GATE_MIN_THRESHOLD_DB, fuzzGateThresholdDb,
   REVERB_DECAY_MAX, REVERB_DECAY_MIN,
   delayFollowsSync, delaySyncedLabel, delayTimeSeconds,
-  clampPedalsToSchema, STORAGE_KEYS, clonePedals, initialPedals, migratePedalCollection, usePedalStore, defaultPresets, parsePresetJson, usePresetStore,
+  clampPedalsToSchema, STORAGE_KEYS, clonePedals, initialPedals, migratePedalCollection, usePedalStore, defaultPresets, parsePresetJson, serializePresetPayload, usePresetStore,
 } = await import(`data:text/javascript;base64,${Buffer.from(harnessBundle.outputFiles[0].text).toString('base64')}`);
 
 let checks = 0;
@@ -418,10 +418,8 @@ usePedalStore.getState().loadPedalsFromStorage();
   equal(byId(imported.pedals, 'reverb').params.decay, 6, '가져온 프리셋 파일: Decay 7.5 → 6.0');
   const [kept] = parsePresetJson(reverbJson(2.5));
   equal(byId(kept.pedals, 'reverb').params.decay, 2.5, '범위 안의 Decay 는 그대로');
-  const [reimported] = parsePresetJson(JSON.stringify({
-    version: 11,
-    presets: [{ id: imported.id, name: imported.name, updatedAt: imported.updatedAt, pedals: imported.pedals }],
-  }));
+  // 내보내기 경로(옛 두 필드로 풀어 적는다)를 그대로 지나 다시 가져온다.
+  const [reimported] = parsePresetJson(serializePresetPayload([imported]));
   deepEqual(reimported.pedals, imported.pedals, '내보냈다 다시 가져와도 같다(멱등)');
 }
 {

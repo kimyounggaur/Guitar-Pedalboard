@@ -18,8 +18,7 @@ import { registerWorklets } from './workletModules';
 export type { InputChannelMode };
 
 export interface PedalPatch {
-  enabled?: boolean;
-  bypassed?: boolean;
+  active?: boolean;
   params?: Record<string, PedalParamValue>;
 }
 
@@ -251,7 +250,7 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
     }
 
     // 켜진 리버브가 있을 때만 임펄스 적용을 기다린다(꺼진 리버브는 소리에 끼어들지 않는다).
-    if (livePedals.some((pedal) => pedal.type === 'reverb' && pedal.enabled && !pedal.bypassed)) {
+    if (livePedals.some((pedal) => pedal.type === 'reverb' && pedal.active)) {
       await new Promise((resolve) => window.setTimeout(resolve, REVERB_SETTLE_MS));
     }
 
@@ -263,8 +262,7 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
         const pedal = livePedals.find((candidate) => candidate.id === id);
         const effect = effects.get(id);
         if (!pedal || !effect) throw new Error(`알 수 없는 페달입니다: ${id}`);
-        if (patch.enabled !== undefined) pedal.enabled = patch.enabled;
-        if (patch.bypassed !== undefined) pedal.bypassed = patch.bypassed;
+        if (patch.active !== undefined) pedal.active = patch.active;
         if (patch.params) pedal.params = { ...pedal.params, ...patch.params } as PedalState['params'];
         effect.update(pedal);
       },

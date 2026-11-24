@@ -75,14 +75,13 @@ export interface ProbeDefinition {
 function pedal(
   id: string,
   params: Record<string, PedalParamValue> = {},
-  state: { enabled?: boolean; bypassed?: boolean } = {},
+  state: { active?: boolean } = {},
 ): PedalState {
   const base = initialPedals.find((candidate) => candidate.id === id);
   if (!base) throw new Error(`알 수 없는 페달 id: ${id}`);
   return {
     ...base,
-    enabled: state.enabled ?? true,
-    bypassed: state.bypassed ?? false,
+    active: state.active ?? true,
     params: { ...base.params, ...params } as PedalParams,
   };
 }
@@ -91,14 +90,13 @@ function pedal(
 function allPedalsOn(adjust: (pedalState: PedalState) => Record<string, PedalParamValue> = () => ({})): PedalState[] {
   return clonePedals(initialPedals).map((pedalState) => ({
     ...pedalState,
-    enabled: true,
-    bypassed: false,
+    active: true,
     params: { ...pedalState.params, ...adjust(pedalState) } as PedalParams,
   }));
 }
 
 function allPedalsBypassed(): PedalState[] {
-  return clonePedals(initialPedals).map((pedalState) => ({ ...pedalState, enabled: true, bypassed: true }));
+  return clonePedals(initialPedals).map((pedalState) => ({ ...pedalState, active: false }));
 }
 
 function metrics(values: Record<string, MetricValue>): Metrics {
@@ -139,7 +137,7 @@ function residualDb(a: OfflineRender, b: OfflineRender): number {
 
 /** 꺼진 페달은 신호를 그대로 통과시키므로 빼도 소리가 같다. 렌더 시간을 줄이는 데 쓴다(P-05 가 같음을 매번 확인한다). */
 function activePedals(pedals: PedalState[]): PedalState[] {
-  return pedals.filter((candidate) => candidate.enabled && !candidate.bypassed);
+  return pedals.filter((candidate) => candidate.active);
 }
 
 const delayMs = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
@@ -211,7 +209,7 @@ const p03: ProbeDefinition = {
     const raw = await ctx.render({ input: [input], pedals: build(), limiter: false });
     // 앱 기본 구성(initialPedals)에서 Cab 만 끈 경우. Cab 을 끄면 소리가 커져(R1-5) 리미터가 없을 때 깨졌다.
     const defaultCabOff = (): PedalState[] =>
-      clonePedals(initialPedals).map((pedalState) => (pedalState.id === 'cab' ? { ...pedalState, bypassed: true } : pedalState));
+      clonePedals(initialPedals).map((pedalState) => (pedalState.id === 'cab' ? { ...pedalState, active: false } : pedalState));
     const cabOffLimited = await ctx.render({ input: [input], pedals: defaultCabOff() });
     const cabOffRaw = await ctx.render({ input: [input], pedals: defaultCabOff(), limiter: false });
     const peak = (render: OfflineRender) => Math.max(m.peakDb(render.output[0]), m.peakDb(render.output[1]));
@@ -241,7 +239,7 @@ const p04: ProbeDefinition = {
   steps: 'S1.4b',
   async run(ctx) {
     const input = signals.refPc(ctx.sampleRate, 4);
-    const off = await ctx.render({ input: [input], pedals: [pedal('cab', {}, { bypassed: true })] });
+    const off = await ctx.render({ input: [input], pedals: [pedal('cab', {}, { active: false })] });
     const offDb = bodyLevelDb(off);
     const values: Record<string, MetricValue> = { offDb };
     let largest = 0;
@@ -883,14 +881,14 @@ const p15: ProbeDefinition = {
     const impulse = signals.refImpulse(rate, 2, position);
     const values: Record<string, MetricValue> = {};
     for (const type of ['delay', 'reverb'] as const) {
-      const bypass = await ctx.render({ input: [impulse], pedals: [pedal(type, { mix: 30 }, { bypassed: true })] });
+      const bypass = await ctx.render({ input: [impulse], pedals: [pedal(type, { mix: 30 }, { active: false })] });
       const active = await ctx.render({ input: [impulse], pedals: [pedal(type, { mix: 30 })] });
       const from = bypass.leadFrames + position - 2;
       const to = bypass.leadFrames + position + Math.round(rate * 0.01);
       values[`${type}.dryChangeDb`] = m.dbOf(m.peakLinear(active.output[0], from, to)) - m.dbOf(m.peakLinear(bypass.output[0], from, to));
     }
     const pc = signals.refPc(rate, 2);
-    const bypassPc = await ctx.render({ input: [pc], pedals: [pedal('delay', { mix: 30 }, { bypassed: true })] });
+    const bypassPc = await ctx.render({ input: [pc], pedals: [pedal('delay', { mix: 30 }, { active: false })] });
     const activePc = await ctx.render({ input: [pc], pedals: [pedal('delay', { mix: 30 })] });
     values['delay.pcDryChangeDb'] = bodyLevelDb(activePc, 0, 0.25) - bodyLevelDb(bypassPc, 0, 0.25);
     return { metrics: metrics(values) };
@@ -909,7 +907,7 @@ const p16: ProbeDefinition = {
   async run(ctx) {
     const rate = ctx.sampleRate;
     const noise = signals.refNoise(rate, 1.5, -20);
-    const defaults = clonePedals(initialPedals).filter((candidate) => candidate.enabled && !candidate.bypassed);
+    const defaults = clonePedals(initialPedals).filter((candidate) => candidate.active);
     const configurations: Array<[string, PedalState[]]> = [
       ['empty', []],
       ['noiseGate', [pedal('noise-gate')]],
@@ -943,7 +941,7 @@ const p16: ProbeDefinition = {
     const position = Math.round(rate * 0.1);
     const impulse = await ctx.render({
       input: [signals.refImpulse(rate, 1, position)],
-      pedals: clonePedals(initialPedals).filter((candidate) => candidate.enabled && !candidate.bypassed),
+      pedals: clonePedals(initialPedals).filter((candidate) => candidate.active),
       alignOutput: false,
     });
     const channel = impulse.output[0];
@@ -979,7 +977,7 @@ const p17: ProbeDefinition = {
       ['allOn', () => ({ input: [input], pedals: allPedalsOn(), monitoring: false })],
       ['allOnMonitored', () => ({ input: [input], pedals: allPedalsOn(), monitoring: true, guardMode: 'device' })],
       ['allOff', () => ({ input: [input], pedals: allPedalsBypassed(), monitoring: false })],
-      ['phaserOff', () => ({ input: [input], pedals: [pedal('phaser', {}, { bypassed: true })], monitoring: false })],
+      ['phaserOff', () => ({ input: [input], pedals: [pedal('phaser', {}, { active: false })], monitoring: false })],
       ['phaserOn', () => ({ input: [input], pedals: [pedal('phaser')], monitoring: false })],
     ];
     const ATTEMPTS = 5;
@@ -1052,11 +1050,11 @@ const p18: ProbeDefinition = {
     let flatGraphicEq = 0;
     for (const preset of defaultPresets) {
       for (const candidate of preset.pedals) {
-        if (candidate.enabled && !candidate.bypassed) continue;
+        if (candidate.active) continue;
         const key = JSON.stringify([candidate.type, candidate.params]);
         let changed = verdicts.get(key);
         if (changed === undefined) {
-          const turned = analyse(await ctx.render({ input: [input], pedals: [{ ...candidate, enabled: true, bypassed: false }] }));
+          const turned = analyse(await ctx.render({ input: [input], pedals: [{ ...candidate, active: true }] }));
           const levelChange = Math.abs(turned.level - original.level);
           const spectralChange = mean(turned.bands.map((band, index) => Math.abs(band - original.bands[index])));
           changed = levelChange >= 0.5 || spectralChange >= 1;
@@ -1135,7 +1133,7 @@ const p20: ProbeDefinition = {
       return reverb;
     };
     const compare = async (key: string, legacy: PedalState): Promise<number> => {
-      const stored = { ...legacy, enabled: true, bypassed: false };
+      const stored = { ...legacy, active: true };
       const converted = clampPedalsToSchema([stored])[0];
       const storedRender = await ctx.render({ input: [input], pedals: [stored] });
       const convertedRender = await ctx.render({ input: [input], pedals: [converted] });
@@ -1289,17 +1287,17 @@ const p23: ProbeDefinition = {
   steps: '모든 Phase',
   async run(ctx) {
     const rate = ctx.sampleRate;
-    const toggles: Array<{ at: number; id: string; bypassed: boolean }> = [
-      { at: 1, id: 'drive', bypassed: true },
-      { at: 3, id: 'drive', bypassed: false },
-      { at: 5, id: 'compressor', bypassed: true },
+    const toggles: Array<{ at: number; id: string; active: boolean }> = [
+      { at: 1, id: 'drive', active: false },
+      { at: 3, id: 'drive', active: true },
+      { at: 5, id: 'compressor', active: false },
     ];
     const created: number[] = [];
     const events: ChainEvent[] = toggles.map((toggle) => ({
       atSeconds: toggle.at,
       run(handle) {
         const before = ctx.nodeCounter.count;
-        handle.patchPedal(toggle.id, { bypassed: toggle.bypassed });
+        handle.patchPedal(toggle.id, { active: toggle.active });
         created.push(ctx.nodeCounter.count - before);
       },
     }));

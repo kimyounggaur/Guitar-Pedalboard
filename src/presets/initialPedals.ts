@@ -7,8 +7,7 @@ export const initialPedals: PedalState[] = [
     id: 'noise-gate',
     type: 'noiseGate',
     name: 'Noise Gate',
-    enabled: true,
-    bypassed: false,
+    active: true,
     color: '#3f8f85',
     params: {
       mix: 100,
@@ -25,8 +24,7 @@ export const initialPedals: PedalState[] = [
     id: 'compressor',
     type: 'compressor',
     name: 'Compressor',
-    enabled: true,
-    bypassed: false,
+    active: true,
     color: '#b48a3c',
     params: {
       mix: 75,
@@ -43,8 +41,7 @@ export const initialPedals: PedalState[] = [
     id: 'auto-wah',
     type: 'autoWah',
     name: 'Auto Wah',
-    enabled: true,
-    bypassed: true,
+    active: false,
     color: '#6fa83f',
     params: {
       mix: 100,
@@ -60,8 +57,7 @@ export const initialPedals: PedalState[] = [
     id: 'drive',
     type: 'drive',
     name: 'Drive',
-    enabled: true,
-    bypassed: false,
+    active: true,
     color: '#bd5d45',
     params: {
       mix: 88,
@@ -76,8 +72,7 @@ export const initialPedals: PedalState[] = [
     id: 'crunch',
     type: 'crunch',
     name: 'Crunch',
-    enabled: true,
-    bypassed: true,
+    active: false,
     color: '#b9231f',
     params: {
       mix: 85,
@@ -94,8 +89,7 @@ export const initialPedals: PedalState[] = [
     id: 'fuzz',
     type: 'fuzz',
     name: 'Fuzz',
-    enabled: true,
-    bypassed: true,
+    active: false,
     color: '#9fa8aa',
     params: {
       mix: 90,
@@ -112,8 +106,7 @@ export const initialPedals: PedalState[] = [
     id: 'graphic-eq',
     type: 'graphicEQ',
     name: 'Graphic EQ',
-    enabled: true,
-    bypassed: true,
+    active: false,
     color: '#4a5b7a',
     params: {
       mix: 100,
@@ -131,8 +124,7 @@ export const initialPedals: PedalState[] = [
     id: 'eq',
     type: 'eq',
     name: 'EQ',
-    enabled: true,
-    bypassed: false,
+    active: true,
     color: '#526fb3',
     params: {
       mix: 100,
@@ -150,8 +142,7 @@ export const initialPedals: PedalState[] = [
     id: 'cab',
     type: 'cab',
     name: 'Cab',
-    enabled: true,
-    bypassed: false,
+    active: true,
     color: '#7a6a55',
     params: {
       mix: 100,
@@ -168,8 +159,7 @@ export const initialPedals: PedalState[] = [
     id: 'chorus',
     type: 'chorus',
     name: 'Chorus',
-    enabled: true,
-    bypassed: true,
+    active: false,
     color: '#4d8fa8',
     params: {
       mix: 35,
@@ -185,8 +175,7 @@ export const initialPedals: PedalState[] = [
     id: 'flanger',
     type: 'flanger',
     name: 'Flanger',
-    enabled: true,
-    bypassed: true,
+    active: false,
     color: '#5f7fbf',
     params: {
       mix: 35,
@@ -201,8 +190,7 @@ export const initialPedals: PedalState[] = [
     id: 'phaser',
     type: 'phaser',
     name: 'Phaser',
-    enabled: true,
-    bypassed: true,
+    active: false,
     color: '#8b5fbf',
     params: {
       mix: 45,
@@ -217,8 +205,7 @@ export const initialPedals: PedalState[] = [
     id: 'tremolo',
     type: 'tremolo',
     name: 'Tremolo',
-    enabled: true,
-    bypassed: true,
+    active: false,
     color: '#c98a3f',
     params: {
       mix: 100,
@@ -235,8 +222,7 @@ export const initialPedals: PedalState[] = [
     id: 'delay',
     type: 'delay',
     name: 'Delay',
-    enabled: true,
-    bypassed: true,
+    active: false,
     color: '#6a7d4f',
     params: {
       mix: 30,
@@ -255,8 +241,7 @@ export const initialPedals: PedalState[] = [
     id: 'reverb',
     type: 'reverb',
     name: 'Reverb',
-    enabled: true,
-    bypassed: true,
+    active: false,
     color: '#8b6f9f',
     params: {
       mix: 25,

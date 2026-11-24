@@ -7,11 +7,11 @@ import type { PedalParams, PedalState } from '../audio/types';
 export type DefaultMixLookup = (pedalId: string) => number | undefined;
 
 /**
- * 페달이 꺼져 있는가. 저장 형식 11 부터는 `enabled` 가 항상 true 이고 꺼짐을 `bypassed` 로만 쓰지만,
- * 이전 형식의 값(`enabled: false`)이 섞여 들어와도 같은 뜻으로 읽는다.
+ * 페달이 꺼져 있는가. S2.4 부터 켜짐은 `active` 하나다. 옛 저장본의 `enabled: false` 와 `bypassed: true` 는
+ * 읽는 순간(M1, persistence/legacy/boardV1.ts) 이미 `active: false` 로 합쳐져서 여기까지 오지 않는다.
  */
-export function isPedalOff(pedal: Pick<PedalState, 'enabled' | 'bypassed'>): boolean {
-  return !pedal.enabled || pedal.bypassed;
+export function isPedalOff(pedal: Pick<PedalState, 'active'>): boolean {
+  return !pedal.active;
 }
 
 /**

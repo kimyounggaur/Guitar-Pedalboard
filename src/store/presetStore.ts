@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { AudioEngine } from '../audio/AudioEngine';
 import { clampTrimDb } from '../audio/offline/loudnessSpec';
+import { toLegacyPedalRecords } from '../persistence/legacy/boardV1';
 import { parsePresetJson, normalizeTrimField, type PresetExport } from '../persistence/legacy/presetsV1';
 import { createId } from '../presets/createId';
 import type { PedalParamValue, PedalState, Preset } from '../audio/types';
@@ -50,16 +51,13 @@ function clonePreset(preset: PresetListItem): PresetListItem {
 
 function withPedalOverrides(
   pedal: PedalState,
-  overrides: Partial<Pick<PedalState, 'enabled' | 'bypassed'>> & {
+  overrides: Partial<Pick<PedalState, 'active'>> & {
     params?: Record<string, PedalParamValue>;
   },
 ): PedalState {
-  const bypassed = overrides.bypassed ?? pedal.bypassed;
-
   return {
     ...pedal,
-    enabled: overrides.enabled ?? pedal.enabled,
-    bypassed,
+    active: overrides.active ?? pedal.active,
     params: {
       ...pedal.params,
       ...overrides.params,
@@ -95,9 +93,9 @@ function createPreset(
 }
 
 // 꺼 둘 페달은 기본값 그대로 두고 스위치만 끈다. 특히 Mix 를 0 으로 두면 나중에 켜도 소리가 바뀌지 않는다(R2-2, S2.1) — 그래서 Mix 를 받지 않는다.
-const off = (): PedalOverrides => ({ bypassed: true });
+const off = (): PedalOverrides => ({ active: false });
 const on = (params: Record<string, PedalParamValue> = {}): PedalOverrides => ({
-  bypassed: false,
+  active: true,
   params,
 });
 
@@ -368,9 +366,10 @@ export function serializePresetPayload(
 ): string {
   const payload: PresetExport = {
     version: SCHEMA_VERSION,
+    // 파일 형식은 S2.7 이 v2 로 바꾸기 전까지 v11 그대로다. 메모리의 `active` 를 옛 두 필드로 풀어 적어 이전 버전 앱도 읽는다.
     presets: presets.map((preset) => ({
       ...preset,
-      pedals: clonePedals(preset.pedals),
+      pedals: toLegacyPedalRecords(preset.pedals),
     })),
   };
 

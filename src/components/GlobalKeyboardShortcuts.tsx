@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AudioEngine } from '../audio/AudioEngine';
 import { useAudioStore } from '../store/audioStore';
+import { togglePedalActive } from '../store/pedalActions';
 import { usePedalStore } from '../store/pedalStore';
 import { usePresetStore } from '../store/presetStore';
 import { ShortcutHelp } from './ShortcutHelp';
@@ -63,13 +63,10 @@ export function executeShortcutCommand(
     case 'toggle-pedal': {
       if (!Number.isInteger(command.index) || command.index < 0 || command.index > 14) return false;
 
-      const pedalStore = usePedalStore.getState();
-      const pedal = pedalStore.pedals[command.index];
+      const pedal = usePedalStore.getState().pedals[command.index];
       if (!pedal) return false;
 
-      const bypassed = !pedal.bypassed;
-      pedalStore.setPedalBypass(pedal.id, bypassed);
-      AudioEngine.getInstance().setPedalBypass(pedal.id, bypassed);
+      togglePedalActive(pedal.id);
       return true;
     }
     case 'toggle-audio': {

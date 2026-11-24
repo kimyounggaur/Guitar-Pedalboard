@@ -71,8 +71,11 @@ interface PedalStore {
   activePedalId: string | null;
   draggingPedalId: string | null;
   reorderPedals: (oldIndex: number, newIndex: number) => void;
-  togglePedal: (id: string) => void;
-  setPedalBypass: (id: string, bypassed: boolean) => void;
+  /**
+   * 페달 하나를 켜거나 끄고 바로 저장한다. 저장소 값만 바꾼다 — 소리까지 바꾸려면 `setPedalActive`(store/pedalActions)를 쓴다.
+   * S2.4: 옛 `togglePedal`·`setPedalBypass` 를 이 하나로 합쳤다.
+   */
+  setActive: (id: string, active: boolean) => void;
   updatePedalParam: (id: string, paramName: string, value: PedalParamValue) => void;
   setActivePedal: (id: string | null) => void;
   setDraggingPedal: (id: string | null) => void;
@@ -101,19 +104,10 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
       return { pedals };
     }),
 
-  togglePedal: (id) =>
+  setActive: (id, active) =>
     set((state) => {
       const pedals = state.pedals.map((pedal) =>
-        pedal.id === id ? { ...clonePedal(pedal), enabled: true, bypassed: pedal.enabled && !pedal.bypassed } : clonePedal(pedal),
-      );
-      savePedals(pedals, state.presetTrimDb);
-      return { pedals };
-    }),
-
-  setPedalBypass: (id, bypassed) =>
-    set((state) => {
-      const pedals = state.pedals.map((pedal) =>
-        pedal.id === id ? clonePedal({ ...pedal, enabled: true, bypassed }) : clonePedal(pedal),
+        pedal.id === id ? clonePedal({ ...pedal, active }) : clonePedal(pedal),
       );
       savePedals(pedals, state.presetTrimDb);
       return { pedals };

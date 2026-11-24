@@ -60,8 +60,9 @@ for (const guardedEvent of [
   assert.equal(resolveShortcutCommand(guardedEvent), null);
 }
 
-const [globalSource, helpSource, routingSource, cssSource] = await Promise.all([
+const [globalSource, actionsSource, helpSource, routingSource, cssSource] = await Promise.all([
   readFile(new URL('../src/components/GlobalKeyboardShortcuts.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../src/store/pedalActions.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/ShortcutHelp.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/keyboardShortcuts.ts', import.meta.url), 'utf8'),
   Promise.all([
@@ -84,12 +85,13 @@ assert.match(globalSource, /contenteditable/);
 assert.match(globalSource, /\[role="button"\]/);
 assert.match(globalSource, /\[tabindex\]:not/);
 
-const storeWrite = globalSource.indexOf('pedalStore.setPedalBypass(pedal.id, bypassed);');
-const engineWrite = globalSource.indexOf(
-  "AudioEngine.getInstance().setPedalBypass(pedal.id, bypassed);",
-);
-assert.ok(storeWrite >= 0 && engineWrite > storeWrite, 'Bypass가 store → engine 순서가 아닙니다.');
-assert.match(globalSource, /const pedal = pedalStore\.pedals\[command\.index\]/);
+// 단축키는 켜고 끄는 단일 입구(togglePedalActive → setPedalActive, S2.4)를 쓴다. store → engine 순서는 입구 한 곳에서 지킨다.
+assert.ok(globalSource.includes('togglePedalActive(pedal.id);'), '단축키가 켜고 끄는 단일 입구를 쓰지 않습니다.');
+assert.ok(!globalSource.includes('setPedalBypass'), '단축키가 옛 Bypass 경로를 씁니다.');
+const storeWrite = actionsSource.indexOf('usePedalStore.getState().setActive(pedalId, active);');
+const engineWrite = actionsSource.indexOf('AudioEngine.getInstance().setPedalActive(pedalId, active);');
+assert.ok(storeWrite >= 0 && engineWrite > storeWrite, '켜고 끄기가 store → engine 순서가 아닙니다.');
+assert.ok(globalSource.includes('const pedal = usePedalStore.getState().pedals[command.index];'));
 assert.match(globalSource, /command\.index < 0 \|\| command\.index > 14/);
 assert.match(globalSource, /if \(audioState\.isLoading\) return true/);
 assert.match(globalSource, /audioState\.isRunning[\s\S]*audioState\.stop\(\)[\s\S]*audioState\.start\(\)/);
@@ -293,19 +295,19 @@ assert.equal(isShortcutBlockedByTarget({ type: 'panic' }, { target: null, isComp
 const reorderedPedals = clonePedals(usePedalStore.getState().pedals).reverse();
 usePedalStore.getState().setPedals(reorderedPedals);
 const targetPedal = usePedalStore.getState().pedals[2];
-const originalBypassed = targetPedal.bypassed;
-const originalSetPedalBypass = usePedalStore.getState().setPedalBypass;
+const originalActive = targetPedal.active;
+const originalSetActive = usePedalStore.getState().setActive;
 const engine = AudioEngine.getInstance();
-const originalEngineBypass = engine.setPedalBypass;
-const bypassOrder = [];
+const originalEngineActive = engine.setPedalActive;
+const activeOrder = [];
 usePedalStore.setState({
-  setPedalBypass: (id, bypassed) => {
-    bypassOrder.push(`store:${id}:${bypassed}`);
-    originalSetPedalBypass(id, bypassed);
+  setActive: (id, active) => {
+    activeOrder.push(`store:${id}:${active}`);
+    originalSetActive(id, active);
   },
 });
-engine.setPedalBypass = (id, bypassed) => {
-  bypassOrder.push(`engine:${id}:${bypassed}`);
+engine.setPedalActive = (id, active) => {
+  activeOrder.push(`engine:${id}:${active}`);
 };
 
 try {
@@ -313,17 +315,17 @@ try {
     executeShortcutCommand({ type: 'toggle-pedal', index: 2 }, () => {}),
     true,
   );
-  assert.deepEqual(bypassOrder, [
-    `store:${targetPedal.id}:${!originalBypassed}`,
-    `engine:${targetPedal.id}:${!originalBypassed}`,
+  assert.deepEqual(activeOrder, [
+    `store:${targetPedal.id}:${!originalActive}`,
+    `engine:${targetPedal.id}:${!originalActive}`,
   ]);
   assert.equal(usePedalStore.getState().pedals[2].id, targetPedal.id);
-  assert.equal(usePedalStore.getState().pedals[2].bypassed, !originalBypassed);
+  assert.equal(usePedalStore.getState().pedals[2].active, !originalActive);
   assert.equal(executeShortcutCommand({ type: 'toggle-pedal', index: -1 }, () => {}), false);
   assert.equal(executeShortcutCommand({ type: 'toggle-pedal', index: 15 }, () => {}), false);
 } finally {
-  usePedalStore.setState({ setPedalBypass: originalSetPedalBypass });
-  engine.setPedalBypass = originalEngineBypass;
+  usePedalStore.setState({ setActive: originalSetActive });
+  engine.setPedalActive = originalEngineActive;
 }
 
 let starts = 0;

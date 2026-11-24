@@ -525,14 +525,14 @@ export class AudioEngine {
     window.dispatchEvent(new Event('cab-ir-change'));
   }
 
-  setPedalBypass(pedalId: string, _bypassed: boolean): void {
+  /**
+   * 페달 하나를 켜거나 끈다(S2.4: 옛 `setPedalBypass` 와 `setPedalEnabled` 를 하나로 합쳤다).
+   * 값은 저장소가 이미 바꾼 상태에서 다시 읽는다 — 호출하는 쪽은 `setPedalActive`(store/pedalActions) 로 저장소를 먼저 바꾼다.
+   */
+  setPedalActive(pedalId: string, _active: boolean): void {
     const pedal = this.getPedals().find((candidate) => candidate.id === pedalId);
     if (!pedal) return;
     this.effects.get(pedalId)?.update(pedal);
-  }
-
-  setPedalEnabled(pedalId: string, enabled: boolean): void {
-    this.effects.get(pedalId)?.setEnabled(enabled);
   }
 
   getCompressorReduction(pedalId: string): number | null {
@@ -602,7 +602,7 @@ export class AudioEngine {
     let linearGain = 1;
 
     this.getPedals().forEach((pedal) => {
-      if (!pedal.enabled || pedal.bypassed) return;
+      if (!pedal.active) return;
 
       if (pedal.type === 'drive') {
         const amount = clamp((pedal.params as DriveParams).drive, 0, 100) / 100;

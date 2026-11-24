@@ -2,16 +2,19 @@
 import type { Preset } from '../../audio/types';
 import { clampTrimDb } from '../../audio/offline/loudnessSpec';
 import { createId } from '../../presets/createId';
-import { migratePedalCollection } from './boardV1';
+import { migratePedalCollection, type LegacyPedalRecord } from './boardV1';
+
+/** 파일·v1 저장본에 적히는 프리셋. 메모리의 `Preset` 과 페달 모양만 다르다 — 켜짐이 옛 `enabled`·`bypassed` 두 필드로 풀려 있다. */
+export type LegacyPreset = Omit<Preset, 'pedals'> & { pedals: LegacyPedalRecord[] };
 
 export type PresetExport = {
   version: number;
   exportedAt?: number;
-  presets: Preset[];
+  presets: LegacyPreset[];
 };
 
-function isPreset(value: unknown): value is Preset {
-  const preset = value as Preset;
+function isPreset(value: unknown): value is LegacyPreset {
+  const preset = value as LegacyPreset;
 
   return (
     !!preset &&
@@ -22,7 +25,7 @@ function isPreset(value: unknown): value is Preset {
   );
 }
 
-function normalizeImportedPreset(preset: Preset, version: number): Preset {
+function normalizeImportedPreset(preset: LegacyPreset, version: number): Preset {
   return {
     id: preset.id || createId(),
     name: preset.name.trim() || 'Imported Preset',

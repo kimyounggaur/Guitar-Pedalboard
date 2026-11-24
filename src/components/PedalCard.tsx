@@ -26,6 +26,7 @@ import type {
 import { AudioEngine } from '../audio/AudioEngine';
 import { formatMidiMapping } from '../audio/midi';
 import { useAudioStore } from '../store/audioStore';
+import { setPedalActive } from '../store/pedalActions';
 import { usePedalStore } from '../store/pedalStore';
 import { SliderControl } from './SliderControl';
 import { knobDefault } from './knobDefaults';
@@ -75,7 +76,6 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
   const midiMenuRef = useRef<HTMLDivElement>(null);
   const midiMenuItemRef = useRef<HTMLButtonElement>(null);
   const setActivePedal = usePedalStore((state) => state.setActivePedal);
-  const setPedalBypass = usePedalStore((state) => state.setPedalBypass);
   const updatePedalParam = usePedalStore((state) => state.updatePedalParam);
   const midiSupported = useAudioStore((state) => state.midiSupported);
   const midiLearningPedalId = useAudioStore((state) => state.midiLearningPedalId);
@@ -112,12 +112,6 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
 
 
   const commitParam = (key: string, value: number | string | boolean) => {
-    if ((key === 'bypass' || key === 'bypassed') && typeof value === 'boolean') {
-      setPedalBypass(pedal.id, value);
-      AudioEngine.getInstance().setPedalBypass(pedal.id, value);
-      return;
-    }
-
     updatePedalParam(pedal.id, key, value);
     AudioEngine.getInstance().setPedalParam(pedal.id, key, value);
   };
@@ -154,7 +148,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         pedal.type === 'fuzz' ? ' pedal-card-fuzz' : ''
       }${pedal.type === 'graphicEQ' ? ' pedal-card-graphic-eq' : ''}${pedal.type === 'eq' ? ' pedal-card-eq' : ''}${pedal.type === 'cab' ? ' pedal-card-cab' : ''}${pedal.type === 'chorus' ? ' pedal-card-chorus' : ''}${pedal.type === 'flanger' ? ' pedal-card-flanger' : ''}${pedal.type === 'phaser' ? ' pedal-card-phaser' : ''}${pedal.type === 'tremolo' ? ' pedal-card-tremolo' : ''}${pedal.type === 'delay' ? ' pedal-card-delay' : ''}${
         pedal.type === 'reverb' ? ' pedal-card-reverb' : ''
-      }${pedal.bypassed ? ' is-bypassed' : ''}${!pedal.enabled ? ' is-disabled' : ''}${
+      }${!pedal.active ? ' is-bypassed' : ''}${
         isDragging ? ' is-dragging' : ''
       }`}
       style={{ '--pedal-color': pedal.color } as CSSProperties}
@@ -310,7 +304,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         onTouchStart={stopControlEvent}
         onKeyDown={stopControlEvent}
       >
-        <StompToggleSwitch label="효과" checked={pedal.enabled && !pedal.bypassed} onChange={(checked) => commitParam('bypassed', !checked)} />
+        <StompToggleSwitch label="효과" checked={pedal.active} onChange={(checked) => setPedalActive(pedal.id, checked)} />
         {midiSupported ? (
           <div className="midi-bypass-control">
             <button type="button" className="midi-learn-button" aria-haspopup="menu" aria-expanded={isMidiMenuOpen} onClick={() => setIsMidiMenuOpen((open) => !open)} onContextMenu={openMidiMenu}>

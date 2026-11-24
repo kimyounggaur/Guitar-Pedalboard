@@ -172,7 +172,7 @@ try {
   const firstSlotA = usePresetStore.getState().slotA;
   const overwrittenA = pedalsWithTempo(149, 44)
     .map((pedal) =>
-      pedal.id === 'drive' ? { ...pedal, enabled: false, bypassed: true } : pedal,
+      pedal.id === 'drive' ? { ...pedal, active: false } : pedal,
     )
     .reverse();
   usePedalStore.getState().setPedals(overwrittenA);
@@ -315,9 +315,9 @@ globalThis.window.localStorage.setItem = () => { throw new Error('quota exceeded
 try {
   usePresetStore.getState().savePreset('저장소 오류에서도 사용', usePedalStore.getState().pedals);
   assert.ok(usePresetStore.getState().presets.some((preset) => preset.name === '저장소 오류에서도 사용'));
-  const prior = usePedalStore.getState().pedals.find((pedal) => pedal.id === 'delay').bypassed;
-  usePedalStore.getState().setPedalBypass('delay', !prior);
-  assert.equal(usePedalStore.getState().pedals.find((pedal) => pedal.id === 'delay').bypassed, !prior);
+  const prior = usePedalStore.getState().pedals.find((pedal) => pedal.id === 'delay').active;
+  usePedalStore.getState().setActive('delay', !prior);
+  assert.equal(usePedalStore.getState().pedals.find((pedal) => pedal.id === 'delay').active, !prior);
   assert.equal(quotaToasts().length, 1, '저장이 두 번 실패해도 안내는 한 번만 보인다');
 } finally {
   globalThis.window.localStorage.setItem = originalSetItem;
