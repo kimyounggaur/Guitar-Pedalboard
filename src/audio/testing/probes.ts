@@ -30,6 +30,8 @@ import {
 } from '../offline/renderChain';
 import type { PedalParamValue, PedalParams, PedalState, PedalType } from '../types';
 import type { ImpulseCache } from '../utils/impulseCache';
+import { runBootstrap } from '../../persistence/bootstrap';
+import { createSafeStorage, type StorageBackend } from '../../persistence/SafeStorage';
 import { clonePedals, initialPedals } from '../../store/pedalStore';
 import { clampPedalsToSchema, isPedalOff, restoreMixOfOffPedals } from '../../presets/normalize';
 import { defaultPresets } from '../../store/presetStore';
@@ -1110,6 +1112,176 @@ const p18: ProbeDefinition = {
 };
 
 // ---------------------------------------------------------------------------------------------
+// P-19 — v1 → v2 동일성
+// ---------------------------------------------------------------------------------------------
+/**
+ * v1 저장소 픽스처 6개(e2e/fixtures/storage-v1). 저장 형식을 바꾸기 전 앱이 쓰던 localStorage 를 원문 그대로 고정한 파일이다.
+ * 프로브 빌드(`--mode test`)에만 들어간다: 이 파일은 배포용 번들이 불러오지 않는다.
+ */
+const v1FixtureFiles = import.meta.glob<string>('/e2e/fixtures/storage-v1/*.json', { query: '?raw', import: 'default', eager: true });
+
+interface V1Fixture {
+  /** 파일 이름 앞의 두 자리(01~06) */
+  id: string;
+  /** 앱이 저장하던 localStorage 의 키 → 원문 */
+  storage: Record<string, string>;
+}
+
+function loadV1Fixtures(): V1Fixture[] {
+  return Object.entries(v1FixtureFiles)
+    .map(([path, text]) => {
+      const file = path.slice(path.lastIndexOf('/') + 1);
+      const parsed = JSON.parse(text) as { storage: Record<string, string> };
+      return { id: file.slice(0, 2), storage: parsed.storage };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** 시험용 저장소(Map). 앱이 쓰는 SafeStorage 가 그대로 올라앉는다. 브라우저의 localStorage 는 건드리지 않는다. */
+function memoryBackend(initial: Record<string, string>): StorageBackend {
+  const values = new Map(Object.entries(initial));
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
+    removeItem: (key) => {
+      values.delete(key);
+    },
+    key: (index) => [...values.keys()][index] ?? null,
+    get length() {
+      return values.size;
+    },
+  };
+}
+
+/**
+ * 옛 앱이 소리를 만들던 규칙을 저장된 원문에서 그대로 따라 한다. 변환 코드를 거치지 않으므로 변환이 틀려도 같이 틀릴 수 없다.
+ *   켜짐 = enabled 이고 bypassed 가 아님(둘 중 하나만 꺼져도 소리가 꺼진다), 값은 저장된 그대로(범위 맞춤·Mix 복원 전), 순서는 저장된 순서.
+ * 읽을 수 없는 값이면 옛 앱은 기본 보드로 시작했다.
+ */
+function oldSoundChain(storedPedals: unknown): PedalState[] {
+  if (!Array.isArray(storedPedals)) return clonePedals(initialPedals);
+  const chain: PedalState[] = [];
+  for (const stored of storedPedals) {
+    if (!isPlainRecord(stored) || typeof stored.id !== 'string') continue;
+    const base = initialPedals.find((candidate) => candidate.id === stored.id);
+    if (!base) continue;
+    const params = isPlainRecord(stored.params) ? stored.params : {};
+    chain.push({
+      ...base,
+      active: stored.enabled === true && stored.bypassed === false,
+      params: { ...base.params, ...params } as PedalParams,
+    });
+  }
+  return chain;
+}
+
+/** 저장된 JSON 원문을 읽는다. 없거나 깨졌으면 null. */
+function parseStoredJson(text: string | undefined): Record<string, unknown> | null {
+  if (text === undefined) return null;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return isPlainRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+const activeIdsOf = (pedals: PedalState[]): string => pedals.filter((candidate) => candidate.active).map((candidate) => candidate.id).join(',');
+
+const p19: ProbeDefinition = {
+  id: 'P-19',
+  title: 'v1 → v2 동일성',
+  describe:
+    'v1 저장소 픽스처 6개(e2e/fixtures/storage-v1)를 시험용 저장소에 넣고 앱이 여는 절차(runBootstrap)를 두 번 돈다: 첫 방문에 v1 에서 v2 로 옮기고, 다음 방문에 v2 키에서 읽는다. ' +
+    '다음 방문에서 읽은 작업 보드와 사용자 프리셋의 소리를, 옛 앱이 같은 저장 원문으로 만들던 소리(켜짐 = enabled 이고 bypassed 가 아님, 값은 저장된 그대로 — 변환 코드를 쓰지 않고 원문에서 직접 만든다)와 REF-PC 1초로 견준다. ' +
+    '두 출력의 차(널 테스트)가 출력 대비 몇 dB 인지 적는다(−200 은 완전히 같다). 옛 방식(legacy)으로 열렸다면 변환이 틀린 것이라 소리가 같아 보여도 불합격이다(첫 방문의 legacy 수와 다음 방문이 v2 로 열린 수를 따로 적는다). ' +
+    '켜진 페달 목록이 옛 규칙과 다른 보드·프리셋의 수(activeMismatch)와 다음 방문에서 사라진 프리셋 수(presetMissing)도 적는다. 시간을 줄이려고 꺼진 페달은 체인에서 뺀다(꺼진 페달이 소리를 바꾸지 않음은 P-05 가 본다).',
+  steps: 'S2.4',
+  async run(ctx) {
+    const rate = ctx.sampleRate;
+    const input = signals.refPc(rate, 1);
+    const fixtures = loadV1Fixtures();
+    const values: Record<string, MetricValue> = {};
+    let worst = -200;
+    let boardsChecked = 0;
+    let presetsChecked = 0;
+    let presetMissing = 0;
+    let activeMismatch = 0;
+    const visit1: Record<string, number> = { converted: 0, fresh: 0, legacy: 0, v2: 0 };
+    let visit2V2 = 0;
+
+    const renderPair = async (oldPedals: PedalState[], newPedals: PedalState[], oldTrimDb: number, newTrimDb: number) => {
+      const before = await ctx.render({ input: [input], pedals: activePedals(oldPedals), presetTrimDb: oldTrimDb });
+      const after = await ctx.render({ input: [input], pedals: activePedals(newPedals), presetTrimDb: newTrimDb });
+      return residualDb(before, after);
+    };
+
+    for (const fixture of fixtures) {
+      const backend = memoryBackend(fixture.storage);
+      const open = () => createSafeStorage({ getBackend: () => backend, notify: () => undefined, subscribeToPageHide: () => undefined });
+      const first = runBootstrap(open()); // 첫 방문: v1 키에서 v2 로 옮긴다.
+      const second = runBootstrap(open()); // 다음 방문: v2 키에서 읽는다. 소리는 이쪽으로 낸다.
+      visit1[first.outcome] += 1;
+      if (second.outcome === 'v2') visit2V2 += 1;
+
+      // 작업 보드
+      const storedBoard = parseStoredJson(fixture.storage['guitar-pedalboard:pedals']);
+      const oldBoard = oldSoundChain(storedBoard?.pedals);
+      const oldTrim = typeof storedBoard?.presetTrimDb === 'number' ? storedBoard.presetTrimDb : 0;
+      const newBoard = second.board?.pedals ?? clonePedals(initialPedals);
+      const boardNull = await renderPair(oldBoard, newBoard, oldTrim, second.board?.trimDb ?? 0);
+      values[`nullDb.board.${fixture.id}`] = boardNull;
+      values[`activeCount.${fixture.id}`] = newBoard.filter((candidate) => candidate.active).length;
+      worst = Math.max(worst, boardNull);
+      boardsChecked += 1;
+      if (activeIdsOf(oldBoard) !== activeIdsOf(newBoard)) activeMismatch += 1;
+
+      // 사용자 프리셋
+      const storedPresets = parseStoredJson(fixture.storage['web-guitar-pedalboard-presets']);
+      const storedList = Array.isArray(storedPresets?.presets) ? (storedPresets.presets as unknown[]) : [];
+      let presetIndex = 0;
+      for (const stored of storedList) {
+        if (!isPlainRecord(stored) || typeof stored.id !== 'string') continue;
+        presetIndex += 1;
+        const migrated = second.userPresets.find((candidate) => candidate.id === stored.id);
+        if (!migrated) {
+          presetMissing += 1;
+          continue;
+        }
+        const oldPedals = oldSoundChain(stored.pedals);
+        const oldPresetTrim = typeof stored.trimDb === 'number' ? stored.trimDb : 0;
+        const presetNull = await renderPair(oldPedals, migrated.pedals, oldPresetTrim, migrated.trimDb ?? 0);
+        values[`nullDb.preset.${fixture.id}.${presetIndex}`] = presetNull;
+        worst = Math.max(worst, presetNull);
+        presetsChecked += 1;
+        if (activeIdsOf(oldPedals) !== activeIdsOf(migrated.pedals)) activeMismatch += 1;
+      }
+    }
+
+    return {
+      metrics: metrics({
+        fixtures: fixtures.length,
+        boardsChecked,
+        presetsChecked,
+        'visit1.converted': visit1.converted,
+        'visit1.fresh': visit1.fresh,
+        'visit1.legacy': visit1.legacy,
+        'visit2.v2': visit2V2,
+        presetMissing,
+        activeMismatch,
+        'nullDb.worst': worst,
+        ...values,
+      }),
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------------------------
 // P-20 — Reverb Decay 변환
 // ---------------------------------------------------------------------------------------------
 /** S2.2 이전의 공장 프리셋이 저장하던 Decay(초). 지금은 둘 다 6.0 이다. */
@@ -1428,7 +1600,7 @@ const p24: ProbeDefinition = {
 };
 
 export const probes: ProbeDefinition[] = [
-  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p20, p21, p22, p23, p24,
+  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24,
 ];
 
 // ---------------------------------------------------------------------------------------------
