@@ -2,27 +2,17 @@ import { create } from 'zustand';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { AudioEngine } from '../audio/AudioEngine';
 import { clampTrimDb } from '../audio/offline/loudnessSpec';
+import { parsePresetJson, normalizeTrimField, type PresetExport } from '../persistence/legacy/presetsV1';
+import { createId } from '../presets/createId';
 import type { PedalParamValue, PedalState, Preset } from '../audio/types';
 import factoryTrims from '../presets/factoryTrims.json';
-import {
-  clonePedals,
-  initialPedals,
-  migratePedalCollection,
-  SCHEMA_VERSION,
-  usePedalStore,
-} from './pedalStore';
+import { clonePedals, initialPedals, SCHEMA_VERSION, usePedalStore } from './pedalStore';
 import { useAudioStore } from './audioStore';
 
 const FACTORY_TIMESTAMP = 1767225600000;
 
 /** 팩토리 프리셋의 음량 보정(dB, S1.4c). `npm run trims` 가 만든 파일이고, 목록에 없는 프리셋은 보정 없음(0)이다(M6). */
 const factoryTrimById: Readonly<Record<string, number>> = factoryTrims.trims;
-
-type PresetExport = {
-  version: number;
-  exportedAt?: number;
-  presets: Preset[];
-};
 
 export type PresetListItem = Preset & {
   isFactory?: boolean;
@@ -372,55 +362,6 @@ export const defaultPresets: PresetListItem[] = [
   }),
 ];
 
-function isPreset(value: unknown): value is Preset {
-  const preset = value as Preset;
-
-  return (
-    !!preset &&
-    typeof preset.id === 'string' &&
-    typeof preset.name === 'string' &&
-    typeof preset.updatedAt === 'number' && Number.isFinite(preset.updatedAt) &&
-    Array.isArray(preset.pedals)
-  );
-}
-
-function normalizeImportedPreset(preset: Preset, version: number): Preset {
-  return {
-    id: preset.id || createId(),
-    name: preset.name.trim() || 'Imported Preset',
-    libraryId: typeof preset.libraryId === 'string' ? preset.libraryId : undefined,
-    libraryName: typeof preset.libraryName === 'string' ? preset.libraryName : undefined,
-    description: typeof preset.description === 'string' ? preset.description : undefined,
-    tags: Array.isArray(preset.tags) ? preset.tags.filter((tag) => typeof tag === 'string') : undefined,
-    pedals: migratePedalCollection(preset.pedals, version),
-    // 음량 보정이 없거나 숫자가 아니면 필드를 두지 않는다(= 0, M6). 이전 버전이 내보낸 파일에는 이 필드가 없다.
-    ...normalizeTrimField(preset.trimDb),
-    updatedAt: typeof preset.updatedAt === 'number' ? preset.updatedAt : Date.now(),
-  };
-}
-
-/** 0 이 아닌 음량 보정만 필드로 남긴다. 저장·내보내기·불러오기가 같은 모양을 쓴다. */
-function normalizeTrimField(value: unknown): { trimDb?: number } {
-  const trimDb = clampTrimDb(value);
-  return trimDb === 0 ? {} : { trimDb };
-}
-
-export function parsePresetJson(json: string): Preset[] {
-  let parsed: unknown;
-  try { parsed = JSON.parse(json); } catch { throw new Error('JSON 파일을 읽을 수 없습니다. 형식을 확인해 주세요.'); }
-  if (!parsed || typeof parsed !== 'object') throw new Error('프리셋 JSON 형식이 올바르지 않습니다.');
-  const payload = parsed as Partial<PresetExport>;
-  const candidates = Array.isArray(parsed) ? parsed : payload.presets;
-  const version = Array.isArray(parsed) ? 1 : typeof payload.version === 'number' ? payload.version : 1;
-
-  if (!Array.isArray(candidates)) {
-    throw new Error('프리셋 JSON 형식이 올바르지 않습니다.');
-  }
-
-  if (!candidates.every(isPreset)) throw new Error('프리셋 항목이 올바르지 않습니다.');
-  return candidates.map((preset) => normalizeImportedPreset(preset, version));
-}
-
 export function serializePresetPayload(
   presets: Preset[],
   options: { exportedAt?: number; pretty?: boolean } = {},
@@ -448,11 +389,6 @@ function readUserPresets(): Preset[] {
 function writeUserPresets(presets: Preset[]): void {
   // 값의 모양(version·presets)은 내보내기와 같은 직렬화를 그대로 쓴다. 실패는 SafeStorage 가 한 번 알리고 메모리에 유지한다.
   safeStorage.setRaw(STORAGE_KEYS.presets, serializePresetPayload(presets));
-}
-
-function createId(): string {
-  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-  return `preset-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function toPresetList(userPresets: Preset[]): PresetListItem[] {
@@ -591,3 +527,6 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
     return true;
   },
 }));
+
+// 이전 위치에서 쓰던 이름을 그대로 내보낸다(S2.4 선행 이동: 가져오는 쪽 코드는 바꾸지 않는다).
+export { parsePresetJson } from '../persistence/legacy/presetsV1';
