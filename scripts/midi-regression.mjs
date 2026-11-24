@@ -8,6 +8,7 @@ import { build } from 'esbuild';
 import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
 const midiSource = await readFile(new URL('../src/audio/midi.ts', import.meta.url), 'utf8');
+const keysSource = await readFile(new URL('../src/persistence/keys.ts', import.meta.url), 'utf8');
 const audioStoreSource = await readFile(
   new URL('../src/store/audioStore.ts', import.meta.url),
   'utf8',
@@ -25,7 +26,10 @@ const appShellSource = await readFile(
   'utf8',
 );
 
-assert.match(midiSource, /'guitar-pedalboard:midi'/, 'MIDI storage key');
+// 저장 키 문자열은 S1.7 에서 src/persistence/keys.ts 한 곳으로 모였다. 값은 그대로여야 한다(키 이름 변경은 S2.4 범위).
+assert.match(keysSource, /midi: 'guitar-pedalboard:midi'/, 'MIDI storage key');
+assert.match(audioStoreSource, /STORAGE_KEYS\.midi/);
+assert.doesNotMatch(midiSource, /localStorage|guitar-pedalboard:midi/, 'MIDI 해석 모듈은 저장소와 키 문자열을 모른다');
 assert.equal(
   [...audioStoreSource.matchAll(/navigator\.requestMIDIAccess\s*\(/g)].length,
   1,

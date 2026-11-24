@@ -89,6 +89,7 @@ const harnessBundle = await build({
       "export { useAudioStore } from './store/audioStore.ts';",
       "export { clonePedals, usePedalStore } from './store/pedalStore.ts';",
       "export { usePresetStore, parsePresetJson } from './store/presetStore.ts';",
+      "export { useToastStore } from './store/toastStore.ts';",
     ].join('\n'),
     resolveDir: fileURLToPath(new URL('../src', import.meta.url)),
     sourcefile: 'preset-ab-harness.ts',
@@ -100,7 +101,7 @@ const harnessBundle = await build({
   write: false,
 });
 const harnessUrl = `data:text/javascript;base64,${Buffer.from(harnessBundle.outputFiles[0].text).toString('base64')}`;
-const { AudioEngine, CabEffect, clonePedals, useAudioStore, usePedalStore, usePresetStore, parsePresetJson } =
+const { AudioEngine, CabEffect, clonePedals, useAudioStore, usePedalStore, usePresetStore, parsePresetJson, useToastStore } =
   await import(harnessUrl);
 
 function pedalsWithTempo(bpm, driveAmount) {
@@ -306,8 +307,9 @@ usePresetStore.getState().savePreset('export fixture', usePedalStore.getState().
 const exportedPresets = JSON.parse(usePresetStore.getState().exportPresets()).presets;
 assert.ok(exportedPresets.length > 0);
 assert.ok(exportedPresets.every((preset) => !preset.id.startsWith('factory-')));
-let storageWarnings = 0;
-globalThis.window.dispatchEvent = () => { storageWarnings += 1; return true; };
+// 저장 실패 안내는 SafeStorage 가 토스트로 한 번만 띄운다(S1.7). 저장이 두 번 실패해도 안내는 하나다.
+const quotaToasts = () => useToastStore.getState().toasts.filter((toast) => toast.key === 'storage:quota');
+assert.equal(quotaToasts().length, 0);
 const originalSetItem = globalThis.window.localStorage.setItem;
 globalThis.window.localStorage.setItem = () => { throw new Error('quota exceeded'); };
 try {
@@ -316,7 +318,7 @@ try {
   const prior = usePedalStore.getState().pedals.find((pedal) => pedal.id === 'delay').bypassed;
   usePedalStore.getState().setPedalBypass('delay', !prior);
   assert.equal(usePedalStore.getState().pedals.find((pedal) => pedal.id === 'delay').bypassed, !prior);
-  assert.equal(storageWarnings, 2);
+  assert.equal(quotaToasts().length, 1, '저장이 두 번 실패해도 안내는 한 번만 보인다');
 } finally {
   globalThis.window.localStorage.setItem = originalSetItem;
 }

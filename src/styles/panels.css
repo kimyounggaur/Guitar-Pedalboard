@@ -742,13 +742,18 @@ select,
   overflow-wrap: anywhere;
 }
 
-.toast-close {
+.toast-close,
+.toast-action {
   flex: none;
   padding: 4px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: transparent;
   color: inherit;
+}
+
+.toast-action {
+  border-color: currentColor;
 }
 
 .preset-form {

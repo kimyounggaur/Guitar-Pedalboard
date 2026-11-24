@@ -1,7 +1,7 @@
-import { notifyStorageFailure } from '../store/storageNotice';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
 import { formatTrimDb } from '../audio/offline/loudnessSpec';
+import { safeStorage, STORAGE_KEYS, type StorageKey } from '../persistence';
 import { usePedalStore } from '../store/pedalStore';
 import {
   applyPresetPedals,
@@ -11,8 +11,8 @@ import {
   type PresetListItem,
 } from '../store/presetStore';
 
-const FAVORITES_KEY = 'guitar-pedalboard:preset-favorites';
-const RECENTS_KEY = 'guitar-pedalboard:preset-recents';
+const FAVORITES_KEY = STORAGE_KEYS.presetFavorites;
+const RECENTS_KEY = STORAGE_KEYS.presetRecents;
 
 type LibraryFilter = {
   id: string;
@@ -21,26 +21,21 @@ type LibraryFilter = {
   count: number;
 };
 
-function canUseStorage(): boolean {
-  try { return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'; } catch { return false; }
+/** 문자열 목록(즐겨찾기·최근). 배열이 아니면 깨진 값으로 보고 SafeStorage 가 보관한 뒤 빈 목록을 쓴다. 문자열이 아닌 항목은 걸러 낸다. */
+function readStringList(key: StorageKey): string[] {
+  return safeStorage.read<string[]>(
+    key,
+    (raw) => {
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error('저장된 목록의 모양이 올바르지 않습니다.');
+      return parsed.filter((item): item is string => typeof item === 'string');
+    },
+    [],
+  );
 }
 
-function readStringList(key: string): string[] {
-  if (!canUseStorage()) return [];
-
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(key) ?? '[]');
-    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeStringList(key: string, values: string[]): void {
-  try {
-    if (!canUseStorage()) throw new Error('Storage unavailable');
-    window.localStorage.setItem(key, JSON.stringify(values));
-  } catch { notifyStorageFailure(); }
+function writeStringList(key: StorageKey, values: string[]): void {
+  safeStorage.set(key, values);
 }
 
 function normalizeText(value: string): string {

@@ -320,7 +320,9 @@
 
   .chain-toast {
     right: 12px;
-    bottom: calc(82px + env(safe-area-inset-bottom));
+    /* 하단 도크 윗선 12 px 위. --dock-h 는 도크의 실제 높이(안전 영역 포함)라 접힘·펼침 모두 도크와 겹치지 않는다(L-54).
+       값이 아직 없을 때(첫 그림)는 접힌 도크의 높이로 둔다. */
+    bottom: calc(var(--dock-h, 58px) + 12px);
     left: 12px;
     z-index: 220;
     text-align: center;

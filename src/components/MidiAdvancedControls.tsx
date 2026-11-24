@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
-import { MIDI_ADVANCED_KEY, dispatchAdvancedMessage, parseAdvancedMessage, readMidiAdvanced, validateMidiAdvanced, type MidiAdvancedConfig } from '../audio/midiAdvanced';
+import { dispatchAdvancedMessage, parseAdvancedMessage, validateMidiAdvanced, type MidiAdvancedConfig } from '../audio/midiAdvanced';
+import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { registerMidiAdvancedHandler, useAudioStore } from '../store/audioStore';
 import { usePedalStore } from '../store/pedalStore';
 import { applyPresetPedals, usePresetStore } from '../store/presetStore';
-import { notifyStorageFailure } from '../store/storageNotice';
+
+/** 저장된 MIDI 고급 설정. 비어 있으면 기본값, JSON 이 아니면 SafeStorage 가 깨진 값으로 보관하고 기본값을 쓴다. */
+function readMidiAdvanced(): MidiAdvancedConfig {
+  return safeStorage.read<MidiAdvancedConfig>(STORAGE_KEYS.midiAdvanced, (raw) => validateMidiAdvanced(JSON.parse(raw)), validateMidiAdvanced(null));
+}
 
 export function MidiAdvancedControls() {
   const [config, setConfig] = useState(readMidiAdvanced);
@@ -25,7 +30,7 @@ export function MidiAdvancedControls() {
     setNotice('설정을 저장했습니다.');
     configRef.current = checked;
     setConfig(checked);
-    try { localStorage.setItem(MIDI_ADVANCED_KEY, JSON.stringify(checked)); } catch { notifyStorageFailure(); }
+    safeStorage.set(STORAGE_KEYS.midiAdvanced, checked);
     if (checked.volumeCc !== null || checked.wahCc !== null || Object.keys(checked.programs).length) void useAudioStore.getState().connectSavedMidi(true);
   };
 
