@@ -3,10 +3,9 @@
 //   · 프리셋을 불러오면 그 프리셋의 보정값(src/presets/factoryTrims.json)이 패널에 보인다
 //   · '음량 맞추기' 버튼이 같은 렌더 코드로 보정값을 정한다(팩토리 값과 ±1 dB 안)
 //   · 보정값은 새로고침해도 남고, 실행 취소가 페달과 함께 되돌린다
-// 마우스 클릭 대신 키보드로 누르는 이유는 helpers/app.ts 의 connectGuitar 설명(F-1)과 같다.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PEDAL_COUNT, activate, openApp, pedalCards } from '../helpers/app';
+import { PEDAL_COUNT, openApp, pedalCards } from '../helpers/app';
 import { repoRoot } from '../helpers/env';
 import { expect, test } from '../helpers/fixtures';
 
@@ -47,17 +46,17 @@ test.describe('S1.4c 프리셋 음량 보정', () => {
     await expect(value).toContainText('0.0 dB');
 
     // 드라이브 프리셋은 줄이고, 클린 프리셋은 키운다(보정 전에는 둘이 약 20 dB 차이였다).
-    await activate(page, page.locator('.preset-load-button', { hasText: 'Texas Push' }));
+    await page.locator('.preset-load-button', { hasText: 'Texas Push' }).click();
     await expect(value).toContainText(label(trimOf(TEXAS_PUSH)));
     expect(trimOf(TEXAS_PUSH)).toBeLessThan(0);
 
-    await activate(page, page.locator('.preset-load-button', { hasText: 'Funk Comp' }));
+    await page.locator('.preset-load-button', { hasText: 'Funk Comp' }).click();
     await expect(value).toContainText(label(trimOf(FUNK_COMP)));
     expect(trimOf(FUNK_COMP)).toBeGreaterThan(0);
 
     // '기본 페달 설정' 은 window.confirm 으로 한 번 묻는다. 확인을 누른다.
     page.once('dialog', (dialog) => void dialog.accept());
-    await activate(page, page.locator('.preset-reset-button'));
+    await page.locator('.preset-reset-button').click();
     await expect(value).toContainText('0.0 dB');
   });
 
@@ -65,11 +64,11 @@ test.describe('S1.4c 프리셋 음량 보정', () => {
     await openApp(page);
     const value = page.getByTestId('preset-trim-value');
     // Texas Push 를 불러온 다음 보정을 0 으로 되돌려 둔다 — 버튼은 현재 체인을 보정 0 으로 재서 새 값을 정한다.
-    await activate(page, page.locator('.preset-load-button', { hasText: 'Texas Push' }));
+    await page.locator('.preset-load-button', { hasText: 'Texas Push' }).click();
     await expect(value).toContainText(label(trimOf(TEXAS_PUSH)));
 
     const button = page.getByRole('button', { name: '음량 맞추기' });
-    await activate(page, button);
+    await button.click();
     // 4초 렌더 + 렌더 코드 불러오기. 끝나면 안내 글이 바뀌고 버튼이 다시 켜진다.
     await expect(page.locator('.preset-message')).toContainText('음량 보정을', { timeout: 30_000 });
     await expect(button).toBeEnabled();
@@ -81,7 +80,7 @@ test.describe('S1.4c 프리셋 음량 보정', () => {
   test('보정값은 새로고침해도 남는다', async ({ page }) => {
     await openApp(page);
     const value = page.getByTestId('preset-trim-value');
-    await activate(page, page.locator('.preset-load-button', { hasText: 'Funk Comp' }));
+    await page.locator('.preset-load-button', { hasText: 'Funk Comp' }).click();
     await expect(value).toContainText(label(trimOf(FUNK_COMP)));
 
     // 저장은 조금 늦춰서 하므로 저장본에 들어갈 때까지 기다린 뒤 다시 연다.
@@ -99,14 +98,14 @@ test.describe('S1.4c 프리셋 음량 보정', () => {
   test('실행 취소·다시 실행이 페달과 보정을 함께 되돌린다', async ({ page }) => {
     await openApp(page);
     const value = page.getByTestId('preset-trim-value');
-    await activate(page, page.locator('.preset-load-button', { hasText: 'Texas Push' }));
+    await page.locator('.preset-load-button', { hasText: 'Texas Push' }).click();
     await expect(value).toContainText(label(trimOf(TEXAS_PUSH)));
-    await activate(page, page.locator('.preset-load-button', { hasText: 'Funk Comp' }));
+    await page.locator('.preset-load-button', { hasText: 'Funk Comp' }).click();
     await expect(value).toContainText(label(trimOf(FUNK_COMP)));
 
-    await activate(page, page.getByRole('button', { name: '실행 취소' }));
+    await page.getByRole('button', { name: '실행 취소' }).click();
     await expect(value).toContainText(label(trimOf(TEXAS_PUSH)));
-    await activate(page, page.getByRole('button', { name: '다시 실행' }));
+    await page.getByRole('button', { name: '다시 실행' }).click();
     await expect(value).toContainText(label(trimOf(FUNK_COMP)));
   });
 });

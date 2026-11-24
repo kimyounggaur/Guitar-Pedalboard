@@ -1,6 +1,6 @@
 // E-03 하울링 차단(설계서 S1.5, 6.3절·부록 A·B). 가짜 마이크로 H-1(1 kHz 순음, −20 dBFS, 5초 지속)을 흘려
 // 출력 가드(output-guard 워클릿)가 **진짜로** 하울링을 판정해 1.5초 안에 차단하는지 실제 브라우저에서 확인한다.
-//   · 데스크톱, 휴대폰의 입력·미터·프리셋 탭 각각(S1.6 에서 '페달' 탭이 생기면 그 탭도 더한다),
+//   · 데스크톱, 휴대폰의 페달(접힘)·입력·미터·프리셋 탭 각각(S1.6),
 //   · 문서가 숨겨진 상태에서도 같은 시간 안에(헤드리스 Chrome 은 진짜 숨김을 만들 수 없어 조건을 흉내 낸다: emulateHiddenDocument),
 //   · 파일 모드에서 H-1 을 재생하면 차단하지 않고, '하울링 보호'를 끄면 차단하지 않으며,
 //   · 녹음 중에 차단되면 녹음 파일이 남는다(S1.2 경로).
@@ -10,7 +10,7 @@
 // 화면이 어떤 상태여도 같은 시간 안에' 가 핵심이다.
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { activate, connectButton, connectGuitar, disconnectButton, openApp, panicButton, setMobileDock } from '../helpers/app';
+import { connectButton, connectGuitar, disconnectButton, openApp, panicButton, setMobileDock } from '../helpers/app';
 import { fixturePath } from '../helpers/env';
 import { expect, test } from '../helpers/fixtures';
 import { emulateHiddenDocument, markTriggers, observeGuard, readAudioTracking, readGuardObservation, trackAudioContexts, type GuardObservation } from '../helpers/mocks';
@@ -81,6 +81,7 @@ test.describe('E-03 하울링 차단', () => {
   });
 
   const phoneTabs = [
+    { id: 'pedals', label: '페달' },
     { id: 'input', label: '입력' },
     { id: 'meter', label: '미터' },
     { id: 'preset', label: '프리셋' },
@@ -94,12 +95,18 @@ test.describe('E-03 하울링 차단', () => {
       // 연결 버튼은 '입력' 탭에 있다. 연결한 뒤 검사할 탭으로 옮긴다(차단까지 1초 남짓 걸리므로 그 전에 옮겨 둔다).
       await setMobileDock(page, true);
       await connectGuitar(page);
-      if (tab.id !== 'input') await activate(page, page.locator(`#mobile-tab-${tab.id}`));
+      if (tab.id !== 'input') await page.locator(`#mobile-tab-${tab.id}`).click();
       await expect(page.locator(`#mobile-tab-${tab.id}`)).toHaveAttribute('aria-selected', 'true');
-      await expect(page.locator(`#mobile-panel-${tab.id}`)).toBeVisible();
+      if (tab.id === 'pedals') {
+        // '페달' 탭은 도크가 접힌 상태다. 패널이 하나도 보이지 않는다 — 감시가 '미터가 보일 때만' 돌던 시절이라면 여기서 놓쳤을 조합이다.
+        await expect(page.locator('#mobile-control-panels')).toBeHidden();
+      } else {
+        await expect(page.locator(`#mobile-panel-${tab.id}`)).toBeVisible();
+      }
 
       const observation = await waitForCut(page);
-      // 차단이 일어난 뒤에도 같은 탭이 선택되어 있었다(탭이 바뀌어서 맞은 것이 아니다).
+      // 차단이 일어난 때에도 같은 탭이 선택되어 있었다(탭이 바뀌어서 맞은 것이 아니다).
+      expect(observation.selectedTabAtCut, '차단 때 선택되어 있던 탭').toBe(`mobile-tab-${tab.id}`);
       await expect(page.locator(`#mobile-tab-${tab.id}`)).toHaveAttribute('aria-selected', 'true');
       expect(observation.visibilityAtCut, '차단 때 문서는 보이는 상태').toBe('visible');
       elapsedUntilCut(observation, `휴대폰 ${tab.label} 탭`);
@@ -175,7 +182,7 @@ test.describe('E-03 하울링 차단', () => {
     const { page } = await launchWithMic('h-1.wav');
     await openForHowl(page);
     await connectGuitar(page);
-    await activate(page, page.getByRole('button', { name: '녹음', exact: true }));
+    await page.getByRole('button', { name: '녹음', exact: true }).click();
     await expect(page.getByText(/녹음 중/)).toBeVisible();
     const recordStartedAt = await page.evaluate(() => (window as unknown as { __lastTrigger: number }).__lastTrigger);
 
@@ -187,7 +194,7 @@ test.describe('E-03 하울링 차단', () => {
     // 정지한 뒤에도 '다운로드' 가 켜져 있고, 받은 파일에 차단 직전까지의 소리가 들어 있다.
     const downloadButton = page.getByRole('button', { name: '다운로드' });
     await expect(downloadButton).toBeEnabled({ timeout: 5000 });
-    const [download] = await Promise.all([page.waitForEvent('download'), activate(page, downloadButton)]);
+    const [download] = await Promise.all([page.waitForEvent('download'), downloadButton.click()]);
     expect(download.suggestedFilename()).toMatch(/\.(webm|m4a|mp4|ogg|wav)$/);
     const bytes = Array.from(readFileSync(await download.path()));
     expect(bytes.length).toBeGreaterThan(1000);

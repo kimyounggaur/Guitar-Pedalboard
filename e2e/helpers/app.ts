@@ -19,13 +19,33 @@ export function pedalSwitches(page: Page): Locator {
   return page.locator('.pedal-board .pedal-card .stomp-toggle-switch');
 }
 
-/** 모바일 하단 도크를 펼치거나 접는다(모바일 배치에서만 있다). */
-export async function setMobileDock(page: Page, open: boolean): Promise<void> {
-  const toggle = page.locator('.mobile-dock-toggle');
-  await expect(toggle).toBeVisible();
-  if ((await toggle.getAttribute('aria-expanded')) === String(open)) return;
-  await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-expanded', String(open));
+/** 모바일 하단 도크의 탭. '페달' 은 도크가 접힌 상태(탭 줄만 보임), 나머지는 그 탭의 패널을 펼친 상태다(S1.6). */
+export type MobileTab = 'pedals' | 'input' | 'meter' | 'preset';
+
+/** 모바일 하단 도크의 탭을 고른다(모바일 배치에서만 있다). 이미 선택된 탭이면 다시 누르지 않는다(다시 누르면 접히기 때문이다). */
+export async function selectMobileTab(page: Page, tab: MobileTab): Promise<void> {
+  const button = page.locator(`#mobile-tab-${tab}`);
+  await expect(button).toBeVisible();
+  if ((await button.getAttribute('aria-selected')) === 'true') return;
+  await button.click();
+  await expect(button).toHaveAttribute('aria-selected', 'true');
+}
+
+/**
+ * 모바일 하단 도크를 펼치거나 접는다. 펼치면 `tab`(기본 '입력')의 패널이 열리고, 접으면 '페달' 탭이 선택된다.
+ * 도크 높이를 `--dock-h` 에 적는 ResizeObserver 는 비동기라, 그 값이 도크의 실제 높이와 같아질 때까지 기다렸다가 돌아온다.
+ */
+export async function setMobileDock(page: Page, open: boolean, tab: Exclude<MobileTab, 'pedals'> = 'input'): Promise<void> {
+  await selectMobileTab(page, open ? tab : 'pedals');
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const dock = document.querySelector('.mobile-control-dock');
+        const published = document.documentElement.style.getPropertyValue('--dock-h');
+        return dock ? published === `${Math.ceil(dock.getBoundingClientRect().height)}px` : false;
+      }),
+    )
+    .toBe(true);
 }
 
 /** 데스크톱 오른쪽 오디오 패널(사이드바)을 펼치거나 접는다(768 px 이상에서만 있다). */
@@ -43,29 +63,17 @@ export async function horizontalOverflow(page: Page): Promise<number> {
 }
 
 /**
- * '기타 연결하기'를 키보드(포커스 + Enter)로 누르고 연결될 때까지 기다린다.
- * 마우스 클릭 대신 키보드를 쓰는 이유: 현재 앱은 그래픽 EQ 의 숫자 입력이 페이지 전체를 덮는 투명 입력이 되어
- * (`.vertical-fader input` 규칙에 걸림, REFACTOR_LOG F-1) 데스크톱에서도 연결 버튼을 마우스로 누를 수 없다.
- * 키보드 Enter 는 신뢰할 수 있는 사용자 입력이라 AudioContext 도 정상으로 시작된다.
- * 겹침이 고쳐진 뒤에도 이 방식은 그대로 유효하다.
+ * '기타 연결하기'를 마우스로 누르고 연결될 때까지 기다린다.
+ * 한동안(REFACTOR_LOG F-1, S1.6 에서 고침) 그래픽 EQ 의 숫자 입력이 화면 전체를 덮는 투명 입력이 되어 이 버튼을 마우스로 누를 수 없었고,
+ * 그동안은 포커스 + Enter 로 대신했다. 이제 실제 클릭으로 돌아왔으므로 같은 결함이 되살아나면(가려진 버튼) Playwright 가 클릭 단계에서 바로 실패한다.
+ * 클릭도 신뢰할 수 있는 사용자 입력이라 AudioContext 가 정상으로 시작된다.
  */
 export async function connectGuitar(page: Page): Promise<void> {
-  const connect = page.getByRole('button', { name: '기타 연결하기' });
-  await connect.focus();
-  await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: '연결 해제' })).toBeVisible({ timeout: 15_000 });
+  await connectButton(page).click();
+  await expect(disconnectButton(page)).toBeVisible({ timeout: 15_000 });
 }
 
 export const connectButton = (page: Page): Locator => page.getByRole('button', { name: '기타 연결하기' });
 export const disconnectButton = (page: Page): Locator => page.getByRole('button', { name: '연결 해제' });
 /** 연결되어 있을 때만 그려지는 긴급 정지 버튼 */
 export const panicButton = (page: Page): Locator => page.locator('.panic-button');
-
-/**
- * 버튼을 키보드(포커스 + Enter)로 누른다. 마우스 클릭을 쓰지 않는 이유는 connectGuitar 의 설명과 같다
- * (그래픽 EQ 숫자 입력이 화면을 덮는 문제 F-1). 키보드 입력도 신뢰할 수 있는 사용자 동작이다.
- */
-export async function activate(page: Page, button: Locator): Promise<void> {
-  await button.focus();
-  await page.keyboard.press('Enter');
-}

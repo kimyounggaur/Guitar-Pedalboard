@@ -7,13 +7,19 @@ import { GlobalKeyboardShortcuts } from './GlobalKeyboardShortcuts';
 import { Meter } from './Meter';
 import { PedalBoard } from './PedalBoard';
 import { PresetPanel } from './PresetPanel';
+import { useDockHeight } from '../hooks/useDockHeight';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useAudioStore } from '../store/audioStore';
 import { usePedalStore } from '../store/pedalStore';
 
 const MOBILE_LAYOUT_QUERY = '(max-width: 767px)';
 
+/**
+ * 휴대폰 하단 도크의 탭. '페달' 탭이 기본이고, 그 탭에서는 도크가 탭 줄만 남기고 접힌다(설계서 S1.6).
+ * 다른 탭을 누르면 최대 50dvh 로 펼치고, 펼쳐진 탭을 다시 누르면 '페달' 로 돌아가 접힌다. 열림 여부는 따로 저장하지 않고 탭에서 정한다.
+ */
 const mobileTabs = [
+  { id: 'pedals', label: '페달' },
   { id: 'input', label: '입력' },
   { id: 'meter', label: '미터' },
   { id: 'preset', label: '프리셋' },
@@ -21,14 +27,18 @@ const mobileTabs = [
 
 type MobileTabId = (typeof mobileTabs)[number]['id'];
 
+/** '페달' 탭이 가리키는 영역(PedalBoard 의 section). 이 탭은 도크 안에 패널이 없고 페달 보드 자체가 내용이다. */
+const PEDAL_BOARD_SECTION_ID = 'pedal-board-section';
+
 function readOnlineStatus(): boolean {
   return typeof navigator === 'undefined' ? true : navigator.onLine;
 }
 
 export function AppShell() {
   const isMobileLayout = useMediaQuery(MOBILE_LAYOUT_QUERY);
-  const [activeMobileTab, setActiveMobileTab] = useState<MobileTabId>('input');
-  const [mobileDockOpen, setMobileDockOpen] = useState(false);
+  const [activeMobileTab, setActiveMobileTab] = useState<MobileTabId>('pedals');
+  const [dockElement, setDockElement] = useState<HTMLElement | null>(null);
+  const mobileDockOpen = isMobileLayout && activeMobileTab !== 'pedals';
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isOnline, setIsOnline] = useState(readOnlineStatus);
   const loadPedalsFromStorage = usePedalStore((state) => state.loadPedalsFromStorage);
@@ -65,6 +75,12 @@ export function AppShell() {
     };
   }, []);
 
+  useDockHeight(dockElement);
+
+  const handleMobileTabClick = (tabId: MobileTabId) => {
+    setActiveMobileTab((current) => (current === tabId ? 'pedals' : tabId));
+  };
+
   const handleMobileTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     const currentIndex = mobileTabs.findIndex((tab) => tab.id === activeMobileTab);
     let nextIndex: number | null = null;
@@ -78,7 +94,6 @@ export function AppShell() {
     event.preventDefault();
     const nextTab = mobileTabs[nextIndex];
     setActiveMobileTab(nextTab.id);
-    setMobileDockOpen(true);
     document.getElementById(`mobile-tab-${nextTab.id}`)?.focus();
   };
 
@@ -87,7 +102,7 @@ export function AppShell() {
   const presetPanel = <PresetPanel />;
 
   return (
-    <main className={`app-shell${mobileDockOpen && isMobileLayout ? ' mobile-dock-open' : ''}`}>
+    <main className={`app-shell${mobileDockOpen ? ' mobile-dock-open' : ''}`}>
       <GlobalKeyboardShortcuts />
       <HistoryControls />
       {!isOnline ? (
@@ -115,10 +130,7 @@ export function AppShell() {
       </div>
 
       {isMobileLayout ? (
-        <section className="mobile-control-dock" aria-label="모바일 오디오 컨트롤">
-          <button className="mobile-dock-toggle" type="button" aria-expanded={mobileDockOpen} aria-controls="mobile-control-panels" onClick={() => setMobileDockOpen((open) => !open)}>
-            {mobileDockOpen ? '패널 접기' : '오디오 패널 펼치기'}
-          </button>
+        <section ref={setDockElement} className="mobile-control-dock" aria-label="모바일 오디오 컨트롤">
           <div className="mobile-bottom-tabs" role="tablist" aria-label="모바일 컨트롤 패널">
             {mobileTabs.map((tab) => {
               const isActive = activeMobileTab === tab.id;
@@ -128,10 +140,10 @@ export function AppShell() {
                   key={tab.id}
                   type="button"
                   role="tab"
-                  aria-controls={`mobile-panel-${tab.id}`}
+                  aria-controls={tab.id === 'pedals' ? PEDAL_BOARD_SECTION_ID : `mobile-panel-${tab.id}`}
                   aria-selected={isActive}
                   tabIndex={isActive ? 0 : -1}
-                  onClick={() => { setActiveMobileTab(tab.id); setMobileDockOpen(true); }}
+                  onClick={() => handleMobileTabClick(tab.id)}
                   onKeyDown={handleMobileTabKeyDown}
                 >
                   {tab.label}

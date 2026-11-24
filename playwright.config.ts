@@ -2,7 +2,7 @@
 //   npm run e2e                          전부(빌드 → vite preview → 시험)
 //   npm run e2e -- --grep "E-23"         E-ID 로 고르기
 //   E2E_SKIP_BUILD=1 npm run e2e         dist/ 가 이미 있으면 빌드를 건너뜀
-//   E2E_UPDATE_BASELINE=1 npm run e2e    기록 모드 시험의 측정값으로 docs/baseline/e2e.json 갱신
+//   E2E_UPDATE_BASELINE=1 npm run e2e    E-04·E-06 이 잰 값으로 docs/baseline/e2e.json 갱신
 //   E2E_CHROME_PATH=/usr/bin/google-chrome npm run e2e   Playwright 의 Chromium 대신 다른 Chrome 사용
 import { defineConfig, devices } from '@playwright/test';
 import { BASE_URL, PORT, chromeExecutablePath, fakeMediaArgs } from './e2e/helpers/env';

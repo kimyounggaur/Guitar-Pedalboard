@@ -1,4 +1,4 @@
-// 기록 모드 시험(E-04, E-06)이 잰 값을 남기는 도우미.
+// E-04(S1.6 부터 정식 단언)와 E-06(S1.8 까지 기록 모드)이 잰 값을 남기는 도우미.
 // 시험은 값을 test-results/measurements/ 에 쓰고, global-teardown 이 요약을 출력한다.
 // E2E_UPDATE_BASELINE=1 로 돌렸을 때만 docs/baseline/e2e.json 에 병합한다(기준선은 의도할 때만 바꾼다).
 import { mkdirSync, writeFileSync } from 'node:fs';

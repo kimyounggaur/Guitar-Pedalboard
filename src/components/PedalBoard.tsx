@@ -76,7 +76,7 @@ export function PedalBoard({ inputPanel }: PedalBoardProps) {
   };
 
   return (
-    <section className="board-section" aria-label="페달보드">
+    <section id="pedal-board-section" className="board-section" aria-label="페달보드">
       <div className="section-heading">
         <div className="brand-lockup">
           <p className="eyebrow">Pedalboard</p>

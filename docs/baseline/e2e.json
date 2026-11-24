@@ -9,163 +9,115 @@
     "E-04": {
       "360x640": {
         "dock-collapsed": {
-          "asIs": {
-            "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
-          },
-          "withoutFaderOverlay": {
-            "count": 15,
-            "reachable": 15,
-            "reachableRatio": 1,
-            "reasons": {},
-            "blockedBy": {},
-            "visibleRatioMean": 1,
-            "visibleRatioMin": 1
-          }
+          "count": 15,
+          "reachable": 15,
+          "reachableRatio": 1,
+          "boxAboveDock": 15,
+          "reasons": {},
+          "blockedBy": {},
+          "minWidth": 54,
+          "minHeight": 101,
+          "freeHeight": 582,
+          "failed": [],
+          "firstScreenKnobs": 3,
+          "lastPedalGapAboveDock": 26.8
         },
         "dock-expanded": {
-          "asIs": {
-            "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "span": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
-          },
-          "withoutFaderOverlay": {
-            "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "span": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+          "count": 15,
+          "reachable": 15,
+          "reachableRatio": 1,
+          "boxAboveDock": 15,
+          "reasons": {},
+          "blockedBy": {},
+          "minWidth": 54,
+          "minHeight": 101,
+          "freeHeight": 320,
+          "failed": [],
+          "dockHeight": 320,
+          "lastPedalGapAboveDock": 26.8,
+          "tabs": {
+            "input": {
+              "reachable": 15,
+              "boxAboveDock": 15,
+              "dockHeight": 320,
+              "lastPedalGapAboveDock": 26.8
+            }
           }
         }
       },
       "390x844": {
         "dock-collapsed": {
-          "asIs": {
-            "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
-          },
-          "withoutFaderOverlay": {
-            "count": 15,
-            "reachable": 15,
-            "reachableRatio": 1,
-            "reasons": {},
-            "blockedBy": {},
-            "visibleRatioMean": 1,
-            "visibleRatioMin": 1
-          }
+          "count": 15,
+          "reachable": 15,
+          "reachableRatio": 1,
+          "boxAboveDock": 15,
+          "reasons": {},
+          "blockedBy": {},
+          "minWidth": 54,
+          "minHeight": 101,
+          "freeHeight": 786,
+          "failed": [],
+          "firstScreenKnobs": 5,
+          "lastPedalGapAboveDock": 26.8
         },
         "dock-expanded": {
-          "asIs": {
-            "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "span": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
-          },
-          "withoutFaderOverlay": {
-            "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "span": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+          "count": 15,
+          "reachable": 15,
+          "reachableRatio": 1,
+          "boxAboveDock": 15,
+          "reasons": {},
+          "blockedBy": {},
+          "minWidth": 54,
+          "minHeight": 101,
+          "freeHeight": 422,
+          "failed": [],
+          "dockHeight": 422,
+          "lastPedalGapAboveDock": 26.8,
+          "tabs": {
+            "input": {
+              "reachable": 15,
+              "boxAboveDock": 15,
+              "dockHeight": 422,
+              "lastPedalGapAboveDock": 26.8
+            }
           }
         }
       },
       "412x915": {
         "dock-collapsed": {
-          "asIs": {
-            "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
-          },
-          "withoutFaderOverlay": {
-            "count": 15,
-            "reachable": 15,
-            "reachableRatio": 1,
-            "reasons": {},
-            "blockedBy": {},
-            "visibleRatioMean": 1,
-            "visibleRatioMin": 1
-          }
+          "count": 15,
+          "reachable": 15,
+          "reachableRatio": 1,
+          "boxAboveDock": 15,
+          "reasons": {},
+          "blockedBy": {},
+          "minWidth": 54,
+          "minHeight": 101,
+          "freeHeight": 857,
+          "failed": [],
+          "firstScreenKnobs": 5,
+          "lastPedalGapAboveDock": 26.8
         },
         "dock-expanded": {
-          "asIs": {
-            "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "span": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
-          },
-          "withoutFaderOverlay": {
-            "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "span": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+          "count": 15,
+          "reachable": 15,
+          "reachableRatio": 1,
+          "boxAboveDock": 15,
+          "reasons": {},
+          "blockedBy": {},
+          "minWidth": 54,
+          "minHeight": 101,
+          "freeHeight": 457.5,
+          "failed": [],
+          "dockHeight": 458,
+          "lastPedalGapAboveDock": 27.3,
+          "tabs": {
+            "input": {
+              "reachable": 15,
+              "boxAboveDock": 15,
+              "dockHeight": 458,
+              "lastPedalGapAboveDock": 27.3
+            }
           }
         }
       }
@@ -320,16 +272,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -490,16 +438,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -656,16 +600,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -820,16 +760,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -992,16 +928,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -1156,16 +1088,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -1322,16 +1250,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -1480,16 +1404,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -1646,16 +1566,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -1816,16 +1732,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -1988,16 +1900,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -2152,16 +2060,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -2318,16 +2222,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
@@ -2482,16 +2382,12 @@
           ],
           "switches": {
             "count": 15,
-            "reachable": 0,
-            "reachableRatio": 0,
-            "reasons": {
-              "covered": 15
-            },
-            "blockedBy": {
-              "input.knob-number-input": 15
-            },
-            "visibleRatioMean": 0,
-            "visibleRatioMin": 0
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
           },
           "switchesWithoutFaderOverlay": {
             "count": 15,
