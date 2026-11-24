@@ -165,8 +165,8 @@
   }
 
   .mobile-control-dock {
-    /* 탭 줄의 높이: 위 테두리 1 + 위아래 여백 6+6 + 탭 44 (+ 아래 안전 영역). 패널이 쓸 수 있는 높이를 계산하는 데 쓴다. */
-    --dock-tabs-h: calc(57px + env(safe-area-inset-bottom));
+    /* 탭 줄까지의 높이: 도크 위 테두리 1 + 탭 줄 위 테두리 1 + 위아래 여백 6+6 + 탭 44 (+ 아래 안전 영역) = 58 px. 패널이 쓸 수 있는 높이를 계산하는 데 쓴다. */
+    --dock-tabs-h: calc(58px + env(safe-area-inset-bottom));
     position: fixed;
     right: 0;
     bottom: 0;
