@@ -1,9 +1,12 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { installCrossTabNotice } from './app/crossTabNotice';
 import { installGlobalErrorHandlers } from './app/globalErrors';
 import { showStaticFallback } from './app/staticFallback';
+import { installUpdateNotice } from './app/updateNotice';
 import { AudioEngine } from './audio/AudioEngine';
+import { getBoot } from './persistence/appData';
 import { usePedalStore } from './store/pedalStore';
 import { announceFactoryCopies } from './store/presetStore';
 import './styles/globals.css';
@@ -41,6 +44,20 @@ try {
     announceFactoryCopies();
   } catch (error) {
     console.warn('팩토리 사본 안내를 띄우지 못했습니다.', error);
+  }
+
+  // 다른 탭에서 옛 버전이 v1 키에 쓰면 닫으라고 알린다(S2.4). v2 모드로 열렸을 때만 뜻이 있다 — 옛 방식(v1) 모드의 탭은 v1 키에 쓰는 것이 정상이다.
+  try {
+    if (getBoot().mode === 'v2') installCrossTabNotice();
+  } catch (error) {
+    console.warn('다른 탭 안내를 설치하지 못했습니다.', error);
+  }
+
+  // 새 서비스 워커가 이 탭을 넘겨받으면 '연주를 마친 뒤 새로고침' 안내만 띄운다(S2.4). 자동으로 새로고침하지 않는다.
+  try {
+    installUpdateNotice();
+  } catch (error) {
+    console.warn('새 버전 알림을 설치하지 못했습니다.', error);
   }
 } catch (error) {
   // React 가 아예 뜨지 못한 경우: 흰 화면 대신 정적 안내를 넣는다.
