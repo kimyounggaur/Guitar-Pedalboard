@@ -11,7 +11,7 @@
 
 ```bash
 npm run build                         # 시험은 빌드 결과(dist/)를 vite preview 로 서비스한다
-npm run e2e                           # 빌드까지 알아서 한다. 전체 120개, 약 4분
+npm run e2e                           # 빌드까지 알아서 한다. 전체 137개, 약 5분
 E2E_SKIP_BUILD=1 npm run e2e          # dist/ 가 이미 있을 때(CI 는 앞 단계에서 빌드해 이렇게 돌린다)
 npm run e2e -- --grep "E-23"          # 일부만
 E2E_UPDATE_BASELINE=1 npm run e2e     # 기준선(e2e.json)과 대표 스크린샷 갱신 (의도한 변화일 때만)
@@ -46,6 +46,7 @@ E2E_UPDATE_BASELINE=1 E2E_SKIP_BUILD=1 npx playwright test e2e/tests/e04-phone-r
 - 데스크톱 배치 시험은 `e06-desktop-layout.spec.ts`(E-06, 31개, S1.8) — 아래 'E-04 와 E-06' 절.
 - 저장된 옛 데이터를 불러올 때의 화면 시험은 `s2-1-off-pedal-mix.spec.ts`(3개, S2.1) — 픽스처 04(꺼진 Delay·Reverb·Chorus 의 Mix 0%)를 열면 기본 Mix 로 보이고, 같은 사용자 프리셋을 불러와도 같으며, 공장 프리셋에서 꺼진 페달의 Mix 가 0% 인 것이 없다. 소리 자체는 오디오 프로브 P-18 이 본다. 기준선(`e2e.json`)에는 기록하지 않는 단언 시험이다.
 - 조절기 이름·범위·기능 시험은 `s2-2-param-schema.spec.ts`(8개, S2.2) — 화면의 모든 슬라이더(15개 카드)를 읽어 `src/audio/params` 스키마의 이름·범위·간격·표시와 견주고(처음 화면, 양 끝값), Fuzz Gate('출력 감쇠' 는 없음, 0 = 끔, 1~100 = 문턱 dB)·EQ Level 0~200(공장 Solo Boost 108)·Delay Sync(D.Time 막힘·동기된 값·Slapback 예외)·BPM·Reverb Decay 6초(7.5초 저장본과 공장 프리셋 둘)·프리셋 패널(막대·Store 탭 없음)을 단언한다. 그래픽 EQ 와 Reverb Tone 의 `aria-valuetext` 는 화면 글자와 일부러 다르게 풀어 쓴 문구라 숫자·단위가 같은지만 본다. 기준선(`e2e.json`)에는 기록하지 않는 단언 시험이다.
+- 연결 오류 안내 시험은 `e07-connect-errors.spec.ts`(E-07, 17개, S2.3) — `getUserMedia` 를 오류 7종으로 거부시키면 설계서 4.13 의 한국어 문구(시험 파일에 글자 그대로 적었다)가 `role="alert"` 로 **화면 안에 전체가** 보이고 영어 원문·오류 이름이 없음(7개), 워클릿 로드 실패(`addModule` 거부)·비보안 출처(`isSecureContext` false)가 장치 시작 실패와 다른 문구임, 골라 둔 장치가 없을 때(OverconstrainedError·NotFoundError) 기본 장치로 다시 연결되고 경고 토스트가 뜨며 선택이 기본 장치로 돌아오고 다음 연결에서 되풀이되지 않음, 기본 장치로도 실패하면 두 번만 시도하고 컨텍스트가 남지 않음, NotReadableError 는 다시 시도하지 않음, 휴대폰 3종(390×844·360×640·412×915)의 입력 탭에서 안내 전체가 화면 안에 보임을 단언한다. 기준선(`e2e.json`)에는 기록하지 않는 단언 시험이다.
 - 타입: `tsconfig.e2e.json` 이 `e2e/` 와 `playwright.config.ts` 를 검사한다(`npx tsc -p tsconfig.e2e.json --noEmit`). `@types/node` 는 앱의 `setTimeout` 반환형을 바꿔 `AutoWahEffect.ts` 를 깨뜨려서 넣지 않고, 쓰는 Node API 만 `e2e/types/node-shim.d.ts` 에 직접 선언했다.
 
 ## E-04 와 E-06 (둘 다 정식 단언)

@@ -2,11 +2,13 @@ import { create } from 'zustand';
 import { AudioEngine } from '../audio/AudioEngine';
 import {
   AudioSession,
+  type StartOutcome,
   type StopDetail,
   type StopReason,
   type StopResult,
 } from '../audio/engine/AudioSession';
 import type { ChannelDecision } from '../audio/engine/channelDecision';
+import { audioErrorMessage, connectErrorMessage, shouldRetryWithDefaultInput } from '../audio/engine/errors';
 import {
   isChannelDecision,
   isInputChannelMode,
@@ -39,6 +41,7 @@ import {
   type MidiMappings,
 } from '../audio/midi';
 import { recordingFormatFromMime, selectRecorderMimeType, WavRecorder, type RecordingFileFormat } from '../audio/recording';
+import { ko } from '../i18n/ko';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { monitorSink } from './monitorStore';
 import { usePedalStore } from './pedalStore';
@@ -714,17 +717,6 @@ interface AudioStore {
   refreshMeters: (inputLevel: LevelReading, outputLevel: LevelReading) => void;
 }
 
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') return '마이크 권한이 차단되었습니다. 브라우저 주소창의 사이트 설정에서 마이크를 허용해 주세요.';
-    if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError' || error.name === 'OverconstrainedError') return '선택한 입력 장치를 찾을 수 없습니다. 연결 상태를 확인하고 장치 목록을 새로고침해 주세요.';
-    if (error.name === 'NotReadableError' || error.name === 'TrackStartError') return '입력 장치를 사용할 수 없습니다. 다른 앱에서 장치를 사용 중인지 확인해 주세요.';
-    if (error.name === 'AbortError') return '오디오 장치 연결이 중단되었습니다. 장치를 확인한 뒤 다시 시도해 주세요.';
-    if (/[가-힣]/.test(error.message)) return error.message;
-  }
-  return '오디오 장치를 시작하지 못했습니다.';
-}
-
 function resetReadings() {
   return {
     inputLevel: silentLevel,
@@ -751,6 +743,35 @@ function loadInputChannels(deviceId: string): void {
     inputChannelDecision: decision ?? 'pending',
     inputChannelSelectable: null,
   });
+}
+
+/**
+ * 입력 장치로 연결한다. 골라 둔 장치가 없으면(OverconstrainedError·NotFoundError) 기본 장치로 한 번 다시 연결한다(설계서 4.13, S2.3).
+ * 첫 시도가 실패하면 AudioSession 이 이미 같은 정리 절차를 지났으므로 두 번째 시도는 깨끗한 상태에서 시작한다.
+ * 기본 장치로 바꿨다면 그 장치에 기억된 채널 설정을 다시 올린다. 두 번째 시도도 실패하면 오류는 그대로 던지되,
+ * 선택은 고른 장치에 그대로 있으므로 채널 설정도 그 장치의 것으로 되돌린다(안 그러면 기본 장치의 판정이 화면에 남고,
+ * 그 상태에서 채널 모드를 바꾸면 고른 장치의 기억으로 저장된다).
+ */
+async function startDeviceSession(deviceId: string): Promise<{ outcome: StartOutcome; fellBackToDefault: boolean }> {
+  try {
+    const outcome = await audioSession.start({ kind: 'device', deviceId: deviceId || undefined });
+    return { outcome, fellBackToDefault: false };
+  } catch (error) {
+    if (!shouldRetryWithDefaultInput(error, deviceId)) throw error;
+  }
+  loadInputChannels('');
+  try {
+    const outcome = await audioSession.start({ kind: 'device' });
+    return { outcome, fellBackToDefault: outcome === 'running' };
+  } catch (error) {
+    loadInputChannels(deviceId);
+    throw error;
+  }
+}
+
+/** 기본 장치로 대신 연결했음을 알린다. 소리가 나오는 입력이 달라졌으므로 경고로 띄운다(내장 마이크가 스피커 소리를 다시 잡을 수 있다). */
+function announceInputFallback(): void {
+  showToast({ kind: 'warning', key: 'input-fallback', message: ko.connect.fellBackToDefault });
 }
 
 /** 지금 선택한 장치의 채널 모드와 자동 판정을 `guitar-pedalboard:io` 의 `inputChannels` 에 남긴다. */
@@ -966,7 +987,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         set({ devices, ...(missing ? { selectedDeviceId: '' } : {}) });
       }
     } catch (error) {
-      set({ error: toErrorMessage(error) });
+      set({ error: audioErrorMessage(error) });
     }
   },
 
@@ -991,11 +1012,12 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
     try {
       await finishActiveRecording('finalize');
-      const outcome = await audioSession.start({ kind: 'device', deviceId: deviceId || undefined });
+      const { outcome, fellBackToDefault } = await startDeviceSession(deviceId);
       if (outcome === 'cancelled') return;
       const devices = await audioEngine.listInputDevices().catch(() => get().devices);
       set({
         devices,
+        ...(fellBackToDefault ? { selectedDeviceId: '' } : {}),
         isRunning: true,
         inputMode: 'device',
         uploadedFileName: null,
@@ -1006,9 +1028,10 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         error: null,
         inputChannelSelectable: audioEngine.getInputInfo()?.selectable ?? null,
       });
+      if (fellBackToDefault) announceInputFallback();
     } catch (error) {
       set({
-        error: toErrorMessage(error),
+        error: connectErrorMessage(error),
         isRunning: false,
         inputMode: 'idle',
         isLoading: false,
@@ -1024,11 +1047,12 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
     try {
       await finishActiveRecording('finalize');
-      const outcome = await audioSession.start({ kind: 'device', deviceId: selectedDeviceId || undefined });
+      const { outcome, fellBackToDefault } = await startDeviceSession(selectedDeviceId);
       if (outcome === 'cancelled') return;
       const devices = await audioEngine.listInputDevices().catch(() => get().devices);
       set({
         devices,
+        ...(fellBackToDefault ? { selectedDeviceId: '' } : {}),
         isRunning: true,
         inputMode: 'device',
         uploadedFileName: null,
@@ -1039,9 +1063,10 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         error: null,
         inputChannelSelectable: audioEngine.getInputInfo()?.selectable ?? null,
       });
+      if (fellBackToDefault) announceInputFallback();
     } catch (error) {
       set({
-        error: toErrorMessage(error),
+        error: connectErrorMessage(error),
         isRunning: false,
         inputMode: 'idle',
         isLoading: false,
@@ -1070,7 +1095,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       });
     } catch (error) {
       set({
-        error: toErrorMessage(error),
+        error: audioErrorMessage(error),
         isRunning: false,
         inputMode: 'idle',
         uploadedFileName: null,
@@ -1099,7 +1124,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       });
     } catch (error) {
       set({
-        error: toErrorMessage(error),
+        error: audioErrorMessage(error),
         isLoading: false,
       });
     }
@@ -1320,7 +1345,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         recordingStatus: 'idle',
         recordedUrl: null,
         recordingElapsed: 0,
-        error: toErrorMessage(error),
+        error: audioErrorMessage(error),
       });
     }
   },
