@@ -2,10 +2,13 @@
 //   · level-meter#in / #out → 입력·출력 레벨(최대 30 Hz). 입력 쪽 채널별 RMS 는 InputStage 의 자동 채널 판정에도 넘긴다.
 //   · output-guard → 하울링 의심(로그용)·차단. 차단 알림이 오면 정지 절차(AudioSession.stop('howl'))를 부르도록 훅을 호출한다.
 //   · limiter → 최근 100 ms 의 최대 이득 감소량.
+//   · 입력 레벨 경고(설계서 4.12, S2.5) → level-meter#in 의 선택 채널 원신호를 LevelWarningJudge 에 넣어 '신호 없음 · 작음 · 큼'을 판정한다.
+//     판정은 이 서비스가 하고 화면은 결과(monitorStore.inputWarning)만 읽는다. 어느 탭이 열려 있는지와 상관없다.
 // 이 클래스는 화면 그리기와 무관하다. 메시지는 오디오 시계로 오고, 미터 탭이 숨겨져 있어도·문서가 숨겨져도 그대로 받는다(C1).
 // 저장소(zustand)를 직접 부르지 않고 MonitorSink 로 내보낸다. 그래서 audio/ 층이 store/ 층을 모른 채 Node 시험이 가짜 sink 로 확인할 수 있다.
 import type { GuardCmd, GuardMode, LevelMsg } from '../engine/guardSpec';
 import { applyLevel, channelPair, SILENT_TAP, type ChannelSelection, type TapState } from './levelReading';
+import { LevelWarningJudge, type InputLevelWarning } from './levelWarning';
 
 export interface GuardStatus {
   /** 엔진이 가드에 지시한 모드. device 일 때만 하울링을 판정한다. */
@@ -21,6 +24,8 @@ export interface MonitorSink {
   setOutput(tap: TapState): void;
   setLimiterGr(grDb: number): void;
   setGuard(patch: Partial<GuardStatus>): void;
+  /** 입력 레벨 경고가 바뀔 때만 부른다(30 Hz 로 부르지 않는다). 경고가 없으면 null. */
+  setInputWarning(warning: InputLevelWarning | null): void;
   /** 세션이 끝났을 때 모두 처음 상태로 */
   reset(): void;
 }
@@ -32,6 +37,12 @@ export interface MonitorHooks {
   inputSelection?: () => ChannelSelection;
   /** 가드가 차단을 마쳤다는 보고(무음 처리는 이미 끝났다). 세션당 한 번만 부른다. */
   onHowlCut?: (freqHz: number) => void;
+  /**
+   * 입력 레벨 경고(4.12)를 판정할 때인가. 장치(마이크·인터페이스) 입력이 열려 있을 때만 true 다. 측정마다 불러 바뀐 것을 곧바로 따른다.
+   * 파일 재생은 false: 경고의 안내('인터페이스 게인')가 파일에는 맞지 않고, 음원 파일은 0 dBFS 근처까지 가도 깨진 것이 아니다.
+   * 없으면 판정하지 않는다.
+   */
+  inputJudging?: () => boolean;
 }
 
 export interface MonitorNodes {
@@ -59,6 +70,8 @@ export class MonitorService {
   private input: TapState = SILENT_TAP;
   private output: TapState = SILENT_TAP;
   private cutNotified = false;
+  private readonly levelWarning = new LevelWarningJudge();
+  private inputWarning: InputLevelWarning | null = null;
 
   constructor(sink: MonitorSink, now: () => number = () => performance.now()) {
     this.sink = sink;
@@ -113,6 +126,8 @@ export class MonitorService {
     this.input = SILENT_TAP;
     this.output = SILENT_TAP;
     this.cutNotified = false;
+    this.levelWarning.reset();
+    this.inputWarning = null;
     if (hadNodes) this.sink.reset();
   }
 
@@ -142,12 +157,22 @@ export class MonitorService {
     }
   }
 
+  /** 선택 채널의 원신호 피크로 입력 레벨 경고를 판정하고, 바뀌었을 때만 sink 에 알린다. */
+  private judgeInputLevel(timeSeconds: number): void {
+    const judging = this.hooks.inputJudging?.() ?? false;
+    const warning = this.levelWarning.update(timeSeconds, this.input.peakDb, judging);
+    if (warning === this.inputWarning) return;
+    this.inputWarning = warning;
+    this.sink.setInputWarning(warning);
+  }
+
   private onLevel(message: LevelMsg): void {
     if (!isNumberArray(message.rmsDb) || !isNumberArray(message.peakDb) || !isFiniteNumber(message.frame)) return;
     if (message.tap === 'in') {
       this.input = applyLevel(this.input, message, this.hooks.inputSelection?.() ?? 'all', this.now());
       this.sink.setInput(this.input);
       this.hooks.onInputLevels?.(channelPair(message.rmsDb), message.frame / this.sampleRate);
+      this.judgeInputLevel(message.frame / this.sampleRate);
     } else if (message.tap === 'out') {
       this.output = applyLevel(this.output, message, 'all', this.now());
       this.sink.setOutput(this.output);

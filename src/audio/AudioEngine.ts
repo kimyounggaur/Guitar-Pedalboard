@@ -59,6 +59,7 @@ const NOOP_MONITOR_SINK: MonitorSink = {
   setOutput: () => undefined,
   setLimiterGr: () => undefined,
   setGuard: () => undefined,
+  setInputWarning: () => undefined,
   reset: () => undefined,
 };
 const CHAIN_FADE_SECONDS = 0.008;
@@ -898,6 +899,8 @@ export class AudioEngine {
         onInputLevels: (rmsDb, timeSeconds) => this.inputStage?.onChannelLevels(rmsDb, timeSeconds),
         inputSelection: () => this.inputStage?.meteredChannels ?? 'all',
         onHowlCut: (freqHz) => this.howlHandler?.(freqHz),
+        // 입력 레벨 경고(4.12)는 장치(마이크·인터페이스) 입력일 때만 판정한다. 파일 재생과 세션 밖에서는 경고가 없다.
+        inputJudging: () => this.stream !== null,
       },
       context.sampleRate,
     );
