@@ -120,5 +120,37 @@ for (const screen of PHONE_PROFILES) {
       await expect(page.locator('#mobile-control-panels')).toBeHidden();
       expectAllReachable(await measureSwitchesAboveDock(page), `${screen.name} 펼침 → 다시 눌러 접은 뒤`);
     });
+
+    // L-54(S1.7): 순서 변경 알림 `.chain-toast` 는 예전에는 화면 아래에서 고정 82 px 라 펼친 도크(최대 50dvh)와 겹쳤다.
+    // 알림은 페달 순서를 바꿨을 때만 생기므로, 같은 클래스의 요소를 문서 끝에 직접 붙여 규칙(CSS)이 도크 위에 놓는지만 잰다(React 영역 밖).
+    test(`E-04 ${screen.name} 순서 변경 알림(.chain-toast)은 도크가 접혔든 펼쳐졌든 도크 위쪽 끝 바로 위에 놓인다`, async ({ page }) => {
+      await openApp(page);
+      await page.evaluate(() => {
+        const toast = document.createElement('div');
+        toast.id = 'e04-chain-toast-probe';
+        toast.className = 'chain-toast';
+        toast.setAttribute('role', 'status');
+        toast.textContent = '페달 순서가 변경되었습니다.';
+        document.body.appendChild(toast);
+      });
+      const measure = () =>
+        page.evaluate(() => {
+          const toast = document.querySelector('#e04-chain-toast-probe')?.getBoundingClientRect();
+          const dock = document.querySelector('.mobile-control-dock')?.getBoundingClientRect();
+          if (!toast || !dock) throw new Error('알림이나 도크가 없다');
+          return { toastTop: toast.top, toastBottom: toast.bottom, dockTop: dock.top };
+        });
+
+      for (const tab of ['pedals', ...EXPANDED_TABS] as const) {
+        if (tab === 'pedals') await setMobileDock(page, false);
+        else await setMobileDock(page, true, tab);
+        const { toastTop, toastBottom, dockTop } = await measure();
+        const gap = dockTop - toastBottom;
+        const label = `${screen.name} ${tab === 'pedals' ? '도크 접힘' : `도크 펼침(${tab} 탭)`}: 알림 ${Math.round(toastTop)}~${Math.round(toastBottom)} px, 도크 윗선 ${Math.round(dockTop)} px`;
+        expect(gap, `${label} — 알림 아래끝이 도크 윗선과 겹치면 안 된다`).toBeGreaterThanOrEqual(11);
+        expect(gap, `${label} — 알림이 도크에서 너무 떨어져 있다`).toBeLessThanOrEqual(14);
+        expect(toastTop, `${label} — 알림이 화면 위로 넘치면 안 된다`).toBeGreaterThanOrEqual(0);
+      }
+    });
   });
 }

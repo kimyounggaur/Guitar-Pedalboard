@@ -202,7 +202,9 @@ assert.match(responsiveCss, /scroll-snap-align: start/);
 assert.match(responsiveCss, /position: fixed[\s\S]*bottom: 0[\s\S]*\.mobile-bottom-tabs/);
 assert.match(responsiveCss, /env\(safe-area-inset-bottom\)/);
 assert.match(responsiveCss, /min-height: 44px/);
-assert.match(responsiveCss, /\.chain-toast[\s\S]*bottom: calc\(82px \+ env\(safe-area-inset-bottom\)\)/);
+// S1.7(L-54): 순서 변경 알림은 도크 높이를 따라 도크 위에 놓인다(펼친 도크와 겹치던 고정 82 px 를 대신한다).
+assert.match(responsiveCss, /\.chain-toast \{[^}]*bottom: calc\(var\(--dock-h, 58px\) \+ 12px\);/);
+assert.doesNotMatch(responsiveCss, /bottom: calc\(82px/);
 assert.match(responsiveCss, /\.app-shell[\s\S]*overflow-x: clip/);
 assert.match(responsiveCss, /\.workspace[\s\S]*overflow-x: clip/);
 assert.match(responsiveCss, /\.board-section[\s\S]*overflow-x: clip/);
