@@ -1,14 +1,8 @@
 import { BaseEffect } from './BaseEffect';
+import { delayTimeSeconds } from '../params/definitions/delay';
 import type { DelayParams, PedalState } from '../types';
 import { clamp } from '../utils/db';
 import { smoothParam } from '../utils/smoothing';
-
-const divisionBeats: Record<DelayParams['division'], number> = {
-  '1/4': 1,
-  '1/8': 0.5,
-  'dotted1/8': 0.75,
-  '1/16': 0.25,
-};
 
 export class DelayEffect extends BaseEffect {
   private readonly delay: DelayNode;
@@ -94,7 +88,7 @@ export class DelayEffect extends BaseEffect {
   override update(pedal: PedalState): void {
     super.update(pedal);
     const params = pedal.params as DelayParams;
-    const delayTime = this.getDelayTime(params);
+    const delayTime = delayTimeSeconds(params);
     const feedback = params.mode === 'slapback' ? Math.min(params.feedback, 0.22) : params.feedback;
     const feedbackAmount = clamp(feedback, 0, 0.95);
     const isPingPong = params.mode === 'pingpong';
@@ -115,14 +109,6 @@ export class DelayEffect extends BaseEffect {
     smoothParam(this.pingPongRightFeedback.gain, isPingPong ? feedbackAmount : 0, this.context);
     smoothParam(this.monoPathGain.gain, isPingPong ? 0 : 1, this.context);
     smoothParam(this.pingPongPathGain.gain, isPingPong ? 1 : 0, this.context);
-  }
-
-  private getDelayTime(params: DelayParams): number {
-    if (params.mode === 'slapback') return clamp(params.timeMs / 1000, 0.02, 0.14);
-    if (!params.sync) return clamp(params.timeMs / 1000, 0.02, 2);
-
-    const secondsPerBeat = 60 / clamp(params.bpm, 40, 240);
-    return clamp(secondsPerBeat * divisionBeats[params.division], 0.02, 2);
   }
 
   override dispose(): void {

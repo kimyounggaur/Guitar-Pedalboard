@@ -11,14 +11,19 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
     ];
   }
 
-  constructor() {
+  constructor(options) {
     super();
+    // 옵션이 없으면(Noise Gate 페달) 닫힌 채로 시작하고 상태를 메인 스레드에 알린다.
+    // 퍼즈 게이트(S2.2)는 같은 워클릿을 열린 채로 시작하고(Gate 0 이면 입력이 한 샘플도 바뀌지 않는다) 메시지를 보내지 않는 방식으로 쓴다.
+    const processorOptions = (options && options.processorOptions) || {};
+    const startOpen = processorOptions.startOpen === true;
+    this.silent = processorOptions.silent === true;
     this.envelope = 0;
-    this.gateGain = 0;
-    this.targetOpen = false;
+    this.gateGain = startOpen ? 1 : 0;
+    this.targetOpen = startOpen;
     this.holdSamples = 0;
     this.framesUntilStatePost = 0;
-    this.state = 'Closed';
+    this.state = startOpen ? 'Open' : 'Closed';
     this.lastProcessFrame = null;
     this.lastQuantumSize = 128;
     this.processCallsSinceGlitchReport = 0;
@@ -34,7 +39,7 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
   setState(state) {
     if (state !== this.state) {
       this.state = state;
-      this.port.postMessage({ type: 'gate-state', state });
+      if (!this.silent) this.port.postMessage({ type: 'gate-state', state });
     }
   }
 
@@ -62,11 +67,13 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
 
     if (this.processCallsSinceGlitchReport >= 100) {
       this.processCallsSinceGlitchReport = 0;
-      this.port.postMessage({
-        type: 'glitch-report',
-        glitchCount: this.glitchCount,
-        missedFrames: this.missedFrames,
-      });
+      if (!this.silent) {
+        this.port.postMessage({
+          type: 'glitch-report',
+          glitchCount: this.glitchCount,
+          missedFrames: this.missedFrames,
+        });
+      }
     }
 
     if (!input || input.length === 0 || !output || output.length === 0) {
@@ -126,7 +133,7 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
     this.framesUntilStatePost -= frames;
     if (this.framesUntilStatePost <= 0) {
       this.framesUntilStatePost = Math.floor(sampleRate / 20);
-      this.port.postMessage({ type: 'gate-state', state: this.state });
+      if (!this.silent) this.port.postMessage({ type: 'gate-state', state: this.state });
     }
 
     return true;

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import type { PedalParamValue, PedalParams, PedalState, PedalType } from '../audio/types';
 import { clampTrimDb, roundTrimDb } from '../audio/offline/loudnessSpec';
-import { restoreMixOfOffPedals } from '../presets/normalize';
+import { clampPedalsToSchema, restoreMixOfOffPedals } from '../presets/normalize';
 
 export const SCHEMA_VERSION = 11;
 
@@ -875,8 +875,11 @@ function mergeStoredPedals(storedPedals: StoredPedal[] | null): PedalState[] {
     }
   });
 
-  // M2(S2.1): 꺼져 있고 Mix 가 0 인 페달은 기본 Mix 로 되돌린다. 저장소에서 읽은 작업 상태와 프리셋(저장·가져오기)이 모두 여기를 지난다.
-  return restoreMixOfOffPedals(restored, (pedalId) => {
+  // 저장소에서 읽은 작업 상태와 프리셋(저장·가져오기)이 모두 여기를 지난다.
+  // M3(S2.2): 스키마 범위를 벗어난 숫자(예: Reverb Decay 7.5)는 범위 안으로 맞춘다.
+  // M2(S2.1): 꺼져 있고 Mix 가 0 인 페달은 기본 Mix 로 되돌린다.
+  // 순서는 M3 → M2 다. 꺼진 페달의 Mix 가 범위 밖 음수(−5 등, 손으로 고친 파일)이면 M3 이 0 으로 맞춘 뒤에야 '꺼짐 + Mix 0' 이 되므로 M2 가 뒤에 와야 잡는다(기록 L-91).
+  return restoreMixOfOffPedals(clampPedalsToSchema(restored), (pedalId) => {
     const mix = defaultsById.get(pedalId)?.params.mix;
     return typeof mix === 'number' ? mix : undefined;
   });

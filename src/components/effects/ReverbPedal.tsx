@@ -4,7 +4,10 @@ import { useKnobDrag } from '../../hooks/useKnobDrag';
 import type { CSSProperties } from 'react';
 import type { PedalParamValue, ReverbParams } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { formatParamValue, getParamDef } from '../../audio/params';
 import { ToggleSwitch } from '../ToggleSwitch';
+
+const decayDef = getParamDef('reverb', 'decay');
 
 interface ReverbPedalProps {
   params: ReverbParams;
@@ -71,11 +74,11 @@ export function ReverbPedal({ params, onChange }: ReverbPedalProps) {
           />
           <ReverbKnob
             label="Decay"
-            value={Math.min(params.decay, 6)}
-            min={0.2}
-            max={6}
-            step={0.1}
-            displayValue={`${Math.min(params.decay, 6).toFixed(1)}s`}
+            value={Math.min(params.decay, decayDef.max)}
+            min={decayDef.min}
+            max={decayDef.max}
+            step={decayDef.step}
+            displayValue={formatParamValue(decayDef, Math.min(params.decay, decayDef.max))}
             onChange={(value) => onChange('decay', value)}
           />
           <ReverbKnob

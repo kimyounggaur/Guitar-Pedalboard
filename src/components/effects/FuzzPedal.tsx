@@ -2,6 +2,7 @@ import { KnobNumberInput } from '../KnobNumberInput';
 import { knobDefault } from '../knobDefaults';
 import type { CSSProperties } from 'react';
 import type { FuzzParams, PedalParamValue } from '../../audio/types';
+import { formatParamValue, getParamDef } from '../../audio/params';
 import { SliderControl } from '../SliderControl';
 import { useKnobDrag } from '../../hooks/useKnobDrag';
 import { initialPedals } from '../../store/pedalStore';
@@ -21,6 +22,9 @@ interface FuzzKnobProps {
   ariaValueText?: string;
   onChange: (value: number) => void;
 }
+
+// Gate 의 이름·범위·표시('끔' 또는 문턱 dB)는 스키마가 정한다(S2.2, D15).
+const gateDef = getParamDef('fuzz', 'gate');
 
 const fuzzModes: FuzzParams['mode'][] = ['classic', 'gated', 'velcro'];
 const fuzzModeLabels: Record<FuzzParams['mode'], string> = {
@@ -133,13 +137,13 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
           onChange={(value) => onChange('bias', value)}
         />
         <SliderControl
-          label="출력 감쇠"
+          label={gateDef.label}
           value={params.gate}
           defaultValue={knobDefault('fuzz', 'gate')}
-          min={0}
-          max={100}
-          step={1}
-          displayValue={`${Math.round(params.gate)}%`}
+          min={gateDef.min}
+          max={gateDef.max}
+          step={gateDef.step}
+          displayValue={formatParamValue(gateDef, params.gate)}
           onChange={(value) => onChange('gate', value)}
         />
         <SliderControl

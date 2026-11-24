@@ -281,13 +281,13 @@ export const defaultPresets: PresetListItem[] = [
     compressor: on({ threshold: -32, ratio: 2.6, sustain: 48, mix: 72 }),
     eq: on({ lowCut: 95, bassGain: -1, midFreq: 1000, midGain: -1, trebleGain: 2, presenceGain: 3 }),
     delay: on({ mode: 'tape', sync: true, bpm: 90, division: 'dotted1/8', feedback: 0.62, mix: 48, tone: 38 }),
-    reverb: on({ mode: 'ambient', decay: 6.2, preDelay: 65, mix: 45, highCut: 8200 }),
+    reverb: on({ mode: 'ambient', decay: 6, preDelay: 65, mix: 45, highCut: 8200 }),
   }),
   preset('factory-tape-swell', 'ambient', 'Tape Swell', '테이프 딜레이와 긴 프리딜레이로 천천히 퍼지는 톤입니다.', ['ambient', 'tape'], {
     compressor: on({ threshold: -36, ratio: 3, sustain: 60, mix: 76 }),
     eq: on({ lowCut: 100, bassGain: -1.5, midFreq: 900, midGain: -1.2, trebleGain: 1.5, presenceGain: 2.5 }),
     delay: on({ mode: 'tape', timeMs: 620, feedback: 0.54, mix: 42, tone: 34 }),
-    reverb: on({ mode: 'ambient', decay: 7.5, preDelay: 90, mix: 48, highCut: 7600 }),
+    reverb: on({ mode: 'ambient', decay: 6, preDelay: 90, mix: 48, highCut: 7600 }),
   }),
   preset('factory-post-rock-wash', 'ambient', 'Post Rock Wash', '코드가 뒤로 번지는 포스트록 클린 공간계입니다.', ['post-rock', 'wash'], {
     drive: on({ mode: 'overdrive', drive: 20, tone: 50, level: 96, mix: 36, bias: 0.04 }),
