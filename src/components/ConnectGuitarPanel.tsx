@@ -1,19 +1,13 @@
 import { useEffect, useState } from 'react';
+import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { useAudioStore } from '../store/audioStore';
 import { DeviceSelector } from './DeviceSelector';
 import { MidiAdvancedControls } from './MidiAdvancedControls';
 import { ToggleSwitch } from './ToggleSwitch';
 
-const MOBILE_AUDIO_NOTICE_KEY = 'guitar-pedalboard:mobile-audio-notice-dismissed';
-
+/** 모바일 안내를 닫았는지. 저장소를 못 써도(읽기 실패) 던지지 않고 '아직 안 닫음'으로 본다. 값은 문자열 'true' 그대로 저장된다. */
 function readMobileNoticeDismissed(): boolean {
-  if (typeof window === 'undefined') return false;
-
-  try {
-    return window.localStorage.getItem(MOBILE_AUDIO_NOTICE_KEY) === 'true';
-  } catch {
-    return false;
-  }
+  return safeStorage.getRaw(STORAGE_KEYS.mobileAudioNotice) === 'true';
 }
 
 function formatPlaybackTime(seconds: number): string {
@@ -82,11 +76,8 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
 
   const dismissMobileNotice = () => {
     setIsMobileNoticeDismissed(true);
-    try {
-      window.localStorage.setItem(MOBILE_AUDIO_NOTICE_KEY, 'true');
-    } catch {
-      // The notice remains dismissed for this session when storage is unavailable.
-    }
+    // 저장하지 못해도(차단·가득 참) 이번 방문 동안은 닫힌 채로 있다 — SafeStorage 가 메모리에 값을 들고 있고 안내는 한 번만 띄운다.
+    safeStorage.setRaw(STORAGE_KEYS.mobileAudioNotice, 'true');
   };
 
   return (

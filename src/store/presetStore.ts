@@ -1,5 +1,5 @@
-import { notifyStorageFailure } from './storageNotice';
 import { create } from 'zustand';
+import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { AudioEngine } from '../audio/AudioEngine';
 import { clampTrimDb } from '../audio/offline/loudnessSpec';
 import type { PedalParamValue, PedalState, Preset } from '../audio/types';
@@ -13,7 +13,6 @@ import {
 } from './pedalStore';
 import { useAudioStore } from './audioStore';
 
-const STORAGE_KEY = 'web-guitar-pedalboard-presets';
 const FACTORY_TIMESTAMP = 1767225600000;
 
 /** 팩토리 프리셋의 음량 보정(dB, S1.4c). `npm run trims` 가 만든 파일이고, 목록에 없는 프리셋은 보정 없음(0)이다(M6). */
@@ -372,10 +371,6 @@ export const defaultPresets: PresetListItem[] = [
   }),
 ];
 
-function canUseStorage(): boolean {
-  try { return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'; } catch { return false; }
-}
-
 function isPreset(value: unknown): value is Preset {
   const preset = value as Preset;
 
@@ -445,24 +440,13 @@ export function serializePresetPayload(
 }
 
 function readUserPresets(): Preset[] {
-  if (!canUseStorage()) return [];
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return parsePresetJson(raw);
-  } catch {
-    return [];
-  }
+  // 읽지 못하는 목록은 SafeStorage 가 원문을 보관해 두고 한 번 알린 뒤 빈 목록을 돌려 준다 — 다음 저장이 원문을 덮어써도 보관본이 남는다.
+  return safeStorage.read<Preset[]>(STORAGE_KEYS.presets, parsePresetJson, []);
 }
 
 function writeUserPresets(presets: Preset[]): void {
-  try {
-    if (!canUseStorage()) throw new Error('Storage unavailable');
-    window.localStorage.setItem(STORAGE_KEY, serializePresetPayload(presets));
-  } catch {
-    notifyStorageFailure();
-  }
+  // 값의 모양(version·presets)은 내보내기와 같은 직렬화를 그대로 쓴다. 실패는 SafeStorage 가 한 번 알리고 메모리에 유지한다.
+  safeStorage.setRaw(STORAGE_KEYS.presets, serializePresetPayload(presets));
 }
 
 function createId(): string {

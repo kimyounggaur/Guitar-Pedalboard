@@ -1,8 +1,14 @@
 // 화면 한쪽에 잠깐 떴다 사라지는 안내(토스트). 정지 이유 안내(S1.2)가 처음 쓰고,
-// 이후 Step(저장 실패 S1.7, 실행 취소 S2.8)이 같은 구조를 재사용한다.
+// 저장 문제 안내·예기치 못한 오류 안내(S1.7)와 이후 실행 취소(S2.8)가 같은 구조를 재사용한다.
 import { create } from 'zustand';
 
 export type ToastKind = 'info' | 'success' | 'warning' | 'error';
+
+/** 토스트 안의 버튼 하나(예: '오류 정보 복사', 이후 '되돌리기'). 누르면 `onAction` 을 부르고 토스트를 닫는다. */
+export interface ToastAction {
+  label: string;
+  onAction: () => void;
+}
 
 export interface Toast {
   id: number;
@@ -12,6 +18,8 @@ export interface Toast {
   key: string;
   /** 0 이면 사용자가 닫을 때까지 남는다. */
   durationMs: number;
+  /** 있으면 닫기 버튼 앞에 동작 버튼이 하나 붙는다. */
+  action?: ToastAction;
 }
 
 export interface ToastInput {
@@ -19,6 +27,7 @@ export interface ToastInput {
   kind?: ToastKind;
   key?: string;
   durationMs?: number;
+  action?: ToastAction;
 }
 
 /** 정보·성공은 5초, 경고는 10초, 오류는 닫을 때까지. */
@@ -61,6 +70,7 @@ export const useToastStore = create<ToastStore>((set, get) => ({
       message: input.message,
       key,
       durationMs: input.durationMs ?? DEFAULT_TOAST_DURATION_MS[kind],
+      ...(input.action ? { action: input.action } : {}),
     };
 
     const kept: Toast[] = [];

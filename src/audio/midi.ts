@@ -1,5 +1,3 @@
-export const MIDI_STORAGE_KEY = 'guitar-pedalboard:midi';
-
 export interface MidiCcMapping {
   channel: number;
   mode?: 'momentary' | 'toggle';

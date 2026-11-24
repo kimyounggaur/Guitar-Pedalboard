@@ -1,9 +1,7 @@
-import { notifyStorageFailure } from './storageNotice';
 import { create } from 'zustand';
+import { safeStorage, STORAGE_KEYS } from '../persistence';
 import type { PedalParamValue, PedalParams, PedalState, PedalType } from '../audio/types';
 import { clampTrimDb, roundTrimDb } from '../audio/offline/loudnessSpec';
-
-const STORAGE_KEY = 'guitar-pedalboard:pedals';
 
 export const SCHEMA_VERSION = 11;
 
@@ -311,10 +309,6 @@ function stripBypassParams(params: Record<string, PedalParamValue>): Record<stri
   return nextParams;
 }
 
-function canUseStorage(): boolean {
-  try { return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'; } catch { return false; }
-}
-
 function toStoredPedals(pedals: PedalState[]): StoredPedal[] {
   return pedals.map((pedal) => ({
     id: pedal.id,
@@ -323,10 +317,6 @@ function toStoredPedals(pedals: PedalState[]): StoredPedal[] {
     params: stripBypassParams(pedal.params),
   }));
 }
-
-let pendingPedalSave: ReturnType<typeof setTimeout> | undefined;
-let pendingPedals: PedalState[] | undefined;
-let pendingTrimDb = 0;
 
 /** 저장본을 만든다. 음량 보정이 0 이면 필드를 쓰지 않아, 보정이 없는 저장본은 이전 버전과 똑같은 모양이다. */
 function buildStoredState(pedals: PedalState[], presetTrimDb: number): StoredState {
@@ -339,32 +329,14 @@ function buildStoredState(pedals: PedalState[], presetTrimDb: number): StoredSta
   return storedState;
 }
 
+/** 지금 쓴다(밀려 있던 지연 저장은 SafeStorage 가 이 값으로 대신한다). 실패는 SafeStorage 가 한 번 알리고 메모리에 유지한다. */
 function savePedals(pedals: PedalState[], presetTrimDb: number): void {
-  if (pendingPedalSave !== undefined) clearTimeout(pendingPedalSave);
-  pendingPedalSave = undefined;
-  pendingPedals = undefined;
-  const storedState = buildStoredState(pedals, presetTrimDb);
-  try {
-    if (!canUseStorage()) throw new Error('Storage unavailable');
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(storedState));
-  } catch {
-    notifyStorageFailure();
-  }
+  safeStorage.set(STORAGE_KEYS.pedals, buildStoredState(pedals, presetTrimDb));
 }
 
+/** 노브를 돌리는 동안에는 쓰지 않고 마지막 변경 300 ms 뒤에 한 번 쓴다. 페이지가 가려지거나 닫히면 SafeStorage 가 바로 쓴다. */
 function schedulePedalSave(pedals: PedalState[], presetTrimDb: number): void {
-  if (pendingPedalSave !== undefined) clearTimeout(pendingPedalSave);
-  pendingPedals = pedals;
-  pendingTrimDb = presetTrimDb;
-  pendingPedalSave = setTimeout(() => {
-    if (pendingPedals) savePedals(pendingPedals, pendingTrimDb);
-  }, 300);
-}
-
-if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-  window.addEventListener('pagehide', () => {
-    if (pendingPedals) savePedals(pendingPedals, pendingTrimDb);
-  });
+  safeStorage.setDebounced(STORAGE_KEYS.pedals, () => buildStoredState(pedals, presetTrimDb), 300);
 }
 
 function isParamValue(value: unknown): value is PedalParamValue {
@@ -863,16 +835,12 @@ export function migrateStoredState(input: StoredState): StoredState {
 }
 
 function readStoredState(): StoredState | null {
-  if (!canUseStorage()) return null;
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return migrateStoredState(normalizeStoredState(JSON.parse(raw)));
-  } catch (error) {
-    console.warn('저장된 페달 설정을 복원하지 못해 기본값을 사용합니다.', error);
-    return null;
-  }
+  // 읽지 못하는 값(깨졌거나 더 새로운 버전)은 SafeStorage 가 보관해 두고 한 번 알린 뒤 null 을 돌려 준다 — 기본값으로 시작한다.
+  return safeStorage.read<StoredState | null>(
+    STORAGE_KEYS.pedals,
+    (raw) => migrateStoredState(normalizeStoredState(JSON.parse(raw))),
+    null,
+  );
 }
 
 function mergeStoredPedals(storedPedals: StoredPedal[] | null): PedalState[] {

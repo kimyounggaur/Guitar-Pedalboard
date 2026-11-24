@@ -1,4 +1,3 @@
-import { notifyStorageFailure } from './storageNotice';
 import { create } from 'zustand';
 import { AudioEngine } from '../audio/AudioEngine';
 import {
@@ -33,22 +32,21 @@ import {
 } from '../audio/tapTempo';
 import {
   createMidiMapping,
-  MIDI_STORAGE_KEY,
   midiMappingMatches,
-  parseMidiMappingsJson,
   parseMidiMessage,
+  validateMidiMappings,
   type MidiDeviceInfo,
   type MidiMappings,
 } from '../audio/midi';
 import { recordingFormatFromMime, selectRecorderMimeType, WavRecorder, type RecordingFileFormat } from '../audio/recording';
+import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { monitorSink } from './monitorStore';
 import { usePedalStore } from './pedalStore';
 import { showToast } from './toastStore';
 
-const IO_STORAGE_KEY = 'guitar-pedalboard:io';
-const OUTPUT_STORAGE_KEY = 'guitar-pedalboard:output-device';
+/** 마지막으로 고른 출력 장치 id. JSON 이 아니라 문자열 그대로 저장된다(S1.7 에서도 형식은 그대로). */
 function readOutputDevice(): string {
-  try { return typeof window === 'undefined' ? '' : window.localStorage.getItem(OUTPUT_STORAGE_KEY) ?? ''; } catch { return ''; }
+  return safeStorage.getRaw(STORAGE_KEYS.outputDevice) ?? '';
 }
 const initialOutputDevice = readOutputDevice();
 const RECORDING_TIMER_INTERVAL_MS = 250;
@@ -115,52 +113,42 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/** 저장된 입출력 설정을 해석한다. JSON 이 아니거나 객체가 아니면 던진다 — SafeStorage 가 깨진 값으로 보관하고 기본값을 쓴다. */
+function parseIoSettings(raw: string): IoSettings {
+  const parsed: unknown = JSON.parse(raw);
+  if (!parsed || typeof parsed !== 'object') throw new Error('저장된 입출력 설정의 모양이 올바르지 않습니다.');
+
+  const stored = parsed as Record<string, unknown>;
+  const inputGainDb =
+    typeof stored.inputGainDb === 'number' && Number.isFinite(stored.inputGainDb)
+      ? clamp(stored.inputGainDb, -24, 24)
+      : defaultIoSettings.inputGainDb;
+  const masterVolume =
+    typeof stored.masterVolume === 'number' && Number.isFinite(stored.masterVolume)
+      ? clamp(stored.masterVolume, 0, 1)
+      : defaultIoSettings.masterVolume;
+
+  return {
+    inputGainDb,
+    masterVolume,
+    howlProtectionEnabled:
+      typeof stored.howlProtectionEnabled === 'boolean'
+        ? stored.howlProtectionEnabled
+        : defaultIoSettings.howlProtectionEnabled,
+    tuningReferenceHz:
+      typeof stored.tuningReferenceHz === 'number' && Number.isFinite(stored.tuningReferenceHz)
+        ? Math.round(clamp(stored.tuningReferenceHz, 400, 480))
+        : defaultIoSettings.tuningReferenceHz,
+    inputChannels: readInputChannels(stored.inputChannels),
+  };
+}
+
 function readIoSettings(): IoSettings {
-  if (typeof window === 'undefined') return { ...defaultIoSettings };
-
-  try {
-    const raw = window.localStorage.getItem(IO_STORAGE_KEY);
-    if (!raw) return { ...defaultIoSettings };
-
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return { ...defaultIoSettings };
-
-    const stored = parsed as Record<string, unknown>;
-    const inputGainDb =
-      typeof stored.inputGainDb === 'number' && Number.isFinite(stored.inputGainDb)
-        ? clamp(stored.inputGainDb, -24, 24)
-        : defaultIoSettings.inputGainDb;
-    const masterVolume =
-      typeof stored.masterVolume === 'number' && Number.isFinite(stored.masterVolume)
-        ? clamp(stored.masterVolume, 0, 1)
-        : defaultIoSettings.masterVolume;
-
-    return {
-      inputGainDb,
-      masterVolume,
-      howlProtectionEnabled:
-        typeof stored.howlProtectionEnabled === 'boolean'
-          ? stored.howlProtectionEnabled
-          : defaultIoSettings.howlProtectionEnabled,
-      tuningReferenceHz:
-        typeof stored.tuningReferenceHz === 'number' && Number.isFinite(stored.tuningReferenceHz)
-          ? Math.round(clamp(stored.tuningReferenceHz, 400, 480))
-          : defaultIoSettings.tuningReferenceHz,
-      inputChannels: readInputChannels(stored.inputChannels),
-    };
-  } catch {
-    return { ...defaultIoSettings };
-  }
+  return safeStorage.read<IoSettings>(STORAGE_KEYS.io, parseIoSettings, { ...defaultIoSettings });
 }
 
 function persistIoSettings(settings: IoSettings): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.setItem(IO_STORAGE_KEY, JSON.stringify(settings));
-  } catch {
-    notifyStorageFailure();
-  }
+  safeStorage.set(STORAGE_KEYS.io, settings);
 }
 
 function isSamePitch(left: PitchReading, right: PitchReading): boolean {
@@ -200,23 +188,12 @@ let midiSessionGeneration = 0;
 const attachedMidiInputs = new Map<string, MIDIInput>();
 
 function readMidiMappings(): MidiMappings {
-  if (typeof window === 'undefined') return {};
-
-  try {
-    return parseMidiMappingsJson(window.localStorage?.getItem(MIDI_STORAGE_KEY) ?? null);
-  } catch {
-    return {};
-  }
+  // JSON 이 아니면 깨진 값으로 보관한다. 모양이 맞지 않는 항목은 예전처럼 걸러 낸다(validateMidiMappings).
+  return safeStorage.read<MidiMappings>(STORAGE_KEYS.midi, (raw) => validateMidiMappings(JSON.parse(raw)), {});
 }
 
 function persistMidiMappings(mappings: MidiMappings): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage?.setItem(MIDI_STORAGE_KEY, JSON.stringify(mappings));
-  } catch {
-    notifyStorageFailure();
-  }
+  safeStorage.set(STORAGE_KEYS.midi, mappings);
 }
 
 let midiAdvancedHandler: ((data: Uint8Array) => boolean) | null = null;
@@ -824,6 +801,21 @@ function stopSession(reason: StopReason, detail: StopDetail = {}): Promise<StopR
   return audioSession.stop(reason, detail);
 }
 
+/**
+ * 오류 경계가 화면을 잃었을 때 소리부터 끈다(S1.7, 설계서 4.8절). 마이크 표시등이 켜진 채 오류 화면만 남는 일을 막는다.
+ * 정리 절차가 실패해도 던지지 않는다 — 오류 화면을 보여 주는 일이 먼저다. 안내(토스트)는 띄우지 않는다('error' 이유는 조용하다).
+ */
+export function stopSessionForError(): Promise<void> {
+  try {
+    return stopSession('error').then(
+      () => undefined,
+      () => undefined,
+    );
+  } catch {
+    return Promise.resolve();
+  }
+}
+
 export const useAudioStore = create<AudioStore>((set, get) => ({
   devices: [],
   selectedDeviceId: '',
@@ -982,7 +974,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     try {
       await audioEngine.setOutputDevice(deviceId);
       set({ selectedOutputDeviceId: deviceId, error: null });
-      try { window.localStorage.setItem(OUTPUT_STORAGE_KEY, deviceId); } catch { notifyStorageFailure(); }
+      safeStorage.setRaw(STORAGE_KEYS.outputDevice, deviceId);
     } catch {
       set({ error: '출력 장치를 변경할 수 없습니다. 장치 연결과 브라우저 권한을 확인해 주세요.' });
     }

@@ -1,0 +1,84 @@
+/* 앱 전체 오류 화면(S1.7, AppErrorBoundary). 렌더링이 깨진 뒤에도 읽히도록 화면 하나만 쓰는 단순한 배치다. */
+.app-error-screen {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  max-width: 640px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 32px) 20px 32px;
+  color: #e8edf4;
+  line-height: 1.6;
+}
+
+.app-error-screen:focus {
+  outline: none;
+}
+
+.app-error-screen h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.app-error-screen h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.app-error-screen p {
+  margin: 0;
+}
+
+.app-error-detail {
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.app-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.app-error-screen button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: inherit;
+  font-weight: 800;
+}
+
+.app-error-screen button.app-error-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #06101f;
+}
+
+.app-error-screen button.app-error-danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #1c0704;
+}
+
+.app-error-confirm {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  background: rgba(255, 107, 95, 0.08);
+}
+
+.app-error-screen textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: inherit;
+  font: 0.8rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

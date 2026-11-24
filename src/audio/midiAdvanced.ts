@@ -1,4 +1,3 @@
-export const MIDI_ADVANCED_KEY = 'guitar-pedalboard:midi-advanced';
 export interface MidiAdvancedConfig {
   channel: number;
   volumeCc: number | null;
@@ -20,10 +19,6 @@ export function validateMidiAdvanced(raw: unknown): MidiAdvancedConfig {
     }
   }
   return { channel, volumeCc, wahCc, programs };
-}
-export function readMidiAdvanced(): MidiAdvancedConfig {
-  try { return validateMidiAdvanced(JSON.parse(localStorage.getItem(MIDI_ADVANCED_KEY) ?? '{}')); }
-  catch { return validateMidiAdvanced(null); }
 }
 export function parseAdvancedMessage(data: ArrayLike<number> | null | undefined, config: MidiAdvancedConfig): { type: 'program' | 'volume' | 'wah'; value: number } | null {
   if (!data || data.length < 2) return null;

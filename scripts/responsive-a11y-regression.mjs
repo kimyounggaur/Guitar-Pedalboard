@@ -26,6 +26,7 @@ const [
   indexSource,
   shortcutsSource,
   dockHeightSource,
+  keysSource,
 ] = await Promise.all([
   readFile(new URL('../src/components/AppShell.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/PedalBoard.tsx', import.meta.url), 'utf8'),
@@ -45,6 +46,7 @@ const [
   readFile(new URL('../index.html', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/GlobalKeyboardShortcuts.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/hooks/useDockHeight.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/persistence/keys.ts', import.meta.url), 'utf8'),
 ]);
 
 assert.match(appShellSource, /MOBILE_LAYOUT_QUERY = '\(max-width: 767px\)'/);
@@ -132,10 +134,14 @@ assert.match(meterSource, /const boundedCents = Math\.round\(Math\.min\(50, Math
 assert.match(meterSource, /aria-valuenow=\{boundedCents\}/);
 assert.match(meterSource, /aria-valuetext=\{tuningStatusLabel\}[\s\S]{0,120}role="meter"/);
 
-assert.match(connectSource, /guitar-pedalboard:mobile-audio-notice-dismissed/);
+assert.match(connectSource, /STORAGE_KEYS\.mobileAudioNotice/);
+assert.match(keysSource, /mobileAudioNotice: 'guitar-pedalboard:mobile-audio-notice-dismissed'/);
 assert.match(connectSource, /모바일은 입력 지연이 커서 실시간 연주에 적합하지 않습니다\./);
 assert.match(connectSource, /음원 파일 재생 모드로 톤을 확인하거나, PC \+ 오디오 인터페이스 사용을 권장합니다\./);
-assert.ok([...connectSource.matchAll(/try \{/g)].length >= 2, 'localStorage 읽기/쓰기에 try/catch가 필요합니다.');
+// 저장소 접근의 try/catch 는 SafeStorage 한 곳에 있다(S1.7). 이 컴포넌트는 직접 localStorage 를 만지지 않고 SafeStorage 로 읽고 쓴다.
+assert.doesNotMatch(connectSource, /localStorage/);
+assert.match(connectSource, /safeStorage\.getRaw\(STORAGE_KEYS\.mobileAudioNotice\)/);
+assert.match(connectSource, /safeStorage\.setRaw\(STORAGE_KEYS\.mobileAudioNotice, 'true'\)/);
 assert.match(connectSource, /aria-label="모바일 오디오 안내 닫기"/);
 
 assert.match(pedalCardSource, /<article[\s\S]*role="group"[\s\S]*aria-label=\{`\$\{pedal\.name\} 이펙터`\}/);
