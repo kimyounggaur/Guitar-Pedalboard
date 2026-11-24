@@ -83,7 +83,7 @@ flowchart TD
 | Auto Wah | Sensitivity, Range, Resonance, Mode, Manual | 0~100%, Auto/Manual |
 | Drive | Mode, Drive, Tone, Bias | Overdrive/Crunch/Distortion/Fuzz, 0~100%, -1~1 |
 | Crunch | Gain, Tone, Presence, Low Cut, Volume | 0~100%, 40~400 Hz, 0~160% |
-| Fuzz | Mode, Fuzz, Tone, Bias, 출력 감쇠, Low Cut | 3 modes, 0~100%, 40~400 Hz |
+| Fuzz | Mode, Fuzz, Tone, Bias, Gate, Low Cut | 3 modes, 0~100%(Gate 는 0 = 끔, 1~100 = 문턱 −80~−30 dB), 40~400 Hz |
 | Graphic EQ | 100/200/400/800 Hz, 1.6/3.2/6.4 kHz | 각 -12~+12 dB |
 | EQ | Low Cut, Bass, Mid Freq/Gain/Q, Treble, Presence | 20~400 Hz, gain ±12 dB, Q 0.3~4 |
 | Cab | Model, Mic Position, Distance, Low/High Cut, Presence | 5 models+Off, 0~100%, 40~200 Hz, 3~12 kHz, ±6 dB |
