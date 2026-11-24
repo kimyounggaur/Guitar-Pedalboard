@@ -56,6 +56,8 @@ CDP를 직접 쓸 때는 같은 스크립트를 `Page.addScriptToEvaluateOnNewDo
 | 05 | S2.2 (Reverb decay 범위) |
 | 06 | S2.9 (MIDI가 `bypassed`→`active` 이름 변경 뒤에도 같은 동작) |
 
+S2.4 는 여섯 픽스처 모두를 E-08(`e2e/tests/e08-active-led.spec.ts`)·P-19(오디오 프로브)·`npm run test:storage-v2` 의 입력으로 쓴다. 파일은 바뀌지 않았다.
+
 ## 바꿀 때 지킬 것
 
 - 파일 안의 값은 **저장 형식 v1~v11이 만든 원본**이다. 앱 형식이 바뀌어도 이 파일을 새 형식으로 고치지 않는다(변환 시험의 입력이기 때문).
