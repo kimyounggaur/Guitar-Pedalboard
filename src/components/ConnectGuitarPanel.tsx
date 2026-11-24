@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { useAudioStore } from '../store/audioStore';
 import { DeviceSelector, InputChannelFields } from './DeviceSelector';
+import { FilePlayer } from './FilePlayer';
 import { InputLevelNotice } from './InputLevelNotice';
 import { MidiAdvancedControls } from './MidiAdvancedControls';
 import { ToggleSwitch } from './ToggleSwitch';
@@ -9,17 +10,6 @@ import { ToggleSwitch } from './ToggleSwitch';
 /** 모바일 안내를 닫았는지. 저장소를 못 써도(읽기 실패) 던지지 않고 '아직 안 닫음'으로 본다. 값은 문자열 'true' 그대로 저장된다. */
 function readMobileNoticeDismissed(): boolean {
   return safeStorage.getRaw(STORAGE_KEYS.mobileAudioNotice) === 'true';
-}
-
-function formatPlaybackTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '0:00';
-
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.floor(seconds % 60)
-    .toString()
-    .padStart(2, '0');
-
-  return `${minutes}:${remainingSeconds}`;
 }
 
 interface ConnectGuitarPanelProps {
@@ -32,19 +22,11 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
   );
   const isRunning = useAudioStore((state) => state.isRunning);
   const inputMode = useAudioStore((state) => state.inputMode);
-  const uploadedFileName = useAudioStore((state) => state.uploadedFileName);
-  const fileCurrentTime = useAudioStore((state) => state.fileCurrentTime);
-  const fileDuration = useAudioStore((state) => state.fileDuration);
-  const isFilePaused = useAudioStore((state) => state.isFilePaused);
   const isLoading = useAudioStore((state) => state.isLoading);
   const error = useAudioStore((state) => state.error);
   const inputGainDb = useAudioStore((state) => state.inputGainDb);
   const howlProtectionEnabled = useAudioStore((state) => state.howlProtectionEnabled);
   const start = useAudioStore((state) => state.start);
-  const startFile = useAudioStore((state) => state.startFile);
-  const playFile = useAudioStore((state) => state.playFile);
-  const pauseFile = useAudioStore((state) => state.pauseFile);
-  const seekFile = useAudioStore((state) => state.seekFile);
   const stop = useAudioStore((state) => state.stop);
   const panic = useAudioStore((state) => state.panic);
   const loadDevices = useAudioStore((state) => state.loadDevices);
@@ -53,8 +35,6 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
   const devices = useAudioStore((state) => state.devices);
   const selectedDeviceId = useAudioStore((state) => state.selectedDeviceId);
   const latency = useAudioStore((state) => state.latency);
-  const hasUploadedFile = inputMode === 'file' && Boolean(uploadedFileName);
-  const fileControlsDisabled = isLoading || !hasUploadedFile;
 
   // S1.8: 데스크톱에서 기타(장치 입력)를 연결하면 이 패널이 한 줄 상태 표시줄로 줄어든다. 장치·채널·지연·입력 트림·연결 해제·Panic 만
   // 남기고 나머지(장치 고르기·MIDI·음원 파일·하울링 보호·안내)는 '입력 설정' 버튼으로 펼친다. 모바일 도크와 음원 파일 재생은 그대로 둔다.
@@ -167,82 +147,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
 
       {!compact && isRunning && panicControl}
 
-      <div className="audio-file-upload">
-        <label htmlFor="audio-file">음원 파일</label>
-        <input
-          id="audio-file"
-          type="file"
-          accept="audio/*"
-          disabled={isLoading}
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            if (file) {
-              void startFile(file);
-            }
-            event.currentTarget.value = '';
-          }}
-        />
-
-        <div className="file-player" role="group" aria-label="업로드 음원 플레이어">
-          <div className="file-playback-row">
-            <span>{uploadedFileName ?? '업로드된 음원 없음'}</span>
-            <span className="file-playback-time">
-              {formatPlaybackTime(fileCurrentTime)} / {formatPlaybackTime(fileDuration)}
-            </span>
-          </div>
-          <label className="io-slider-control">
-            <span>재생 위치 · 반복 재생</span>
-            <input type="range" min={0} max={fileDuration || 0} step="0.1"
-              value={Math.min(fileCurrentTime, fileDuration || 0)}
-              disabled={fileControlsDisabled || !fileDuration}
-              aria-label="음원 재생 위치"
-              aria-valuetext={`${formatPlaybackTime(fileCurrentTime)} / ${formatPlaybackTime(fileDuration)}`}
-              onChange={(event) => seekFile(Number(event.currentTarget.value) - fileCurrentTime)} />
-          </label>
-          <div className="file-transport-controls">
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={fileControlsDisabled}
-              onClick={() => seekFile(-10)}
-            >
-              뒤로 10초
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={fileControlsDisabled || !isFilePaused}
-              onClick={() => void playFile()}
-            >
-              재생
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={fileControlsDisabled || isFilePaused}
-              onClick={pauseFile}
-            >
-              일시정지
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={fileControlsDisabled}
-              onClick={() => void stop()}
-            >
-              정지
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={fileControlsDisabled}
-              onClick={() => seekFile(10)}
-            >
-              앞으로 10초
-            </button>
-          </div>
-        </div>
-      </div>
+      <FilePlayer />
 
       <div className="input-safety-controls">
         {!compact && trimControl}

@@ -80,6 +80,8 @@ export class AudioEngine {
   private source: MediaStreamAudioSourceNode | MediaElementAudioSourceNode | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private audioFileUrl: string | null = null;
+  /** 음원 파일 반복 재생(설계서 4.11). 기본 켜짐이고, 켜고 끄는 값은 새 파일 세션에도 이어진다. */
+  private fileLoop = true;
   private inputGain: GainNode | null = null;
   private chainInput: GainNode | null = null;
   /** 마스터 게인 → 출력 가드 → 리미터 → level-meter#out. 스피커·파형 분석·녹음은 이 단계의 출력에서 갈라진다. */
@@ -236,6 +238,12 @@ export class AudioEngine {
     return !!this.context && this.context.state !== 'closed' && (!!this.stream || !!this.audioElement);
   }
 
+  /** 반복을 끄면 '끝'까지 재생한 뒤 멈춘다(`ended` 가 와서 처음부터 다시 틀기 전까지 그 자리에 있다). 재생 중에도 바로 적용된다. */
+  setFileLoop(loop: boolean): void {
+    this.fileLoop = loop;
+    if (this.audioElement) this.audioElement.loop = loop;
+  }
+
   setPlaybackEndedHandler(handler: (() => void) | null): void {
     this.playbackEndedHandler = handler;
   }
@@ -346,7 +354,7 @@ export class AudioEngine {
       audioFileUrl = URL.createObjectURL(file);
       audioElement = new Audio(audioFileUrl);
       audioElement.preload = 'auto';
-      audioElement.loop = true;
+      audioElement.loop = this.fileLoop;
       audioElement.addEventListener('ended', () => {
         this.playbackEndedHandler?.();
       });
@@ -396,6 +404,14 @@ export class AudioEngine {
     const duration = Number.isFinite(this.audioElement.duration) ? this.audioElement.duration : Infinity;
     const nextTime = Math.min(Math.max(this.audioElement.currentTime + deltaSeconds, 0), duration);
     this.audioElement.currentTime = nextTime;
+  }
+
+  /** 탐색 막대용 절대 위치 이동. 0 ~ 전체 길이로 자른다(길이를 모르면 아래쪽만 자른다). */
+  seekUploadedFileTo(seconds: number): void {
+    if (!this.audioElement || !Number.isFinite(seconds)) return;
+
+    const duration = Number.isFinite(this.audioElement.duration) ? this.audioElement.duration : Infinity;
+    this.audioElement.currentTime = Math.min(Math.max(seconds, 0), duration);
   }
 
   readFilePlayback(): { currentTime: number; duration: number; isPaused: boolean } {
@@ -670,7 +686,12 @@ export class AudioEngine {
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
 
-    this.audioElement?.pause();
+    // 세션마다 새 <audio> 요소를 쓴다(createMediaElementSource 는 요소마다 한 번만 부를 수 있다). 옛 요소는 자원을 바로 놓는다.
+    if (this.audioElement) {
+      this.audioElement.pause();
+      this.audioElement.removeAttribute('src');
+      this.audioElement.load();
+    }
     this.audioElement = null;
 
     if (this.audioFileUrl) {

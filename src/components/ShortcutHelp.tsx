@@ -15,7 +15,7 @@ const FOCUSABLE_SELECTOR = [
 
 const shortcutItems = [
   { key: '1–9 / 0 / Q W E R Y', description: '현재 순서의 1–15번째 페달 전환' },
-  { key: 'Space', description: '기타 입력 연결·해제 또는 파일 재생·일시정지' },
+  { key: 'Space', description: '음원 파일이 열려 있으면 재생·일시정지, 아니면 기타 입력 연결·해제' },
   { key: 'T', description: '탭 템포 입력' },
   { key: 'A / B', description: '저장된 프리셋 비교 슬롯 활성화' },
   { key: 'Esc', description: '긴급 정지 (도움말이 열려 있으면 도움말 닫기)' },

@@ -75,7 +75,9 @@
 }
 
 .device-selector label,
-.audio-file-upload label {
+.audio-file-upload label,
+.audio-file-upload .file-section-title {
+  margin: 0;
   color: var(--ink-muted);
   font-size: 0.78rem;
   font-weight: 800;
@@ -111,23 +113,23 @@ select,
   gap: 8px;
 }
 
-.audio-file-upload input[type="file"] {
-  width: 100%;
-  min-width: 0;
-  color: var(--ink-muted);
-  font-size: 0.84rem;
+/* '음원 파일 열기'·'파일 닫기'. 실제 파일 입력(#audio-file)은 숨기고 한국어 버튼이 연다(설계서 4.11, S2.6). */
+.file-open-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.audio-file-upload input[type="file"]::file-selector-button {
-  height: 40px;
-  margin-right: 10px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #1c2636;
-  color: #d8e1ee;
-  font: inherit;
-  font-weight: 800;
+.file-open-actions .secondary-button {
+  width: 100%;
+  min-width: 0;
+  padding: 0 8px;
+  font-size: 0.78rem;
+}
+
+.file-loop-control {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .file-player {

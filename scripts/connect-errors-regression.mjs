@@ -387,7 +387,7 @@ equal(count(panelSource, 'className="error-message"'), 1, '화면: 오류 문단
 equal(count(panelSource, '{!compact && errorNotice}'), 1, '화면: 연결 전에는 안내가 연결 버튼 줄 바로 아래에 있다');
 equal(count(panelSource, '{compact ? errorNotice : null}'), 1, '화면: 연결된 한 줄 상태 표시줄에서는 표시줄 바로 아래에 있다');
 ok(panelSource.indexOf('{!compact && errorNotice}') > panelSource.indexOf('className="connect-actions"'), '화면: 안내는 연결 버튼 줄 다음에 온다');
-ok(panelSource.indexOf('{!compact && errorNotice}') < panelSource.indexOf('className="audio-file-upload"'), '화면: 안내는 음원 파일·안전 설정 묶음보다 위에 있다(휴대폰 도크에서 스크롤 아래로 밀리지 않는다)');
+ok(panelSource.indexOf('{!compact && errorNotice}') < panelSource.indexOf('<FilePlayer />'), '화면: 안내는 음원 파일·안전 설정 묶음보다 위에 있다(휴대폰 도크에서 스크롤 아래로 밀리지 않는다)');
 ok(panelSource.indexOf('{compact ? errorNotice : null}') < panelSource.indexOf('id="connect-panel-details"'), '화면: 연결된 상태에서도 접힌 상세 설정보다 위에 있다');
 ok(panelSource.includes("errorRef.current?.scrollIntoView({ block: 'nearest' })"), '화면: 새 오류가 생기면 보이는 곳까지 스크롤한다');
 ok(!panelSource.includes('{error && <p className="error-message"'), '화면: 패널 맨 아래의 옛 오류 문단이 없다');
