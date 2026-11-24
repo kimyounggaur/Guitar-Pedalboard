@@ -104,7 +104,8 @@ function createPreset(
   };
 }
 
-const off = (mix?: number): PedalOverrides => ({ bypassed: true, ...(mix !== undefined && mix > 0 ? { params: { mix } } : {}) });
+// 꺼 둘 페달은 기본값 그대로 두고 스위치만 끈다. 특히 Mix 를 0 으로 두면 나중에 켜도 소리가 바뀌지 않는다(R2-2, S2.1) — 그래서 Mix 를 받지 않는다.
+const off = (): PedalOverrides => ({ bypassed: true });
 const on = (params: Record<string, PedalParamValue> = {}): PedalOverrides => ({
   bypassed: false,
   params,
@@ -336,10 +337,10 @@ export const defaultPresets: PresetListItem[] = [
   }),
 
   preset('factory-direct-clean', 'utility', 'Direct Clean', '거의 모든 효과를 걷어낸 기준점 프리셋입니다.', ['utility', 'direct'], {
-    'noise-gate': off(100),
-    compressor: off(0),
+    'noise-gate': off(),
+    compressor: off(),
     eq: on({ lowCut: 40, bassGain: 0, midFreq: 800, midGain: 0, midQ: 0.9, trebleGain: 0, presenceGain: 0 }),
-    cab: off(100),
+    cab: off(),
   }),
   preset('factory-headphone-safe-start', 'utility', 'Headphone Safe Start', '낮은 레벨과 최소 공간계로 시작하는 안전 테스트 프리셋입니다.', ['utility', 'safe'], {
     'noise-gate': on({ thresholdDb: -62, reductionDb: -80, attackMs: 8, holdMs: 80, releaseMs: 220, level: 80 }),
@@ -349,7 +350,7 @@ export const defaultPresets: PresetListItem[] = [
   }),
   preset('factory-low-noise-gate', 'utility', 'Low Noise Gate', '노이즈가 많은 입력을 빠르게 점검하기 위한 게이트 중심 프리셋입니다.', ['utility', 'gate'], {
     'noise-gate': on({ thresholdDb: -48, reductionDb: -80, attackMs: 2, holdMs: 60, releaseMs: 120, hysteresisDb: 7 }),
-    compressor: off(0),
+    compressor: off(),
     eq: on({ lowCut: 90, bassGain: 0, midFreq: 850, midGain: 0, trebleGain: 1, presenceGain: 1 }),
   }),
   preset('factory-solo-boost', 'utility', 'Solo Boost', '현재 체인에 리드감을 주는 볼륨과 중역 부스트 프리셋입니다.', ['utility', 'boost'], {

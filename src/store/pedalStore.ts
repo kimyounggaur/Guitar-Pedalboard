@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import type { PedalParamValue, PedalParams, PedalState, PedalType } from '../audio/types';
 import { clampTrimDb, roundTrimDb } from '../audio/offline/loudnessSpec';
+import { restoreMixOfOffPedals } from '../presets/normalize';
 
 export const SCHEMA_VERSION = 11;
 
@@ -874,7 +875,11 @@ function mergeStoredPedals(storedPedals: StoredPedal[] | null): PedalState[] {
     }
   });
 
-  return restored;
+  // M2(S2.1): 꺼져 있고 Mix 가 0 인 페달은 기본 Mix 로 되돌린다. 저장소에서 읽은 작업 상태와 프리셋(저장·가져오기)이 모두 여기를 지난다.
+  return restoreMixOfOffPedals(restored, (pedalId) => {
+    const mix = defaultsById.get(pedalId)?.params.mix;
+    return typeof mix === 'number' ? mix : undefined;
+  });
 }
 
 export function migratePedalCollection(value: unknown, version = 1): PedalState[] {

@@ -859,7 +859,12 @@
           "presets": 40,
           "tested": 368,
           "distinctRendered": 14,
-          "unchangedCount": 40
+          "unchangedCount": 40,
+          "unchangedFlatEq": 40,
+          "unchangedUnexpected": 0,
+          "loadRestoredPedals": 368,
+          "loadUntouchedOffPedals": 0,
+          "loadNullDb": -200
         }
       },
       "P-20": {
@@ -1774,7 +1779,12 @@
           "presets": 40,
           "tested": 368,
           "distinctRendered": 14,
-          "unchangedCount": 40
+          "unchangedCount": 40,
+          "unchangedFlatEq": 40,
+          "unchangedUnexpected": 0,
+          "loadRestoredPedals": 368,
+          "loadUntouchedOffPedals": 0,
+          "loadNullDb": -200
         }
       },
       "P-20": {
