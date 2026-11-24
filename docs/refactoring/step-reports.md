@@ -978,3 +978,36 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - `ko.ts` 에는 연결 오류와 일반 실패 문구뿐이다. 나머지 화면 문구(R4-6)와 영어·내부 이름 노출 점검(E-22)은 S4.6 몫이다.
 
 ---
+
+## S2.4 선행 이동 (코드 위치만 옮김)
+
+- 브랜치·병합: `refactor/s2-4-prep-move` → `phase/2`. 커밋 `cba1c79`(이동 전부) · 이 보고서를 담은 문서 커밋(`docs(S2.4 선행): …` — 기록 L-100). 기준선 JSON 은 바뀌지 않아 `baseline:` 커밋은 없다. main 에는 병합하지 않는다(병합하면 Pages 가 자동 배포된다).
+- 해결 항목: 없음(R2-2 의 준비). 설계서 0.3-4(파일 이동과 로직 변경을 같은 PR 에 섞지 않는다)를 지키려고 S2.4 본 작업 앞에 따로 둔 Step 이다. S2.4 본 작업은 v1 저장 형식을 읽는 코드를 새 `persistence/` 안에서 쓰는데, 그 코드가 `pedalStore.ts`(872줄) 안에 스토어와 섞여 있었다.
+- 변경 파일(6개, 신규 4개, +952 / −925줄): `src/presets/initialPedals.ts`(신규 283줄 — 페달 15개 기본 상태·`clonePedal`·`clonePedals`) · `src/persistence/legacy/boardV1.ts`(신규 584줄 — 스키마 1~11 읽기·`mergeStoredPedals`·`migratePedalCollection`) · `src/persistence/legacy/presetsV1.ts`(신규 60줄 — `parsePresetJson` 등) · `src/presets/createId.ts`(신규 5줄) · `src/store/pedalStore.ts`(872줄 줄어 196줄) · `src/store/presetStore.ts`(73줄 줄어). 저장 키·형식·DSP·화면은 바뀌지 않았다.
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| (설계서에 없는 추가 단언) 옮긴 본문이 줄 단위로 같다 | 충족 | 옮기기 전후의 diff 에서 지워진 줄과 더해진 줄을 줄 내용으로 견주었다. 빈 줄을 뺀 차이는 37가지뿐이고 전부 import 경로(`./` → `../../`)·옮긴 곳 머리말 주석·`pedalStore.ts`/`presetStore.ts` 의 새 import·이전 이름을 다시 내보내는 `export` 였다. 함수 본문은 한 줄도 다르지 않다 |
+| (설계서에 없는 추가 단언) 가져오는 쪽 코드는 바뀌지 않는다 | 충족 | `pedalStore.ts`·`presetStore.ts` 가 `clonePedals`·`initialPedals`·`migratePedalCollection`·`migrations`·`migrateStoredState`·`SCHEMA_VERSION`·`parsePresetJson`·타입 `StoredPedal`/`StoredState` 를 다시 내보낸다. 이 두 파일 밖에서 바뀐 파일은 0개 |
+| (설계서에 없는 추가 단언) 동작이 같다 | 충족 | 아래 검증 |
+
+**전후**
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| `src/store/pedalStore.ts` | 868줄 — 스토어 + 기본 페달 + v1 읽기 사슬(1→11) | 196줄 — 스토어와 저장본 만들기·읽기 연결 |
+| v1 저장 형식 읽기 | 스토어 파일 안 | `src/persistence/legacy/boardV1.ts`·`presetsV1.ts`(S2.4 본 작업이 v2 변환에서 이 코드를 부른다) |
+| `npm test` | 35개 통과(404.6초) | 35개 통과(436.7초 — 같은 시험, 측정 오차 안쪽의 변동으로 본다) |
+
+- 검증
+  - `npm run typecheck`·`npm run lint` 오류 0.
+  - 이동 커밋의 소스에서 `npm test` 35개 모두 통과(436.7초 — 오디오 프로브 23개의 기준선 값이 하나도 바뀌지 않았다). `npm run e2e` 는 전체가 아니라 저장·시작·프리셋 e2e 5개 파일(`e05-storage`·`e23-startup`·`s2-1-off-pedal-mix`·`s1-4c-preset-loudness`·`f-regressions`) 29개만 돌렸고 모두 통과(49.5초). 이동은 저장소를 읽고 쓰는 두 스토어의 import 만 바꾸므로, 시작할 때 저장본을 읽는 경로를 가장 직접 지나는 시험을 골랐다. 전체 e2e 는 S2.4 본 작업의 마지막에 돌린다.
+  - **새 시험이 정말 잡는지**: 이 Step 은 새 시험이 없다(동작이 같음을 기존 시험으로 확인하는 Step). 기존 시험이 이동 때문에 깨질 수 있는지는 확인했다 — `__migration_check.ts` 의 v1~v11 변환 단언 1,085줄이 `migrateStoredState`·`parsePresetJson` 을 재내보낸 이름으로 불러 모두 통과한다.
+- 만난 문제
+  - 없다. 타입 검사·린트가 첫 시도에 통과했다. 이동 스크립트는 줄 번호로 자르는 일회용이라 저장소에 넣지 않았다.
+- 사람 확인 필요
+  - 없다(화면·소리·저장 동작이 같음을 자동 시험으로 확인한다). `legacy/` 라는 폴더 이름이 4.14 목록에 없는 것은 기록 L-100 에 적었다.
+- 남은 위험
+  - 이전 이름을 두 스토어가 다시 내보내는 임시 통로는 S2.4 본 작업이 `active` 모델과 v2 저장을 넣은 뒤에도 남는다. 쓰는 쪽이 새 위치를 직접 가져오도록 바꾸는 일은 이름이 바뀌는 Step 마다 조금씩 하고, 마지막 정리는 Phase 4 몫이다.
+
+---
