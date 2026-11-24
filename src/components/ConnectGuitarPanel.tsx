@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { useAudioStore } from '../store/audioStore';
 import { DeviceSelector, InputChannelFields } from './DeviceSelector';
+import { InputLevelNotice } from './InputLevelNotice';
 import { MidiAdvancedControls } from './MidiAdvancedControls';
 import { ToggleSwitch } from './ToggleSwitch';
 
@@ -37,7 +38,6 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
   const isFilePaused = useAudioStore((state) => state.isFilePaused);
   const isLoading = useAudioStore((state) => state.isLoading);
   const error = useAudioStore((state) => state.error);
-  const inputLevel = useAudioStore((state) => state.inputLevel);
   const inputGainDb = useAudioStore((state) => state.inputGainDb);
   const howlProtectionEnabled = useAudioStore((state) => state.howlProtectionEnabled);
   const start = useAudioStore((state) => state.start);
@@ -72,19 +72,6 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
     : '기본 입력 장치';
   const latencyTotal = latency.base !== null && latency.output !== null ? latency.base + latency.output : null;
   const latencyText = latency.sampleRate > 0 && latencyTotal !== null ? `${latencyTotal.toFixed(1)}ms` : '측정 대기';
-  const inputWarning = !isRunning
-    ? null
-    : inputLevel.isClipping
-      ? {
-          kind: 'danger',
-          message: '클리핑 발생. 오디오 인터페이스 게인을 낮추세요',
-        }
-      : inputLevel.peakDb > -1
-        ? { kind: 'warning', message: '입력이 0dBFS에 근접했습니다' }
-        : inputLevel.peakDb > -90 && inputLevel.peakDb < -40
-          ? { kind: 'muted', message: '입력이 너무 작습니다. 게인을 올리세요' }
-          : null;
-
   useEffect(() => {
     void loadDevices();
     const mediaDevices = navigator.mediaDevices;
@@ -330,14 +317,8 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
         detailsContent
       )}
 
-      {inputWarning ? (
-        <p
-          className={`level-warning is-${inputWarning.kind}`}
-          role={inputWarning.kind === 'danger' ? 'alert' : 'status'}
-        >
-          {inputWarning.message}
-        </p>
-      ) : null}
+      {/* 입력 레벨 경고(4.12): 판정은 MonitorService 가 한다. 여기서는 결과를 보이기만 한다(S2.5). */}
+      <InputLevelNotice />
 
       {!compact ? (
         <p className="panel-copy">

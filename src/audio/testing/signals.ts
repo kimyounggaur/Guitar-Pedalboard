@@ -238,6 +238,48 @@ export function noiseFloor(sampleRate: number, seconds = GOOD_SECONDS): Samples 
 }
 
 // ---------------------------------------------------------------------------------------------
+// 입력 레벨 경고 시험용(S2.5, E-09, 설계서 4.12). 부록 A 에 없는 신호라 REFACTOR_LOG L-126 에 적는다.
+// '정상 입력(피크 −12 dBFS)'은 REF-PC 그대로 쓰고, 나머지는 REF-PC 의 피크만 바꾼 것(2초마다 다시 치는 '연주 중' 입력)과 무음, 한 번 치고 멈춘 연주다.
+// ---------------------------------------------------------------------------------------------
+/**
+ * REF-PC 의 타건(2초 간격)마다 피크를 peakDb 로 맞춘다. REF-PC 는 전체를 한 번에 −12 dBFS 로 맞춰서 첫 타건만 −12 이고
+ * 뒤의 타건은 세 음의 위상이 어긋나 1~3 dB 낮다. 레벨 경고 시험은 '모든 타건이 같은 크기'여야 판정을 시간에 걸쳐 같은 조건으로 볼 수 있다.
+ */
+function everyStrikeAt(samples: Samples, sampleRate: number, peakDb: number): Samples {
+  const segment = Math.round(sampleRate * 2);
+  for (let start = 0; start < samples.length; start += segment) {
+    normalizePeak(samples.subarray(start, Math.min(samples.length, start + segment)), peakDb);
+  }
+  return samples;
+}
+
+/** LVL-SMALL: 작은 입력. REF-PC 의 모든 타건을 피크 −40 dBFS 로(표의 '너무 작음' 기준 −36 dBFS 보다 4 dB 작다). */
+export function levelSmall(sampleRate: number, seconds = 8): Samples {
+  return everyStrikeAt(refPc(sampleRate, seconds), sampleRate, -40);
+}
+
+/** LVL-HOT: 한계 초과. REF-PC 의 모든 타건을 피크 0 dBFS 로(표의 '너무 큼' 기준 −0.5 dBFS 이상). */
+export function levelHot(sampleRate: number, seconds = 8): Samples {
+  return everyStrikeAt(refPc(sampleRate, seconds), sampleRate, 0);
+}
+
+/** LVL-SILENT: 디지털 무음(연결은 되었는데 소리가 없다). 16비트 WAV 에서도 정확히 0 이다. */
+export function levelSilent(sampleRate: number, seconds = 10): Samples {
+  return allocate(sampleRate, seconds);
+}
+
+/**
+ * LVL-STOP: 파워코드를 한 번 치고 멈춘 연주. REF-PC 와 같은 음·어택·시정수(1.2초)로 첫 타건만 만들고, 여운이 다시 치지 않은 채 끝까지 줄어든다
+ * (피크 −12 dBFS 에서 초당 약 7.2 dB 씩, 약 12초 뒤 16비트 바닥 아래). '연주를 멈췄다'를 가짜 마이크로 만드는 신호다.
+ */
+export function levelStop(sampleRate: number, seconds = 14): Samples {
+  const out = allocate(sampleRate, seconds);
+  const envelope = (time: number): number => Math.min(1, time / 0.002) * Math.exp(-time / 1.2);
+  for (const note of REF_PC_NOTES_HZ) addSawtoothVoice(out, sampleRate, note, 20, envelope);
+  return normalizePeak(out, REF_PC_PEAK_DB);
+}
+
+// ---------------------------------------------------------------------------------------------
 // 튜너 시험용 음(P-22, E-16): 기본음 + 배음 6개가 2초 시정수로 줄어드는 뜯은 현 소리.
 // ---------------------------------------------------------------------------------------------
 export const OPEN_STRINGS_HZ = [82.41, 110, 146.83, 196, 246.94, 329.63] as const;
@@ -279,6 +321,10 @@ export const fixtureSignals: FixtureSignal[] = [
   { file: 'g-1', id: 'G-1', description: '서스테인 리드(오차단 시험) 60초', create: mono((sr) => sustainLead(sr)) },
   { file: 'g-2', id: 'G-2', description: '스트러밍(오차단 시험) 60초', create: mono((sr) => strumming(sr)) },
   { file: 'g-3', id: 'G-3', description: '잡음 바닥 −70 dBFS(오차단 시험) 60초', create: mono((sr) => noiseFloor(sr)) },
+  { file: 'lvl-small', id: 'LVL-SMALL', description: '입력 레벨 경고 시험: REF-PC 모든 타건 피크 −40 dBFS, 8초', create: mono((sr) => levelSmall(sr)) },
+  { file: 'lvl-hot', id: 'LVL-HOT', description: '입력 레벨 경고 시험: REF-PC 모든 타건 피크 0 dBFS, 8초', create: mono((sr) => levelHot(sr)) },
+  { file: 'lvl-silent', id: 'LVL-SILENT', description: '입력 레벨 경고 시험: 디지털 무음 10초', create: mono((sr) => levelSilent(sr)) },
+  { file: 'lvl-stop', id: 'LVL-STOP', description: '입력 레벨 경고 시험: 한 번 치고 멈춘 연주(여운이 끝까지 줄어듦) 14초', create: mono((sr) => levelStop(sr)) },
   ...OPEN_STRINGS_HZ.map((frequency, index): FixtureSignal => ({
     file: `tuner-string-${index + 1}`,
     id: 'TUNER',

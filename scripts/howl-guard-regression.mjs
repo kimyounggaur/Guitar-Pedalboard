@@ -745,7 +745,7 @@ for (const [label, options] of [
   const makeSink = () => {
     const calls = [];
     const record = (name) => (...args) => calls.push([name, ...args]);
-    return { calls, setInput: record('setInput'), setOutput: record('setOutput'), setLimiterGr: record('setLimiterGr'), setGuard: record('setGuard'), reset: record('reset') };
+    return { calls, setInput: record('setInput'), setOutput: record('setOutput'), setLimiterGr: record('setLimiterGr'), setGuard: record('setGuard'), setInputWarning: record('setInputWarning'), reset: record('reset') };
   };
   const callsOf = (sink, name) => sink.calls.filter((call) => call[0] === name).map((call) => call.slice(1));
   const deliver = (node, data) => node.port.onmessage({ data });

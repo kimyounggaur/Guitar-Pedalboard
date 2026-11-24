@@ -11,7 +11,8 @@ import { createRecordingFilename } from '../audio/recording';
 import type { LevelReading, TuningPresetId } from '../audio/types';
 import { TUNING_PRESETS, TUNING_PRESET_OPTIONS } from '../audio/utils/tunings';
 import { useAudioStore } from '../store/audioStore';
-import { readInputLevel, readOutputLevel } from '../store/monitorStore';
+import { readInputLevel, readOutputLevel, useMonitorStore } from '../store/monitorStore';
+import { InputLevelNotice } from './InputLevelNotice';
 import { ToggleSwitch } from './ToggleSwitch';
 import { WaveformCanvas, type WaveformCanvasHandle } from './WaveformCanvas';
 
@@ -99,8 +100,10 @@ export function Meter({ active = true }: MeterProps) {
     const engine = AudioEngine.getInstance();
     let animationFrame: number | null = null;
 
-    const updateRealtimeStatus = (inputLevel: LevelReading, outputLevel: LevelReading) => {
-      const isClipping = inputLevel.isClipping || outputLevel.isClipping;
+    const updateRealtimeStatus = (outputLevel: LevelReading) => {
+      // 입력 쪽은 막대의 순간 클립 표시가 아니라 MonitorService 가 판정한 '너무 큼'(4.12)을 따른다. 입력 패널의 안내와 같은 값이라
+      // 한쪽은 '클리핑 발생', 다른 쪽은 '헤드룸 정상'이라고 하는 어긋남이 없다(S2.5).
+      const isClipping = useMonitorStore.getState().inputWarning === 'high' || outputLevel.isClipping;
       const clipIndicator = clipIndicatorRef.current;
       const outputWarning = outputWarningRef.current;
 
@@ -135,7 +138,7 @@ export function Meter({ active = true }: MeterProps) {
       inputLevelRef.current?.reset();
       outputLevelRef.current?.reset();
       waveformRef.current?.clear();
-      updateRealtimeStatus(SILENT_LEVEL, SILENT_LEVEL);
+      updateRealtimeStatus(SILENT_LEVEL);
     };
 
     const cancelFrame = () => {
@@ -156,7 +159,7 @@ export function Meter({ active = true }: MeterProps) {
       inputLevelRef.current?.update(inputLevel);
       outputLevelRef.current?.update(outputLevel);
       waveformRef.current?.draw(engine.readInputWaveform(), engine.readOutputWaveform());
-      updateRealtimeStatus(inputLevel, outputLevel);
+      updateRealtimeStatus(outputLevel);
 
       animationFrame = window.requestAnimationFrame(renderFrame);
     };
@@ -221,6 +224,8 @@ export function Meter({ active = true }: MeterProps) {
       <div ref={clipIndicatorRef} className="clip-indicator" role="status" aria-live="polite">
         헤드룸 정상
       </div>
+
+      <InputLevelNotice />
 
       <p ref={outputWarningRef} className="level-warning" hidden />
 
