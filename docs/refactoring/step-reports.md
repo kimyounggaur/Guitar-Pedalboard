@@ -641,3 +641,94 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - 정규식 단언이 늘었다(354 → 373곳). 소스 문자열에 기대는 시험은 CSS·TSX 를 다듬을 때 쉽게 깨진다 — 브라우저 단언(E-04·`responsive-a11y-regression` 의 브라우저 부분)을 우선 믿는다.
 
 ---
+
+## S1.7 저장소 접근 한 곳으로(SafeStorage)와 오류 화면
+
+- 브랜치·병합: `refactor/s1-7-safe-storage` → `phase/1`. 커밋 `b8710c4`(SafeStorage·오류 화면·전역 오류 처리·ESLint 금지·단위 시험) · `fc82bf8`(L-54, 휴대폰 순서 변경 알림 위치 — **따로 떼어 cherry-pick 할 수 있다**) · `5b7b9e2`(E-05 브라우저 시험 7개) · `6b1ddb9`(주석 한 줄) · 문서 커밋.
+- 해결 항목: R2-1(저장소가 막히거나 차면 앱이 멈춤, 설계서 C6·G6). **다만 L-69 — 설계서의 '현재' 서술(막히면 흰 화면, 가득 차면 조작 불가)은 S1.6 코드에서 이미 재현되지 않았다.** 설계 기준 커밋 `4ac9cf7` 에서는 맞았고, `859a11c`(2026-11-13)가 try/catch 와 안내 배너를 먼저 넣었다(코드 지도 S0.1 도 'R2-1 해결(실측)', S1.7 을 '축소'로 분류했다). 옛 코드(`b94a7ea`)를 따로 빌드해 같은 모의로 재어 보니 이 Step 이 실제로 고친 것은 다섯 가지다 — ① 안내가 닫아도 되풀이됨 ② 깨진 값을 알리지 않고 덮어씀 ③ 렌더 오류 때 소리가 계속됨 ④ 앱 스크립트 실패 때 빈 화면 ⑤ 처리되지 않은 오류가 아무 표시 없이 사라짐(아래 '전후'). 함께 처리: L-21(S1.2 의 최소 토스트 확장), L-54(휴대폰 순서 변경 알림이 펼친 도크와 겹침).
+- 변경 파일(문서·기준선 제외 35개, 신규 10·삭제 3, +2184 / −251줄): 제품 — `src/persistence/`(신규 `SafeStorage.ts` 418줄·`keys.ts`·`index.ts`), `src/app/`(신규 `AppErrorBoundary.tsx`·`globalErrors.ts`·`staticFallback.ts`·`errorReport.ts`), `src/main.tsx`·`index.html`(앱이 아예 못 뜰 때의 안전망), `src/store/`(`pedalStore`·`presetStore`·`audioStore`·`toastStore`; 옛 `storageNotice.ts` 삭제), `src/components/`(`PresetPanel`·`MidiAdvancedControls`·`ConnectGuitarPanel`·`Toast`; 옛 `ErrorBoundary.tsx`·`StorageNotice.tsx` 삭제), `src/audio/`(`midi.ts`·`midiAdvanced.ts` 에서 저장 제거), 스타일(`app-error.css` 신규·`responsive.css`·`panels.css`·`globals.css`), `eslint.config.js`. 시험 — `scripts/safe-storage-regression.mjs`(신규 712줄, `npm test` 에 `test:safe-storage` 로 등록)·`midi`·`preset-ab`·`responsive-a11y` 회귀 갱신, `e2e/tests/e05-storage.spec.ts`(신규 7개)·`e04-phone-reachability.spec.ts`(순서 변경 알림 3개).
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| 사이트 데이터 차단 모의: 흰 화면 없이 표시, Bypass·On/Off·노브·프리셋 불러오기 동작, 안내 1회 | 충족 | E-05 ①: 카드 15개, `storage:blocked` 알림 1장, Drive 스위치 켬→끔→켬, 노브 61, 프리셋 'Direct Clean' 이 Noise Gate 를 끔. 알림을 닫고 다시 써도 0장, 처리되지 않은 예외 0 |
+| 저장 공간 가득 참 모의: 위 조작 동작, 안내 1회(되풀이 없음) | 충족 | E-05 ②: 같은 확인, `storage:quota` 1장 |
+| 렌더 중 예외 주입: 한국어 오류 화면이 뜨고 소리가 멈춤 | 충족 | E-05 ④: 제목 '문제가 생겨 화면을 표시하지 못했습니다'·포커스 이동, AudioContext 1개가 closed, 마이크 트랙 0개 live. 변이 검사 — `void stopSessionForError();` 를 빼면 notClosed 1·liveTracks 1 로 시험이 실패 |
+| 린트: `localStorage` 직접 참조 0건 | 충족 | `grep -rn "localStorage" src --include=*.ts --include=*.tsx` 가 SafeStorage.ts 밖에서 0건. ESLint 가 `window.localStorage`·`globalThis.localStorage`·맨 `localStorage` 세 형태를 모두 오류로 잡음(임시 파일로 확인) |
+| 모든 `localStorage` 호출을 SafeStorage 로 교체 | 충족 | 아래 교체 목록 19곳 + 지연 저장 1곳 |
+| 저장 키 이름·값 형식을 바꾸지 않음(S2.4 범위) | 충족 | 단위 시험 0절이 9개 키 문자열을 옛 코드 그대로 못 박음. 깨진 값 보관 키 `…:corrupt-<시각>` 만 새로 생김 |
+| SafeStorage: `mode`·읽기·쓰기·`setDebounced`(300 ms, pagehide·visibilitychange 에서 바로 씀)·삭제·`usageBytes`, 어떤 경우에도 throw 하지 않음 | 충족 | 단위 시험 `test:safe-storage`(assert 165곳): 차단·가득 참·알 수 없는 오류·깨진 값·저장소 없음(Node)·범위 있는 초기화. 인터페이스를 넓힌 부분은 L-58 |
+| 깨진 값 → `:corrupt-{시각}` 보관 + 기본값 + 안내 | 충족 | E-05 ③(픽스처 03): 켜진 페달 5개로 기본값 시작, `storage:corrupt` 1장, 깨진 세 키가 원문 그대로 보관(키마다 최대 3개, L-65) |
+| 토스트 확장: 종류·같은 키 중복 방지·동작 버튼 자리 | 충족 | `toastStore` 의 `action` 칸(L-61). 오류 토스트의 '오류 정보 복사'가 처음 쓴다. 'S2.8 실행 취소' 는 그때 같은 칸을 쓴다 |
+| `AppErrorBoundary`: 소리를 끈 뒤 한국어 화면, 버튼 3개(다시 시도·설정 초기화·오류 정보 복사) | 충족 | E-05 ④⑤. 소리 끄기는 `stopSessionForError()`(L-62 — 설계서의 `AudioSession.stop('error')`). 초기화는 안에서 두 번 묻고 `guitar-pedalboard:` 키만 지우며 내 프리셋은 남김 |
+| `main.tsx` 안전망 + 전역 오류 알림 | 충족 | E-05 ⑥(스크립트 요청을 막으면 정적 안내와 '페이지 다시 불러오기'), ⑦(타이머·약속의 예외는 알림 1장, 중단된 요청·ResizeObserver 는 걸러짐) |
+| (L-54) 휴대폰 순서 변경 알림이 접힌·펼친 도크 모두에서 도크 위 | 충족 | E-04 세 화면 × 접힘·펼침 세 탭에서 도크와의 간격 11~14 px. 고치기 전 CSS 로 되돌리면 24 px 로 실패 |
+
+**localStorage 호출 교체 목록** (이전 위치 `b94a7ea` → SafeStorage 메서드)
+
+| 이전 위치 | 이전 호출 | 지금 |
+|---|---|---|
+| `store/pedalStore.ts:315` | `canUseStorage()` 접근 확인 | 삭제(접근 검사는 SafeStorage 안) |
+| `store/pedalStore.ts:349` | `savePedals` 의 `setItem` | `safeStorage.set(pedals, …)` |
+| `store/pedalStore.ts` `schedulePedalSave`(300 ms 타이머)와 파일 안의 `pagehide` 처리(365) | 지연 저장 | `safeStorage.setDebounced(pedals, () => 값, 300)` — 함수는 쓰는 순간 평가, pagehide·visibilitychange 흘려 쓰기는 SafeStorage 가 맡음(L-60) |
+| `store/pedalStore.ts:869` | `readStoredState` 의 `getItem` | `safeStorage.read(pedals, 해석, null)` |
+| `store/presetStore.ts:376` | `canUseStorage()` | 삭제 |
+| `store/presetStore.ts:451` | `readUserPresets` 의 `getItem` | `safeStorage.read(presets, parsePresetJson, [])` |
+| `store/presetStore.ts:462` | `writeUserPresets` 의 `setItem` | `safeStorage.setRaw(presets, serializePresetPayload(presets))` |
+| `store/audioStore.ts:51` | 출력 장치 읽기 | `safeStorage.getRaw(outputDevice)` |
+| `store/audioStore.ts:985` | 출력 장치 쓰기 | `safeStorage.setRaw(outputDevice, deviceId)` |
+| `store/audioStore.ts:122` | `readIoSettings` | `safeStorage.read(io, parseIoSettings, 기본값)` |
+| `store/audioStore.ts:160` | `persistIoSettings` | `safeStorage.set(io, settings)` |
+| `store/audioStore.ts:206` | `readMidiMappings` | `safeStorage.read(midi, JSON.parse 뒤 validateMidiMappings, {})` |
+| `store/audioStore.ts:216` | `persistMidiMappings` | `safeStorage.set(midi, mappings)` |
+| `audio/midiAdvanced.ts:25` | `readMidiAdvanced` | 삭제 — 오디오 계층은 저장소를 건드리지 않는다. 읽기는 화면 쪽으로(L-66) |
+| `components/MidiAdvancedControls.tsx:28` | 설정 저장 `setItem` | `safeStorage.set(midiAdvanced, checked)`(읽기는 `safeStorage.read(midiAdvanced, …)`) |
+| `components/PresetPanel.tsx:25` | `canUseStorage()` | 삭제 |
+| `components/PresetPanel.tsx:32` | `readStringList`(즐겨찾기·최근) | `safeStorage.read(키, 문자열 배열 해석, [])` |
+| `components/PresetPanel.tsx:42` | `writeStringList` | `safeStorage.set(키, values)` |
+| `components/ConnectGuitarPanel.tsx:13` | 모바일 안내 닫음 읽기 | `safeStorage.getRaw(mobileAudioNotice) === 'true'` |
+| `components/ConnectGuitarPanel.tsx:86` | 닫음 쓰기 | `safeStorage.setRaw(mobileAudioNotice, 'true')` |
+
+새로 생긴 호출은 하나다 — `AppErrorBoundary` 의 '설정을 초기화하고 다시 시작' 이 `safeStorage.clearAppSettings()` 를 부른다(`guitar-pedalboard:` 로 시작하는 키와 깨진 값 보관본을 지우고 `web-guitar-pedalboard-presets` 는 남긴다, L-62).
+
+**전후** — '이전' 은 옛 코드(`b94a7ea`)를 일회용 임시 작업 폴더에 빌드해 **같은 모의와 같은 조작**으로 잰 값이다(저장소에는 남기지 않았다, L-69). '지금' 은 E-05.
+
+| 상황 | 이전(`b94a7ea`) | 지금 |
+|---|---|---|
+| 저장소 차단(SecurityError) | 카드 15개·스위치·노브·프리셋 모두 동작, 처리되지 않은 예외 0. 안내는 열 때는 없고 첫 쓰기 뒤에 `role=alert` 배너 1개, **닫은 뒤 다음 쓰기에서 다시 뜸** | 열 때 알림 1장(`storage:blocked`), 닫은 뒤 쓰기를 해도 0장. 조작 동작 |
+| 저장 공간 가득 참(QuotaExceededError) | 위와 같음(배너가 되풀이됨) | `storage:quota` 1장, 되풀이 없음 |
+| 깨진 저장값(픽스처 03) | 기본값으로 열림(켜진 페달 5개). **화면 안내 없음**(콘솔 경고뿐). 페달 키는 첫 조작 뒤 새 값이 원문을 **덮어씀**, 보관본 없음 | 기본값 + `storage:corrupt` 1장. 깨진 세 키가 원문 그대로 `…:corrupt-<시각>` 에 보관됨 |
+| 렌더 중 예외(기타 연결 상태) | '화면을 표시하지 못했습니다' + 버튼 1개('페이지 다시 불러오기'). **2.5초 뒤에도 AudioContext running·마이크 트랙 live** | 한국어 오류 화면(버튼 3개), AudioContext closed·마이크 트랙 ended. '다시 시도'로 돌아오고 다시 연결도 됨 |
+| 앱 스크립트를 못 불러옴 | 본문 0글자(**빈 화면**) | 정적 안내(`main[data-static-fallback]`)와 '페이지 다시 불러오기', 누르면 복구 |
+| 이벤트·타이머·약속의 처리되지 않은 예외 | 콘솔에만 남고 화면에는 아무 표시 없음 | 알림 1장(+ '오류 정보 복사'), 같은 오류는 겹치지 않음. 중단된 요청(AbortError)·ResizeObserver 알림은 걸러짐 |
+
+- 판정(단계 지시문의 '멈추고 물어볼 조건')
+  - '저장 시점이 바뀌어(디바운스) 즉시 저장을 가정한 기존 코드가 깨질 때' — **해당 없음.** 옛 코드가 이미 300 ms 지연 저장과 `pagehide` 저장을 했고, 새 코드는 같은 300 ms 에 `visibilitychange`(hidden)를 더했을 뿐이다(L-60). 관련 회귀 시험이 모두 통과한다.
+  - '오류 경계로 잡을 수 없는 오류 종류가 있을 때' — **있다**(이벤트 핸들러·타이머·약속·모듈 로드 실패·`AudioWorkletNode.onprocessorerror`). '스스로 승인하며 진행' 지시에 따라 묻지 않고, 앞의 세 가지는 `window` 의 `error`·`unhandledrejection` 처리기로, 모듈 로드 실패는 `index.html` 안전망으로 받았다. `onprocessorerror` 는 처리하지 않았고 아래 남은 위험에 적었다(L-63).
+- 프로브·스크린샷 변화: 오디오 엔진·워클릿·프리셋 값을 건드리지 않아 프로브 기준선은 그대로다(`npm test` 의 프로브 비교 통과, 기준선 파일 변경 없음). 스크린샷 기준선도 바꾸지 않았다. 새 오류 화면·알림의 스크린샷은 기준선에 넣지 않았다 — 사람이 직접 본다.
+- 검증: `npx tsc -b --noEmit`, `npx tsc -p tsconfig.e2e.json --noEmit`, `npm run lint`, `npm run build`, **`npm test` 31/31 통과(420.8초, 코드가 최종인 `6b1ddb9` 에서)** — L-54 커밋 전 상태에서도 31/31(379.2초), **`npm run e2e` 87/87(3.6분)** — 시험 77 → 87개(E-05 +7, 순서 변경 알림 +3). 정규식(소스 문자열) 단언은 373 → 394곳(`safe-storage-regression` 신규, `midi`·`preset-ab`·`responsive-a11y` 갱신, `docs/refactoring/regex-assertions.md` 다시 생성).
+- 만난 문제
+  - 설계서의 '현재' 서술이 이미 해결되어 있었다(L-69). 옛 코드를 빌드해 재어 본 뒤에야 확인했다 — 이 Step 의 '전후' 는 그 실측이다.
+  - 시험 출력이 쏟아졌다(깨진 값마다 `console.warn`). 단위 시험이 경고를 모아 끝에 한 번 요약하고, 실행 때는 출력을 걸러 읽었다.
+  - E-05 ①②가 처음 10초 시간 초과로 실패했다. 프리셋 'Direct Clean' 을 불러온 뒤에는 Drive 가 꺼져 있어, 한 번 더 누르면 켜지는데 시험이 '꺼짐'을 기대했다 → 앞 상태의 반대를 기대하는 `flipDrive` 도우미.
+  - '저장된 설정 때문에 계속 죽음' 시험(⑤)이 **죽지 않은 채 통과**하고 있었다. 범위 입력에 `fill('2.0')` 은 "Malformed value" 오류라 `.catch` 가 삼켰고, ④는 연결된 미터가 계속 다시 그려져서 우연히 통과했다 → `fill('2')`, 그리고 오류 화면이 이미 떠 있을 때만 오류를 삼킨다.
+  - 렌더 예외를 일으키는 방법. 불러오기 값에 독을 넣는 방법은 S2.1 의 검증이 막으면 깨지고, 한 번만 던지는 예외는 React 가 렌더를 한 번 다시 시도해 통하지 않는다 → 시험이 `Number.prototype.toFixed` 를 계속 던지게 하고, 저장된 설정 때문에 죽는 상태는 init 스크립트가 흉내 낸다(L-67).
+  - 서비스 워커가 가운데서 요청을 받으면 `page.route` 가 닿지 않아 E-05 전체를 `serviceWorkers: 'block'` 으로 돌린다.
+  - `usageBytes()` 가 앱 키 전부(접두사)를 세야 하는데 처음에는 고정 키 목록만 셌다(L-64).
+- 사람 확인 필요
+  - **실제 브라우저에서 사이트 데이터를 막은 상태**(Safari 비공개 모드, Chrome 의 쿠키·사이트 데이터 차단)로 열어 안내 문구와 조작이 맞는지. 모의는 '`localStorage` 를 읽을 때 SecurityError' 와 '`setItem` 의 QuotaExceededError' 두 가지만 흉내 낸다.
+  - 정말 가득 찬 저장 공간(같은 주소 `kimyounggaur.github.io` 의 다른 앱이 공간을 채운 경우)에서의 안내와 조작.
+  - 오류 화면의 모양과 문구를 실제 휴대폰·노트북에서 눈으로 보기, 키보드 포커스와 스크린리더 낭독('문제가 생겨 화면을 표시하지 못했습니다'). 기준선 스크린샷이 없다.
+  - **배포 사이트에서 '설정을 초기화하고 다시 시작'**: 두 번 묻는지, 취소하면 그대로인지, 초기화 뒤 내 프리셋이 남는지, 같은 주소의 다른 앱 데이터는 지워지지 않는지(코드는 `guitar-pedalboard:` 접두사만 지운다).
+  - 실제로 쓰는 동안 **오류 알림(`app:unexpected-error`)이 오경보로 자주 뜨는지** — 전에는 조용히 사라지던 처리되지 않은 약속 거부(오디오 연결·MIDI 권한 등)가 이제 보인다.
+  - 알림 문구 4종(차단·가득 참·깨짐·알 수 없음)이 읽기 편한지. 앞의 셋은 설계서 문구 그대로, '알 수 없음'만 새로 썼다(L-59).
+  - 휴대폰 순서 변경 알림이 펼친 도크 윗선 바로 위에 놓이는지, 안전 영역이 있는 실제 iOS 기기에서(L-53, L-68).
+- 남은 위험
+  - `AudioWorkletNode.onprocessorerror`(워클릿이 오디오 스레드에서 죽는 경우)는 아직 처리하지 않는다. 죽으면 소리만 끊기고 화면에는 알림이 없다(L-63).
+  - 파싱은 되지만 내용이 독인 사용자 프리셋 보관함은 '초기화' 뒤에도 다시 죽일 수 있다. 초기화가 내 프리셋을 남기기 때문이다. S2.1 의 불러오기 검증이 막는다(L-62).
+  - 이전에 조용히 사라지던 처리되지 않은 약속 거부가 이제 알림으로 보인다 — 오경보가 늘 수 있다.
+  - E-05 의 렌더 예외 주입은 '소수를 `toFixed` 로 그리는 표시가 어딘가에 있다'는 사실에 기대고(L-67), 서비스 워커를 막은 채 돈다. 서비스 워커·캐시와 오류 화면의 상호작용은 시험하지 않았다.
+  - 한 번 막힌 저장소(`blocked`)는 새로고침 전에는 다시 시도하지 않는다. 설정을 바꾼 뒤 같은 탭에서 되살아나지 않는다.
+  - `usageBytes()` 는 만들었지만 화면에 쓰이지 않는다(L-64). 지연 저장(300 ms)은 탭이 강제 종료되면 마지막 변경이 사라질 수 있다 — 이전과 같다.
+  - 정규식 단언이 늘었다(373 → 394곳). 소스 문자열에 기대는 시험은 코드를 다듬을 때 쉽게 깨진다 — 브라우저 단언(E-05·E-04)을 우선 믿는다.
+
+---
