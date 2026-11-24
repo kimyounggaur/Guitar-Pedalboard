@@ -26,6 +26,7 @@ import type {
   TuningPresetId,
 } from './types';
 import type { ChannelDecision } from './engine/channelDecision';
+import { WorkletLoadError } from './engine/errors';
 import type { GuardMode } from './engine/guardSpec';
 import { InputStage, type InputChannelMode } from './engine/InputStage';
 import { createLevelMeter, createOutputGuard, GUARD_ANALYSIS_INPUT } from './engine/monitorNodes';
@@ -275,6 +276,10 @@ export class AudioEngine {
 
   async init(deviceId?: string): Promise<void> {
     if (!navigator.mediaDevices?.getUserMedia) {
+      // 보안 출처(https·localhost)가 아니면 브라우저가 mediaDevices 자체를 주지 않는다. 브라우저 탓이 아니라 주소 탓이다(설계서 4.13: SecurityError).
+      if (globalThis.isSecureContext === false) {
+        throw new DOMException('보안 출처가 아니어서 마이크를 쓸 수 없습니다.', 'SecurityError');
+      }
       throw new Error('이 브라우저는 오디오 입력을 지원하지 않습니다.');
     }
 
@@ -799,7 +804,12 @@ export class AudioEngine {
       outputGuardWorkletUrl,
     ];
 
-    await Promise.all(moduleUrls.map((url) => context.audioWorklet.addModule(url)));
+    try {
+      await Promise.all(moduleUrls.map((url) => context.audioWorklet.addModule(url)));
+    } catch (error) {
+      // 브라우저는 모듈을 못 불러온 것도 AbortError 로 알려서 장치 시작 실패와 구별되지 않는다. 안내가 다르므로(설계서 4.13) 이름을 붙여 던진다.
+      throw new WorkletLoadError({ cause: error });
+    }
     if (context === this.context && context.state !== 'closed') {
       this.workletsLoaded = true;
     }

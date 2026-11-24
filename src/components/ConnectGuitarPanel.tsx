@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { useAudioStore } from '../store/audioStore';
 import { DeviceSelector, InputChannelFields } from './DeviceSelector';
@@ -94,6 +94,16 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
     return () => mediaDevices.removeEventListener('devicechange', handleDeviceChange);
   }, [loadDevices]);
 
+  // 연결 실패 안내는 '기타 연결하기' 바로 아래에 둔다. 그래도 스크롤되는 좁은 패널(휴대폰 도크)에서는 버튼이 아래쪽에 있으면 안내가 밖으로 밀리므로,
+  // 새 오류가 생기면 보이는 곳까지만(block: 'nearest') 스크롤한다. 안 그러면 휴대폰에서는 '눌렀는데 아무 일도 없다'로 보인다(S2.3, REFACTOR_LOG L-93).
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [error]);
+  const errorNotice = error ? (
+    <p ref={errorRef} className="error-message" role="alert">{error}</p>
+  ) : null;
+
   const dismissMobileNotice = () => {
     setIsMobileNoticeDismissed(true);
     // 저장하지 못해도(차단·가득 참) 이번 방문 동안은 닫힌 채로 있다 — SafeStorage 가 메모리에 값을 들고 있고 안내는 한 번만 띄운다.
@@ -165,6 +175,8 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
           )}
         </div>
       )}
+
+      {!compact && errorNotice}
 
       {!compact && isRunning && panicControl}
 
@@ -308,6 +320,8 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
         </div>
       ) : null}
 
+      {compact ? errorNotice : null}
+
       {compact ? (
         <div id="connect-panel-details" className="connect-panel-details" hidden={!detailsOpen}>
           {detailsContent}
@@ -332,7 +346,6 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
         </p>
       ) : null}
 
-      {error && <p className="error-message">{error}</p>}
     </section>
   );
 }
