@@ -48,7 +48,7 @@ const HEADLINES = {
   'P-15': ['delay.dryChangeDb', 'reverb.dryChangeDb', 'delay.pcDryChangeDb'],
   'P-16': ['latencyMs.compressor', 'latencyMs.default', 'impulseOnsetMs.default'],
   'P-17': ['cpuShare.allOff', 'cpuShare.allOn', 'cpuShare.phaserOff', 'ratio.allOffOverAllOn'],
-  'P-18': ['tested', 'unchangedCount'],
+  'P-18': ['tested', 'unchangedCount', 'unchangedFlatEq', 'unchangedUnexpected', 'loadNullDb'],
   'P-20': ['maxStoredDecay'],
   'P-21': ['displayedSilenceDb', 'displayedToneDb'],
   'P-22': ['maxAbsCentsOpenStrings', 'cents.B1', 'cents.C2'],

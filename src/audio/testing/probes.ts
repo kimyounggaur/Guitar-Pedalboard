@@ -24,6 +24,7 @@ import {
 import type { PedalParamValue, PedalParams, PedalState, PedalType } from '../types';
 import type { ImpulseCache } from '../utils/impulseCache';
 import { clonePedals, initialPedals } from '../../store/pedalStore';
+import { isPedalOff, restoreMixOfOffPedals } from '../../presets/normalize';
 import { defaultPresets } from '../../store/presetStore';
 import * as m from './measure';
 import * as signals from './signals';
@@ -1011,11 +1012,18 @@ const p17: ProbeDefinition = {
 // ---------------------------------------------------------------------------------------------
 // P-18 — 꺼진 페달을 켰을 때의 변화
 // ---------------------------------------------------------------------------------------------
+/** 모든 밴드가 0 dB 인 Graphic EQ. 이것은 켜도 소리가 같은 것이 정상이라(변화 없음이 곧 설계) '변화 없음' 불합격에서 뺀다. */
+function isFlatGraphicEq(candidate: PedalState): boolean {
+  if (candidate.type !== 'graphicEQ') return false;
+  const bands = Object.entries(candidate.params).filter(([name]) => /^band\d+$/.test(name));
+  return bands.length > 0 && bands.every(([, value]) => value === 0);
+}
+
 const p18: ProbeDefinition = {
   id: 'P-18',
   title: '꺼진 페달을 켰을 때의 변화',
   describe:
-    '공장 프리셋마다 꺼진 페달을 (그 페달의 저장된 값 그대로) 혼자 켜 REF-PC 2초를 통과시키고, 원음(빈 체인)과 견준다. 변화 = RMS 차 ≥ 0.5 dB 또는 1/3옥타브 대역 전력의 평균 절대 차 ≥ 1 dB. 같은 값의 페달은 한 번만 렌더한다.',
+    '공장 프리셋마다 꺼진 페달을 (그 페달의 저장된 값 그대로) 혼자 켜 REF-PC 2초를 통과시키고, 원음(빈 체인)과 견준다. 변화 = RMS 차 ≥ 0.5 dB 또는 1/3옥타브 대역 전력의 평균 절대 차 ≥ 1 dB. 같은 값의 페달은 한 번만 렌더한다. 변화가 없는 것 중 모든 밴드가 0 dB 인 Graphic EQ 는 설계상 정상이라 따로 센다(unchangedFlatEq). 그 밖에 변화가 없는 페달(unchangedUnexpected)이 있으면 S2.1 의 불합격이다. 이어서 불러온 직후의 소리를 본다: 공장 프리셋마다 꺼진 페달의 Mix 를 모두 0 으로 만든 체인(옛 저장본)과 불러올 때 바로잡은 체인(restoreMixOfOffPedals)을 REF-PC 0.5초로 렌더해 출력 차(널 테스트, −200 은 완전히 같다)의 최악값을 loadNullDb 로 둔다.',
   steps: 'S2.1',
   async run(ctx) {
     const rate = ctx.sampleRate;
@@ -1033,6 +1041,8 @@ const p18: ProbeDefinition = {
     const verdicts = new Map<string, boolean>();
     let tested = 0;
     const unchanged: string[] = [];
+    const unexpected: string[] = [];
+    let flatGraphicEq = 0;
     for (const preset of defaultPresets) {
       for (const candidate of preset.pedals) {
         if (candidate.enabled && !candidate.bypassed) continue;
@@ -1046,17 +1056,50 @@ const p18: ProbeDefinition = {
           verdicts.set(key, changed);
         }
         tested += 1;
-        if (!changed) unchanged.push(`${preset.id}:${candidate.id}`);
+        if (changed) continue;
+        unchanged.push(`${preset.id}:${candidate.id}`);
+        if (isFlatGraphicEq(candidate)) flatGraphicEq += 1;
+        else unexpected.push(`${preset.id}:${candidate.id}`);
       }
     }
+
+    // 불러온 직후의 소리(S2.1): 옛 저장본(꺼진 페달의 Mix 가 모두 0)과 불러올 때 바로잡은 체인은 같은 소리여야 한다.
+    const defaultMix = new Map(initialPedals.map((initial) => [initial.id, Number(initial.params.mix)]));
+    const loadInput = signals.refPc(rate, 0.5);
+    let loadNullWorst = -200;
+    let restoredPedals = 0;
+    let untouchedOffPedals = 0;
+    for (const preset of defaultPresets) {
+      const stored = preset.pedals.map((candidate) =>
+        isPedalOff(candidate) ? { ...candidate, params: { ...candidate.params, mix: 0 } as PedalParams } : candidate,
+      );
+      const loaded = restoreMixOfOffPedals(stored, (pedalId) => defaultMix.get(pedalId));
+      stored.forEach((candidate, index) => {
+        if (!isPedalOff(candidate)) return;
+        if (loaded[index] === candidate) untouchedOffPedals += 1;
+        else restoredPedals += 1;
+      });
+      const before = await ctx.render({ input: [loadInput], pedals: stored });
+      const after = await ctx.render({ input: [loadInput], pedals: loaded });
+      loadNullWorst = Math.max(loadNullWorst, residualDb(before, after));
+    }
+
     return {
       metrics: metrics({
         presets: defaultPresets.length,
         tested,
         distinctRendered: verdicts.size,
         unchangedCount: unchanged.length,
+        unchangedFlatEq: flatGraphicEq,
+        unchangedUnexpected: unexpected.length,
+        loadRestoredPedals: restoredPedals,
+        loadUntouchedOffPedals: untouchedOffPedals,
+        loadNullDb: loadNullWorst,
       }),
-      notes: unchanged.length > 0 ? [`변화 없음: ${unchanged.join(', ')}`] : [],
+      notes: [
+        ...(unexpected.length > 0 ? [`변화 없음(예상 밖): ${unexpected.join(', ')}`] : []),
+        ...(flatGraphicEq > 0 ? [`변화 없음(밴드가 모두 0 dB 인 Graphic EQ, 설계상 정상): ${flatGraphicEq}개`] : []),
+      ],
     };
   },
 };
