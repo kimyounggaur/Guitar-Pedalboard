@@ -4310,3 +4310,13 @@
 .cab-custom-ir p { margin: 0; overflow-wrap: anywhere; }
 .cab-custom-ir small { line-height: 1.5; }
 .cab-custom-ir [role='alert'] { color: #ffd0bf; }
+
+/* F-4(S1.8): 노브의 장식 층(링·바늘·가운데 캡)은 투명한 range 입력 위에 겹쳐 그려져서, 입력의 가운데를 누르면 입력 대신 이 장식이 포인터를 받았다.
+   마우스로 노브 한가운데를 끌어도 값이 바뀌지 않았다(스캔: 데스크톱 range 입력 101개 중 13개). 장식은 포인터를 받지 않게 해서 입력이 받는다.
+   클래스 이름이 `…-knob-shell` 로 끝나는 노브 껍데기(Noise Gate·Compressor·Drive·Reverb·Crunch·Fuzz·Delay)와 공용 `.knob-control-shell` 이 모두 대상이다. */
+:is(.knob-control-shell, [class*="knob-shell"])::before,
+:is(.knob-control-shell, [class*="knob-shell"])::after,
+:is(.knob-control-shell, [class*="knob-shell"]) i,
+:is(.knob-control-shell, [class*="knob-shell"]) i::after {
+  pointer-events: none;
+}
