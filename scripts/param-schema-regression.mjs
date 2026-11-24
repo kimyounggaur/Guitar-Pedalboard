@@ -439,5 +439,22 @@ usePedalStore.getState().loadPedalsFromStorage();
   ok(found, '사용자 프리셋을 읽었다');
   equal(byId(found.pedals, 'reverb').params.decay, 6, '사용자 프리셋: Decay 9 → 6.0');
 }
+{
+  // 실행 순서 M3(범위) → M2(꺼짐 + Mix 0). 꺼진 페달의 Mix 가 범위 밖 음수이면 0 으로 맞춰진 뒤 기본 Mix 로 되돌려져야 한다(기록 L-91).
+  const defaultMix = byId(initialPedals, 'delay').params.mix;
+  ok(defaultMix > 0, `Delay 의 기본 Mix(${defaultMix})는 0 보다 크다`);
+  const storedDelay = (bypassed, mix) => [{ id: 'delay', enabled: true, bypassed, params: { ...byId(initialPedals, 'delay').params, mix } }];
+  const delayMix = (pedals) => byId(pedals, 'delay').params.mix;
+  equal(delayMix(migratePedalCollection(storedDelay(true, -5), 11)), defaultMix, '꺼진 Delay 의 Mix −5 → 0 으로 맞춘 뒤 기본 Mix');
+  equal(delayMix(migratePedalCollection(storedDelay(true, 0), 11)), defaultMix, '꺼진 Delay 의 Mix 0 → 기본 Mix(S2.1 그대로)');
+  equal(delayMix(migratePedalCollection(storedDelay(true, 150), 11)), 100, '꺼진 Delay 의 Mix 150 → 100');
+  equal(delayMix(migratePedalCollection(storedDelay(true, 0.4), 11)), 0.4, '꺼진 Delay 의 Mix 0.4 는 사용자가 정한 값이라 그대로');
+  equal(delayMix(migratePedalCollection(storedDelay(false, -5), 11)), 0, '켜진 Delay 의 Mix −5 → 0(켜진 페달의 Mix 0 은 되돌리지 않는다)');
+  const importedJson = JSON.stringify({
+    version: 11,
+    presets: [{ id: 'neg-mix', name: 'Negative Mix', updatedAt: 1, pedals: storedDelay(true, -5) }],
+  });
+  equal(delayMix(parsePresetJson(importedJson)[0].pedals), defaultMix, '가져온 프리셋 파일: 꺼진 Delay 의 Mix −5 → 기본 Mix');
+}
 
 console.log(`통과 ${checks}건 — S2.2 파라미터 스키마·M3 회귀 시험`);
