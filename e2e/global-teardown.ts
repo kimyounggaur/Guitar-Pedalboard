@@ -1,4 +1,4 @@
-// 기록 모드 시험의 측정값을 요약해 보여 주고, E2E_UPDATE_BASELINE=1 이면 docs/baseline/e2e.json 에 병합한다.
+// 시험(E-04, E-06)이 기록한 측정값을 요약해 보여 주고, E2E_UPDATE_BASELINE=1 이면 docs/baseline/e2e.json 에 병합한다.
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { repoRoot } from './helpers/env';
@@ -29,7 +29,7 @@ export default function globalTeardown(): void {
     .map((name) => JSON.parse(readFileSync(join(measurementsDir, name), 'utf8')) as Measurement);
   if (measurements.length === 0) return;
 
-  console.log('\n기록 모드 측정값');
+  console.log('\n시험이 기록한 측정값');
   for (const measurement of measurements) {
     console.log(`  ${measurement.id} ${measurement.profile} ${measurement.condition}: ${measurement.summary}`);
   }
