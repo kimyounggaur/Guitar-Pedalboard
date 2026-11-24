@@ -1,6 +1,6 @@
 import { useHistoryStore } from '../store/historyStore';
 import { HistoryControls } from './HistoryControls';
-import { useEffect, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { ChainText } from './ChainText';
 import { ConnectGuitarPanel } from './ConnectGuitarPanel';
 import { GlobalKeyboardShortcuts } from './GlobalKeyboardShortcuts';
@@ -9,6 +9,7 @@ import { PedalBoard } from './PedalBoard';
 import { PresetPanel } from './PresetPanel';
 import { useDockHeight } from '../hooks/useDockHeight';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useSidebar } from '../hooks/useSidebar';
 import { useAudioStore } from '../store/audioStore';
 import { usePedalStore } from '../store/pedalStore';
 
@@ -39,7 +40,11 @@ export function AppShell() {
   const [activeMobileTab, setActiveMobileTab] = useState<MobileTabId>('pedals');
   const [dockElement, setDockElement] = useState<HTMLElement | null>(null);
   const mobileDockOpen = isMobileLayout && activeMobileTab !== 'pedals';
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // 오른쪽 오디오 패널: 1280px 이상은 붙박이(기본 열림, 접은 선택을 기억), 768~1279px 는 위에 뜨는 서랍(기본 닫힘)이다(S1.8).
+  const { docked: sidebarDocked, open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
+  const sidebarToggleRef = useRef<HTMLButtonElement>(null);
+  const drawerCloseRef = useRef<HTMLButtonElement>(null);
+  const wasDrawerOpenRef = useRef(false);
   const [isOnline, setIsOnline] = useState(readOnlineStatus);
   const loadPedalsFromStorage = usePedalStore((state) => state.loadPedalsFromStorage);
   const refreshChainGainWarning = useAudioStore((state) => state.refreshChainGainWarning);
@@ -77,6 +82,14 @@ export function AppShell() {
 
   useDockHeight(dockElement);
 
+  // 서랍을 열면 포커스를 서랍의 닫기 버튼으로 옮기고, 닫으면 여는 데 쓴 버튼으로 돌려 보낸다. 붙박이 패널은 포커스를 건드리지 않는다.
+  const drawerOpen = !isMobileLayout && !sidebarDocked && sidebarOpen;
+  useEffect(() => {
+    if (drawerOpen) drawerCloseRef.current?.focus();
+    else if (wasDrawerOpenRef.current) sidebarToggleRef.current?.focus();
+    wasDrawerOpenRef.current = drawerOpen;
+  }, [drawerOpen]);
+
   const handleMobileTabClick = (tabId: MobileTabId) => {
     setActiveMobileTab((current) => (current === tabId ? 'pedals' : tabId));
   };
@@ -104,7 +117,15 @@ export function AppShell() {
   return (
     <main className={`app-shell${mobileDockOpen ? ' mobile-dock-open' : ''}`}>
       <GlobalKeyboardShortcuts />
-      <HistoryControls />
+      {/* 실행 취소·다시 실행과 오디오 패널 버튼을 한 줄에 둔다(S1.8 상단 압축: 따로 두면 줄이 둘이라 첫 페달이 그만큼 내려간다). */}
+      <div className={`app-toolbar${!isMobileLayout ? ' has-sidebar-toggle' : ''}`}>
+        <HistoryControls />
+        {!isMobileLayout && (
+          <button ref={sidebarToggleRef} className="sidebar-toggle" type="button" aria-expanded={sidebarOpen} aria-controls="desktop-sidebar" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            {sidebarOpen ? '오디오 패널 접기' : '오디오 패널 펼치기'}
+          </button>
+        )}
+      </div>
       {!isOnline ? (
         <div className="offline-notice" role="status" aria-live="polite">
           <strong>오프라인 상태입니다.</strong>
@@ -113,19 +134,22 @@ export function AppShell() {
           </span>
         </div>
       ) : null}
-      {!isMobileLayout && (
-        <button className="sidebar-toggle" type="button" aria-expanded={sidebarOpen} aria-controls="desktop-sidebar" onClick={() => setSidebarOpen((open) => !open)}>
-          {sidebarOpen ? '오디오 패널 접기' : '오디오 패널 펼치기'}
-        </button>
-      )}
-      <div className={`workspace${!sidebarOpen && !isMobileLayout ? ' sidebar-collapsed' : ''}`}>
+      <div className={`workspace${!sidebarOpen && sidebarDocked && !isMobileLayout ? ' sidebar-collapsed' : ''}${!sidebarDocked && !isMobileLayout ? ' sidebar-drawer-mode' : ''}`}>
         <PedalBoard inputPanel={isMobileLayout ? undefined : inputPanel} />
         {!isMobileLayout ? (
-          <aside id="desktop-sidebar" className="sidebar" aria-label="오디오와 프리셋 패널" hidden={!sidebarOpen}>
-            {presetPanel}
-            {meterPanel}
-            <ChainText />
-          </aside>
+          <>
+            {drawerOpen ? <div className="sidebar-scrim" aria-hidden="true" onClick={() => setSidebarOpen(false)} /> : null}
+            <aside id="desktop-sidebar" className={`sidebar${!sidebarDocked ? ' is-drawer' : ''}`} aria-label="오디오와 프리셋 패널" hidden={!sidebarOpen}>
+              {!sidebarDocked ? (
+                <button ref={drawerCloseRef} type="button" className="sidebar-drawer-close" onClick={() => setSidebarOpen(false)}>
+                  오디오 패널 닫기
+                </button>
+              ) : null}
+              {presetPanel}
+              {meterPanel}
+              <ChainText />
+            </aside>
+          </>
         ) : null}
       </div>
 

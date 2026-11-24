@@ -115,16 +115,6 @@ export function describeDockSwitchReport(report: DockSwitchReport): string {
   return `스위치 ${report.reachable}/${report.count} 도달(${Math.round(report.reachableRatio * 100)}%), 상자가 도크 위에 통째로 ${report.boxAboveDock}/${report.count}, 최소 ${report.minWidth}×${report.minHeight}px, 빈 영역 ${report.freeHeight}px${blockers ? `, 가린 것: ${blockers}` : ''}`;
 }
 
-/**
- * 그래픽 EQ 세로 페이더 안의 숫자 입력이 페이지를 덮는 투명 입력이 되는 문제(REFACTOR_LOG F-1)를
- * 측정에서만 걷어 낸다. 레이아웃은 그대로 두고 포인터 이벤트만 통과시키므로,
- * 이 상태로 잰 값은 '겹침이 고쳐졌다면 도크·배치만의 영향'을 보여 준다.
- * 겹침이 고쳐진 뒤에도 해롭지 않다(해당 입력이 이미 작아졌어도 같은 값이 나온다).
- */
-export async function ignoreHiddenFaderInputs(page: Page): Promise<void> {
-  await page.addStyleTag({ content: '.vertical-fader > input.knob-number-input { pointer-events: none !important; }' });
-}
-
 export function describeSwitchReport(report: SwitchReport): string {
   const blockers = Object.entries(report.blockedBy)
     .map(([name, count]) => `${name}×${count}`)

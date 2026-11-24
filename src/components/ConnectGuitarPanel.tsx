@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { useAudioStore } from '../store/audioStore';
-import { DeviceSelector } from './DeviceSelector';
+import { DeviceSelector, InputChannelFields } from './DeviceSelector';
 import { MidiAdvancedControls } from './MidiAdvancedControls';
 import { ToggleSwitch } from './ToggleSwitch';
 
@@ -50,8 +50,28 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
   const loadDevices = useAudioStore((state) => state.loadDevices);
   const setInputGainDb = useAudioStore((state) => state.setInputGainDb);
   const setHowlProtectionEnabled = useAudioStore((state) => state.setHowlProtectionEnabled);
+  const devices = useAudioStore((state) => state.devices);
+  const selectedDeviceId = useAudioStore((state) => state.selectedDeviceId);
+  const latency = useAudioStore((state) => state.latency);
   const hasUploadedFile = inputMode === 'file' && Boolean(uploadedFileName);
   const fileControlsDisabled = isLoading || !hasUploadedFile;
+
+  // S1.8: 데스크톱에서 기타(장치 입력)를 연결하면 이 패널이 한 줄 상태 표시줄로 줄어든다. 장치·채널·지연·입력 트림·연결 해제·Panic 만
+  // 남기고 나머지(장치 고르기·MIDI·음원 파일·하울링 보호·안내)는 '입력 설정' 버튼으로 펼친다. 모바일 도크와 음원 파일 재생은 그대로 둔다.
+  const isLiveConnected = isRunning && inputMode === 'device';
+  const compact = !isMobile && isLiveConnected;
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [previousLive, setPreviousLive] = useState(isLiveConnected);
+  // 연결이 끝나면(해제·Panic·하울링 차단·장치 분실) 다음 연결은 다시 접힌 채로 시작한다.
+  if (previousLive !== isLiveConnected) {
+    setPreviousLive(isLiveConnected);
+    if (!isLiveConnected) setDetailsOpen(false);
+  }
+  const deviceLabel = selectedDeviceId
+    ? (devices.find((device) => device.deviceId === selectedDeviceId)?.label || '선택한 입력 장치')
+    : '기본 입력 장치';
+  const latencyTotal = latency.base !== null && latency.output !== null ? latency.base + latency.output : null;
+  const latencyText = latency.sampleRate > 0 && latencyTotal !== null ? `${latencyTotal.toFixed(1)}ms` : '측정 대기';
   const inputWarning = !isRunning
     ? null
     : inputLevel.isClipping
@@ -80,34 +100,56 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
     safeStorage.setRaw(STORAGE_KEYS.mobileAudioNotice, 'true');
   };
 
-  return (
-    <section className="side-panel connect-panel">
-      {isMobile && !isMobileNoticeDismissed ? (
-        <aside className="mobile-audio-notice" aria-label="모바일 오디오 안내">
-          <p>
-            <span>모바일은 입력 지연이 커서 실시간 연주에 적합하지 않습니다.</span>
-            <span>
-              음원 파일 재생 모드로 톤을 확인하거나, PC + 오디오 인터페이스 사용을 권장합니다.
-            </span>
-          </p>
-          <button
-            type="button"
-            aria-label="모바일 오디오 안내 닫기"
-            onClick={dismissMobileNotice}
-          >
-            닫기
-          </button>
-        </aside>
-      ) : null}
+  const trimControl = (
+    <label className="io-slider-control">
+      <span className="control-row">
+        <span>입력 트림</span>
+        <output>
+          {inputGainDb > 0 ? '+' : ''}
+          {inputGainDb.toFixed(1)} dB
+        </output>
+      </span>
+      <input
+        type="range"
+        min={-24}
+        max={24}
+        step={0.5}
+        value={inputGainDb}
+        aria-label="입력 트림"
+        aria-valuetext={`입력 트림 ${inputGainDb > 0 ? '+' : ''}${inputGainDb.toFixed(1)} 데시벨`}
+        onChange={(event) => setInputGainDb(Number(event.currentTarget.value))}
+      />
+    </label>
+  );
+
+  const disconnectControl = (
+    <button
+      type="button"
+      className="danger-button"
+      disabled={isLoading}
+      onClick={() => void stop()}
+    >
+      연결 해제
+    </button>
+  );
+
+  const panicControl = (
+    <button type="button" className="panic-button" onClick={panic}>
+      Panic
+    </button>
+  );
+
+  const detailsContent = (
+    <>
       <div className="panel-title">
         <p className="eyebrow">Audio Input</p>
         <h2>기타 입력 연결</h2>
       </div>
 
-      <DeviceSelector />
+      <DeviceSelector hideChannelMenu={compact} />
       <MidiAdvancedControls />
 
-      {inputMode !== 'file' && (
+      {!compact && inputMode !== 'file' && (
         <div className="connect-actions">
           {!isRunning ? (
             <button
@@ -119,23 +161,12 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
               {isLoading ? '연결 중...' : '기타 연결하기'}
             </button>
           ) : (
-            <button
-              type="button"
-              className="danger-button"
-              disabled={isLoading}
-              onClick={() => void stop()}
-            >
-              연결 해제
-            </button>
+            disconnectControl
           )}
         </div>
       )}
 
-      {isRunning && (
-        <button type="button" className="panic-button" onClick={panic}>
-          Panic
-        </button>
-      )}
+      {!compact && isRunning && panicControl}
 
       <div className="audio-file-upload">
         <label htmlFor="audio-file">음원 파일</label>
@@ -215,25 +246,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
       </div>
 
       <div className="input-safety-controls">
-        <label className="io-slider-control">
-          <span className="control-row">
-            <span>입력 트림</span>
-            <output>
-              {inputGainDb > 0 ? '+' : ''}
-              {inputGainDb.toFixed(1)} dB
-            </output>
-          </span>
-          <input
-            type="range"
-            min={-24}
-            max={24}
-            step={0.5}
-            value={inputGainDb}
-            aria-label="입력 트림"
-            aria-valuetext={`입력 트림 ${inputGainDb > 0 ? '+' : ''}${inputGainDb.toFixed(1)} 데시벨`}
-            onChange={(event) => setInputGainDb(Number(event.currentTarget.value))}
-          />
-        </label>
+        {!compact && trimControl}
         <div className="howl-protection-control">
           <ToggleSwitch
             label="하울링 보호"
@@ -243,6 +256,65 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
           <span>입력에서 같은 높이의 소리가 줄지 않고 1초 넘게 이어지면 하울링으로 보고 차단합니다. 기타의 긴 서스테인에 반응하거나 일부 피드백을 놓칠 수 있으므로 헤드폰을 사용하세요.</span>
         </div>
       </div>
+    </>
+  );
+
+  return (
+    <section className={`side-panel connect-panel${compact ? ' is-connected' : ''}`}>
+      {isMobile && !isMobileNoticeDismissed ? (
+        <aside className="mobile-audio-notice" aria-label="모바일 오디오 안내">
+          <p>
+            <span>모바일은 입력 지연이 커서 실시간 연주에 적합하지 않습니다.</span>
+            <span>
+              음원 파일 재생 모드로 톤을 확인하거나, PC + 오디오 인터페이스 사용을 권장합니다.
+            </span>
+          </p>
+          <button
+            type="button"
+            aria-label="모바일 오디오 안내 닫기"
+            onClick={dismissMobileNotice}
+          >
+            닫기
+          </button>
+        </aside>
+      ) : null}
+
+      {compact ? (
+        <div className="connect-status-bar" role="group" aria-label="입력 연결 상태">
+          <span className="connect-status-dot" aria-hidden="true" />
+          <span className="connect-status-device" title={deviceLabel}>
+            <span className="connect-status-key">입력</span>
+            <span className="connect-status-value">{deviceLabel}</span>
+          </span>
+          <div className="connect-status-channel">
+            <InputChannelFields />
+          </div>
+          <span className="connect-status-latency" title="출력 지연 추정(이펙터 처리 시간은 빠져 있습니다)">
+            <span className="connect-status-key">지연</span>
+            <span className="connect-status-value">{latencyText}</span>
+          </span>
+          {trimControl}
+          {disconnectControl}
+          {panicControl}
+          <button
+            type="button"
+            className="secondary-button connect-status-more"
+            aria-expanded={detailsOpen}
+            aria-controls="connect-panel-details"
+            onClick={() => setDetailsOpen((open) => !open)}
+          >
+            {detailsOpen ? '입력 설정 접기' : '입력 설정'}
+          </button>
+        </div>
+      ) : null}
+
+      {compact ? (
+        <div id="connect-panel-details" className="connect-panel-details" hidden={!detailsOpen}>
+          {detailsContent}
+        </div>
+      ) : (
+        detailsContent
+      )}
 
       {inputWarning ? (
         <p
@@ -253,10 +325,12 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
         </p>
       ) : null}
 
-      <p className="panel-copy">
-        초기 테스트는 헤드폰 사용을 권장합니다. 오디오 인터페이스의 Direct Monitor가 켜져 있으면
-        원음과 처리음이 함께 들릴 수 있습니다.
-      </p>
+      {!compact ? (
+        <p className="panel-copy">
+          초기 테스트는 헤드폰 사용을 권장합니다. 오디오 인터페이스의 Direct Monitor가 켜져 있으면
+          원음과 처리음이 함께 들릴 수 있습니다.
+        </p>
+      ) : null}
 
       {error && <p className="error-message">{error}</p>}
     </section>

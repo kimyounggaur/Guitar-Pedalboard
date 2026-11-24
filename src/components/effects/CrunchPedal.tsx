@@ -84,12 +84,18 @@ export function CrunchPedal({ params, onChange }: CrunchPedalProps) {
           />
         </div>
 
-        <div className="crunch-led" aria-hidden="true" />
-        <span className="crunch-side-label crunch-side-out">OUT</span>
-        <span className="crunch-side-label crunch-side-in">IN</span>
-        <strong className="crunch-brand">Crunch</strong>
-        <div className="crunch-footswitch" aria-hidden="true">
-          <span />
+        {/* S1.8: LED·로고·발스위치·입출력 글자를 고정 좌표(absolute top)로 놓지 않고 노브 줄 아래에 차례로 쌓는다.
+            노브 칸에 숫자 입력이 붙어 노브 줄이 길어져도 이 장식이 글자를 덮지 않는다. */}
+        <div className="crunch-center-row">
+          <span className="crunch-side-label crunch-side-out">OUT</span>
+          <div className="crunch-center-stack">
+            <div className="crunch-led" aria-hidden="true" />
+            <strong className="crunch-brand">Crunch</strong>
+            <div className="crunch-footswitch" aria-hidden="true">
+              <span />
+            </div>
+          </div>
+          <span className="crunch-side-label crunch-side-in">IN</span>
         </div>
         <strong className="crunch-mode-label">Distortion</strong>
       </section>
