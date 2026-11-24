@@ -2,6 +2,7 @@
 //
 //   node scripts/make-fixture-wavs.mjs                 e2e/fixtures/*.wav 전부(48 kHz, 16비트 PCM)
 //   node scripts/make-fixture-wavs.mjs --only h-1,ref-pc
+//   node scripts/make-fixture-wavs.mjs --missing       아직 없는 파일만(e2e/global-setup.ts 가 시험 전에 부른다)
 //   node scripts/make-fixture-wavs.mjs --out /tmp/wav --sample-rate 44100
 //   node scripts/make-fixture-wavs.mjs --list
 //
@@ -11,6 +12,7 @@
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
 import { build } from 'esbuild';
+import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
@@ -51,7 +53,11 @@ if (args.includes('--list')) {
   process.exit(0);
 }
 
-const selected = only.length ? fixtureSignals.filter((signal) => only.includes(signal.file)) : fixtureSignals;
+const requested = only.length ? fixtureSignals.filter((signal) => only.includes(signal.file)) : fixtureSignals;
+// --missing: 이미 있는 WAV 는 건드리지 않는다. 신호가 새로 늘어난 뒤에도 옛 WAV 를 가진 환경이 시험 전에 따라잡게 한다.
+const selected = args.includes('--missing')
+  ? requested.filter((signal) => !existsSync(join(outputDirectory, `${signal.file}.wav`)))
+  : requested;
 const unknown = only.filter((name) => !fixtureSignals.some((signal) => signal.file === name));
 if (unknown.length > 0) {
   console.error(`알 수 없는 신호: ${unknown.join(', ')} (--list 로 목록을 볼 수 있습니다)`);
