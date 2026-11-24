@@ -1,4 +1,4 @@
-// 화면 프로필 10종(설계서 S0.4, 필요하면 1680×1050 추가). 앱의 모바일 배치 경계는 767 px 이하(AppShell MOBILE_LAYOUT_QUERY).
+// 화면 프로필 11종(설계서 S0.4 의 10종 + S1.8 에서 더한 1680×1050). 앱의 모바일 배치 경계는 767 px 이하(AppShell MOBILE_LAYOUT_QUERY).
 export interface ScreenProfile {
   /** 'WxH' */
   name: string;
@@ -22,6 +22,7 @@ export const SCREEN_PROFILES: readonly ScreenProfile[] = [
   profile(1366, 768),
   profile(1440, 900),
   profile(1536, 864),
+  profile(1680, 1050),
   profile(1920, 1080),
 ];
 

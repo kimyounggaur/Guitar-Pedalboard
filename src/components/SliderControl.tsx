@@ -26,7 +26,8 @@ export function SliderControl({ label, value, min, max, step, unit = '', display
   return (
     <div className="slider-control knob-control">
       <span className="knob-control-head">
-        <span>{label}</span>
+        {/* 좁은 카드에서는 이름이 한 줄로 줄어들며 말줄임표가 붙는다(S1.8). 전체 이름은 title 과 range 입력의 aria-label 로 남는다. */}
+        <span title={label}>{label}</span>
         <output>{shownValue}</output>
       </span>
       <span className="knob-control-shell" style={{ '--knob-rotation': `${rotation}deg`, '--knob-fill': `${clampedProgress * 75}%` } as CSSProperties}>

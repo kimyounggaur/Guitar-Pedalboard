@@ -48,12 +48,20 @@ export async function setMobileDock(page: Page, open: boolean, tab: Exclude<Mobi
     .toBe(true);
 }
 
-/** 데스크톱 오른쪽 오디오 패널(사이드바)을 펼치거나 접는다(768 px 이상에서만 있다). */
+/**
+ * 데스크톱 오른쪽 오디오 패널(사이드바)을 펼치거나 접는다(768 px 이상에서만 있다).
+ * 1280 px 이상에서는 페달 보드 옆에 붙은 패널이고, 768~1279 px 에서는 화면 위에 뜨는 서랍이다(S1.8).
+ * 서랍이 열려 있으면 여는 버튼이 서랍·막 뒤에 가려지므로 닫을 때는 서랍 안의 '오디오 패널 닫기' 버튼을 누른다.
+ */
 export async function setSidebar(page: Page, open: boolean): Promise<void> {
   const toggle = page.locator('.sidebar-toggle');
   await expect(toggle).toBeVisible();
   if ((await toggle.getAttribute('aria-expanded')) === String(open)) return;
-  await toggle.click();
+  if (!open && (await page.locator('#desktop-sidebar.is-drawer').count()) > 0) {
+    await page.locator('#desktop-sidebar .sidebar-drawer-close').click();
+  } else {
+    await toggle.click();
+  }
   await expect(toggle).toHaveAttribute('aria-expanded', String(open));
 }
 

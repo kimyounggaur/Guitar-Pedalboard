@@ -128,6 +128,8 @@ assert.deepEqual(
     presetFavorites: 'guitar-pedalboard:preset-favorites',
     presetRecents: 'guitar-pedalboard:preset-recents',
     mobileAudioNotice: 'guitar-pedalboard:mobile-audio-notice-dismissed',
+    // S1.8 에서 더한 키: 넓은 화면의 오른쪽 오디오 패널 열림 상태(`{ sidebarOpen: boolean }`).
+    ui: 'guitar-pedalboard:ui',
   },
   '저장 키 문자열이 바뀌었습니다(S2.4 범위)',
 );

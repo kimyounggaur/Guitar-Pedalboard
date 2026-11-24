@@ -22,6 +22,11 @@ export const STORAGE_KEYS = {
   presetRecents: 'guitar-pedalboard:preset-recents',
   /** 모바일 오디오 안내를 닫았는지('true' 문자열) */
   mobileAudioNotice: 'guitar-pedalboard:mobile-audio-notice-dismissed',
+  /**
+   * 화면 설정(JSON, S1.8). 지금은 넓은 화면(1280px 이상)에서 오른쪽 오디오 패널을 펴 두었는지(`sidebarOpen`)만 담는다.
+   * 좁은 화면의 서랍은 화면을 덮으므로 열림 여부를 저장하지 않는다.
+   */
+  ui: 'guitar-pedalboard:ui',
 } as const;
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];

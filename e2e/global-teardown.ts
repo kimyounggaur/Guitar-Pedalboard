@@ -6,12 +6,15 @@ import { measurementsDir, type Measurement } from './helpers/record';
 
 const baselinePath = join(repoRoot, 'docs', 'baseline', 'e2e.json');
 const screenshotsDir = join(repoRoot, 'docs', 'baseline', 'screenshots');
-// 20장을 모두 넣으면 5.9 MB 라 기준선을 갱신할 때마다 저장소가 부푼다. 대표 4장만 커밋하고 나머지는 CI 실패 보고서로만 남는다.
+// 모두 넣으면 6 MB 가 넘어 기준선을 갱신할 때마다 저장소가 부푼다. 대표 몇 장만 커밋하고 나머지는 CI 실패 보고서로만 남는다.
+// E-06 은 S1.8 에서 1440×900 과 '기타 연결 뒤' 1280×800 을 더했다(1024×768 '펼침' 은 서랍이 열린 모습이다).
 const committedScreenshots = new Set([
   'E-04__390x844__dock-collapsed.png',
   'E-04__390x844__dock-expanded.png',
   'E-06__1024x768__sidebar-open.png',
   'E-06__1280x800__sidebar-open.png',
+  'E-06__1280x800__connected.png',
+  'E-06__1440x900__sidebar-open.png',
 ]);
 
 interface BaselineFile {
@@ -45,8 +48,8 @@ export default function globalTeardown(): void {
   const next: BaselineFile = {
     schema: 1,
     description:
-      '브라우저 시나리오 기록 모드(E-04·E-06)의 기준 측정값. E2E_UPDATE_BASELINE=1 npm run e2e 로만 갱신하고 커밋 메시지는 `baseline: {Step ID} {이유}` 로 적는다.',
-    generatedWith: { playwright: '1.63.0', note: 'scripts/ 가 아니라 e2e/tests 의 기록 모드 시험이 쓴다' },
+      '브라우저 시나리오(E-04·E-06)가 잰 값의 기준선. 두 시험 모두 정식 단언(S1.6·S1.8)이고, 이 파일은 사람이 값의 변화를 읽기 위한 기록이다. E2E_UPDATE_BASELINE=1 npm run e2e 로만 갱신하고 커밋 메시지는 `baseline: {Step ID} {이유}` 로 적는다.',
+    generatedWith: { playwright: '1.63.0', note: 'scripts/ 가 아니라 e2e/tests 의 E-04·E-06 시험이 잰 값을 쓴다' },
     results: existing?.results ?? {},
   };
   for (const measurement of measurements) {

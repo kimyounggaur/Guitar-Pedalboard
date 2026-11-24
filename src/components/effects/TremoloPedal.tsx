@@ -84,6 +84,19 @@ export function TremoloPedal({ pedalId, params, onChange }: TremoloPedalProps) {
             </button>
           ))}
         </div>
+        {/* 카드가 340px 이하로 좁아지면 세 버튼 대신 이 선택 상자만 보인다(S1.8, 컨테이너 쿼리). 둘 중 숨겨진 쪽은 접근성 트리에도 없다. */}
+        <select
+          className="tremolo-shape-select"
+          aria-label="Shape"
+          value={params.shape}
+          onChange={(event) => onChange('shape', event.currentTarget.value)}
+        >
+          {shapeOptions.map((shape) => (
+            <option key={shape} value={shape}>
+              {shape}
+            </option>
+          ))}
+        </select>
       </fieldset>
 
       <div className="tremolo-sync-controls">

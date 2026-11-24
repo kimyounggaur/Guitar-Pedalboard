@@ -126,3 +126,54 @@ test.describe('F-3 페달 카드 위에서 시작한 터치 스크롤', () => {
     expect(after.y, '가로로 끌었는데 문서가 세로로 움직이면 안 된다').toBeLessThan(40);
   });
 });
+
+// F-4(S1.8 에서 고침, REFACTOR_LOG L-55·L-77): 노브의 장식 층(링·바늘·가운데 캡)이 투명한 range 입력의 가운데를 덮어,
+// 마우스로 노브 한가운데를 끌어도 값이 바뀌지 않았다. 데스크톱 화면의 range 입력 101개 중 13개였다.
+test.describe('F-4 노브 가운데를 눌러도 입력이 포인터를 받는다', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } });
+
+  test('F-4 모든 노브 입력의 가운데 점을 받는 것은 입력 자신이다', async ({ page }) => {
+    await openApp(page);
+    const blocked = await page.evaluate(async () => {
+      const found: string[] = [];
+      for (const input of Array.from(document.querySelectorAll<HTMLInputElement>('.pedal-board input[type="range"]'))) {
+        input.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' as ScrollBehavior });
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        const rect = input.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) continue;
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        if (hit !== input) {
+          const card = input.closest('.pedal-card')?.getAttribute('aria-label') ?? '?';
+          found.push(`${card} / ${input.getAttribute('aria-label') ?? '?'} ← ${hit ? `${hit.tagName.toLowerCase()}.${String((hit as HTMLElement).className)}` : 'null'}`);
+        }
+      }
+      return found;
+    });
+    expect(blocked, '가운데 점을 입력이 아닌 요소가 받는 노브').toEqual([]);
+  });
+
+  // 전에는 값이 그대로였던 노브들(장식 층 종류별로 하나씩): Noise Gate(`i` 캡), Chorus(공용 껍데기 바늘), Drive(튜브 껍데기), Reverb(리버브 껍데기).
+  const knobs = [
+    { card: 'Noise Gate 이펙터', label: 'Threshold' },
+    { card: 'Chorus 이펙터', label: 'Rate' },
+    { card: 'Drive 이펙터', label: 'Tone' },
+    { card: 'Reverb 이펙터', label: 'Mix' },
+  ] as const;
+  for (const knob of knobs) {
+    test(`F-4 ${knob.card.replace(' 이펙터', '')} ${knob.label}: 마우스로 가운데를 위로 끌면 값이 바뀐다`, async ({ page }) => {
+      await openApp(page);
+      const input = page.locator(`.pedal-card[aria-label="${knob.card}"] input[type="range"][aria-label="${knob.label}"]`);
+      await input.scrollIntoViewIfNeeded();
+      const box = await input.boundingBox();
+      expect(box, `${knob.card} ${knob.label} 입력 상자`).not.toBeNull();
+      const x = (box?.x ?? 0) + (box?.width ?? 0) / 2;
+      const y = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+      const before = await input.inputValue();
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, y - 40, { steps: 6 });
+      await page.mouse.up();
+      expect(await input.inputValue(), `${knob.card} ${knob.label}: 가운데를 끈 뒤의 값`).not.toBe(before);
+    });
+  }
+});

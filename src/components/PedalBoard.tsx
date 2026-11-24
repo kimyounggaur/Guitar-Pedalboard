@@ -15,6 +15,7 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 import { AudioEngine } from '../audio/AudioEngine';
+import { useAudioStore } from '../store/audioStore';
 import { usePedalStore } from '../store/pedalStore';
 import { PedalIcon } from './PedalIcon';
 import { SortablePedal } from './SortablePedal';
@@ -30,6 +31,8 @@ export function PedalBoard({ inputPanel }: PedalBoardProps) {
   const toastTimerRef = useRef<number | null>(null);
   const pedals = usePedalStore((state) => state.pedals);
   const reorderPedals = usePedalStore((state) => state.reorderPedals);
+  // 기타를 연결하면 연결 패널이 한 줄 상태 표시줄로 줄어든다(ConnectGuitarPanel). 머리말도 로고 옆에 붙여 높이를 아낀다(S1.8).
+  const isLiveConnected = useAudioStore((state) => state.isRunning && state.inputMode === 'device');
   const setDraggingPedal = usePedalStore((state) => state.setDraggingPedal);
   useEffect(() => {
     return () => {
@@ -77,7 +80,7 @@ export function PedalBoard({ inputPanel }: PedalBoardProps) {
 
   return (
     <section id="pedal-board-section" className="board-section" aria-label="페달보드">
-      <div className="section-heading">
+      <div className={`section-heading${inputPanel && isLiveConnected ? ' is-connected' : ''}`}>
         <div className="brand-lockup">
           <p className="eyebrow">Pedalboard</p>
           <h1 className="app-logo-title">
