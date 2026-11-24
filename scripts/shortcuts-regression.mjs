@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { Buffer } from 'node:buffer';
+import { Buffer, File } from 'node:buffer';
 import console from 'node:console';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
@@ -365,6 +365,39 @@ assert.equal(starts, 1);
 useAudioStore.setState({ isRunning: true });
 assert.equal(executeShortcutCommand({ type: 'toggle-audio' }, () => {}), true);
 assert.equal(stops, 1);
+
+// 파일 모드의 Space 는 재생/일시정지이고, 마이크를 켜지도 연결을 끊지도 않는다(S2.6, E-10).
+let filePlays = 0;
+let filePauses = 0;
+useAudioStore.setState({
+  playFile: async () => {
+    filePlays += 1;
+  },
+  pauseFile: () => {
+    filePauses += 1;
+  },
+  inputMode: 'file',
+  isRunning: true,
+  isFilePaused: false,
+  uploadedFile: new File(['x'], 'a.wav', { type: 'audio/wav' }),
+});
+assert.equal(executeShortcutCommand({ type: 'toggle-audio' }, () => {}), true);
+assert.deepEqual({ filePauses, filePlays, starts, stops }, { filePauses: 1, filePlays: 0, starts: 1, stops: 1 }, '재생 중 Space = 일시정지');
+useAudioStore.setState({ isFilePaused: true });
+assert.equal(executeShortcutCommand({ type: 'toggle-audio' }, () => {}), true);
+assert.deepEqual({ filePauses, filePlays, starts, stops }, { filePauses: 1, filePlays: 1, starts: 1, stops: 1 }, '일시정지 중 Space = 재생');
+// 정지·Panic 으로 세션이 끝났어도 열어 둔 파일이 있으면 Space 는 마이크가 아니라 그 파일을 다시 튼다.
+useAudioStore.setState({ inputMode: 'idle', isRunning: false });
+assert.equal(executeShortcutCommand({ type: 'toggle-audio' }, () => {}), true);
+assert.deepEqual({ filePauses, filePlays, starts, stops }, { filePauses: 1, filePlays: 2, starts: 1, stops: 1 }, '세션이 끝난 뒤에도 파일이 열려 있으면 Space = 파일 재생(마이크 아님)');
+// 파일이 없으면 예전대로 기타를 연결한다. 기타가 연결돼 있으면 끊는다.
+useAudioStore.setState({ uploadedFile: null });
+assert.equal(executeShortcutCommand({ type: 'toggle-audio' }, () => {}), true);
+assert.deepEqual({ filePauses, filePlays, starts, stops }, { filePauses: 1, filePlays: 2, starts: 2, stops: 1 }, '열린 파일이 없으면 Space = 기타 연결');
+useAudioStore.setState({ inputMode: 'device', isRunning: true });
+assert.equal(executeShortcutCommand({ type: 'toggle-audio' }, () => {}), true);
+assert.deepEqual({ filePauses, filePlays, starts, stops }, { filePauses: 1, filePlays: 2, starts: 2, stops: 2 }, '기타가 연결돼 있으면 Space = 연결 해제');
+useAudioStore.setState({ inputMode: 'idle', isRunning: false });
 assert.equal(executeShortcutCommand({ type: 'tap-tempo' }, () => {}), true);
 assert.equal(taps, 1);
 assert.equal(

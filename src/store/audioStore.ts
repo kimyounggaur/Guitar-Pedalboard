@@ -641,7 +641,14 @@ interface AudioStore {
   outputSelectionSupported: boolean;
   setOutputDevice: (deviceId: string) => Promise<void>;
   inputMode: InputMode;
+  /**
+   * 열어 둔 음원 File(설계서 4.11 '파일 유지'). 재생이 끝나거나 정지·Panic 으로 세션이 끝나도 남고,
+   * 다른 파일을 열거나 '파일 닫기'를 누르거나 기타를 연결할 때만 놓는다. 화면이 보이는 이름은 `uploadedFileName` 이다.
+   */
+  uploadedFile: File | null;
   uploadedFileName: string | null;
+  /** '반복 재생'(기본 켜짐). 저장하지 않는다 — 새로 열면 다시 켜져 있다. */
+  fileLoop: boolean;
   fileCurrentTime: number;
   fileDuration: number;
   isFilePaused: boolean;
@@ -698,6 +705,11 @@ interface AudioStore {
   playFile: () => Promise<void>;
   pauseFile: () => void;
   seekFile: (deltaSeconds: number) => void;
+  /** 탐색 막대: 처음부터 몇 초 되는 자리로 곧바로 간다. */
+  seekFileTo: (seconds: number) => void;
+  setFileLoop: (loop: boolean) => void;
+  /** '파일 닫기': 재생 중이면 멈추고, 열어 둔 파일을 놓는다. */
+  closeFile: () => Promise<void>;
   stop: () => Promise<void>;
   panic: () => void;
   tapTempoTap: () => void;
@@ -808,14 +820,16 @@ function rememberInputChannels(): void {
 function stopSession(reason: StopReason, detail: StopDetail = {}): Promise<StopResult> {
   const active = audioSession.state !== 'idle' || useAudioStore.getState().isRunning;
   if (active) {
+    const { uploadedFile, fileDuration } = useAudioStore.getState();
     useAudioStore.setState({
       isRunning: false,
       inputMode: 'idle',
-      uploadedFileName: null,
       isLoading: false,
       error: null,
       inputChannelSelectable: null,
       ...resetReadings(),
+      // 열어 둔 파일은 정지해도 남는다(설계서 4.11): 이름과 전체 길이는 그대로 두고 위치·재생 상태만 처음으로 돌린다.
+      fileDuration: uploadedFile ? fileDuration : 0,
     });
   }
   return audioSession.stop(reason, detail);
@@ -843,7 +857,9 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   selectedOutputDeviceId: initialOutputDevice,
   outputSelectionSupported: audioEngine.supportsOutputSelection,
   inputMode: 'idle',
+  uploadedFile: null,
   uploadedFileName: null,
+  fileLoop: true,
   fileCurrentTime: 0,
   fileDuration: 0,
   isFilePaused: true,
@@ -1018,6 +1034,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         ...(fellBackToDefault ? { selectedDeviceId: '' } : {}),
         isRunning: true,
         inputMode: 'device',
+        uploadedFile: null,
         uploadedFileName: null,
         fileCurrentTime: 0,
         fileDuration: 0,
@@ -1053,6 +1070,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         ...(fellBackToDefault ? { selectedDeviceId: '' } : {}),
         isRunning: true,
         inputMode: 'device',
+        uploadedFile: null,
         uploadedFileName: null,
         fileCurrentTime: 0,
         fileDuration: 0,
@@ -1083,6 +1101,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       set({
         isRunning: true,
         inputMode: 'file',
+        uploadedFile: file,
         uploadedFileName: file.name,
         fileCurrentTime: playback.currentTime,
         fileDuration: playback.duration,
@@ -1096,6 +1115,8 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         error: audioErrorMessage(error),
         isRunning: false,
         inputMode: 'idle',
+        // 열지 못한 파일은 '열어 둔 파일'이 아니다. 시작이 실패하면 이전 세션도 정리 절차로 끝나 있다(AudioSession).
+        uploadedFile: null,
         uploadedFileName: null,
         fileCurrentTime: 0,
         fileDuration: 0,
@@ -1106,6 +1127,13 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   },
 
   playFile: async () => {
+    // 세션이 끝나 있어도(정지·Panic) 열어 둔 파일은 남아 있다. 새 세션 — 새 <audio> 요소와 Object URL, 옛 URL 은 정리 때 해제 — 로 처음부터 튼다(설계서 4.11).
+    if (get().inputMode !== 'file') {
+      const { uploadedFile } = get();
+      if (uploadedFile) await get().startFile(uploadedFile);
+      return;
+    }
+
     set({ isLoading: true, error: null });
 
     try {
@@ -1148,6 +1176,29 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       fileDuration: playback.duration,
       isFilePaused: playback.isPaused,
     });
+  },
+
+  seekFileTo: (seconds) => {
+    const engine = AudioEngine.getInstance();
+    engine.seekUploadedFileTo(seconds);
+    const playback = engine.readFilePlayback();
+    set({
+      fileCurrentTime: playback.currentTime,
+      fileDuration: playback.duration,
+      isFilePaused: playback.isPaused,
+    });
+  },
+
+  setFileLoop: (loop) => {
+    set({ fileLoop: loop });
+    audioEngine.setFileLoop(loop);
+  },
+
+  closeFile: async () => {
+    const wasPlaying = get().inputMode === 'file';
+    // 먼저 놓는다: 아래 정리 절차가 도는 동안에도 화면은 '열어 둔 파일 없음' 이다.
+    set({ uploadedFile: null, uploadedFileName: null, fileCurrentTime: 0, fileDuration: 0, isFilePaused: true });
+    if (wasPlaying) await stopSession('user-disconnect');
   },
 
   stop: async () => {
@@ -1398,9 +1449,16 @@ audioEngine.setInputEndedHandler(() => {
   void stopSession('device-lost');
 });
 
-// 음원 파일 재생이 끝나면 연결 해제와 같은 정리 절차로 마친다.
+// 반복을 끈 음원이 끝까지 재생됐다. 세션도 열어 둔 파일도 그대로 두고(맨 끝에서 멈춘 상태) 화면만 맞춘다.
+// '재생' 은 같은 요소로 처음부터 다시 튼다. 반복이 켜져 있으면(기본) 이 이벤트는 오지 않는다(설계서 4.11).
 audioEngine.setPlaybackEndedHandler(() => {
-  void stopSession('user-disconnect');
+  if (useAudioStore.getState().inputMode !== 'file') return;
+  const playback = audioEngine.readFilePlayback();
+  useAudioStore.setState({
+    fileCurrentTime: playback.currentTime,
+    fileDuration: playback.duration,
+    isFilePaused: playback.isPaused,
+  });
 });
 
 // 레벨·가드 상태는 오디오 스레드의 워클릿이 재고 MonitorService 가 monitorStore 에 둔다. 화면은 읽어 그리기만 한다.

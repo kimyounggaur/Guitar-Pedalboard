@@ -74,10 +74,14 @@ export function executeShortcutCommand(
       if (audioState.isLoading) return true;
 
       if (audioState.inputMode === 'file') {
+        // 파일 모드의 Space 는 재생/일시정지다. 마이크는 켜지지 않는다(설계서 4.11, E-10).
         if (audioState.isFilePaused) void audioState.playFile();
         else audioState.pauseFile();
       } else if (audioState.isRunning) {
         void audioState.stop();
+      } else if (audioState.uploadedFile) {
+        // 정지·Panic 으로 세션이 끝나도 열어 둔 파일은 남는다. 파일이 열려 있으면 Space 는 마이크가 아니라 그 파일을 다시 튼다.
+        void audioState.playFile();
       } else {
         void audioState.start();
       }

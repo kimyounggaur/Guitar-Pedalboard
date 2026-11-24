@@ -116,12 +116,13 @@
   align-items: end;
 }
 
-.header-tools .connect-panel .audio-file-upload > label {
+.header-tools .connect-panel .audio-file-upload > .file-section-title {
   grid-column: 1;
   grid-row: 1;
+  align-self: start;
 }
 
-.header-tools .connect-panel .audio-file-upload > input[type="file"] {
+.header-tools .connect-panel .audio-file-upload > .file-open-actions {
   grid-column: 1;
   grid-row: 2;
 }
@@ -148,11 +149,6 @@
 
 .header-tools .connect-panel .panic-button {
   width: 78px;
-}
-
-.header-tools .connect-panel .audio-file-upload input[type="file"]::file-selector-button {
-  height: 36px;
-  padding: 0 10px;
 }
 
 .header-tools .connect-panel .file-player,
