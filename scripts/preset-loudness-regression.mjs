@@ -55,19 +55,31 @@ const harnessBundle = await build({
   target: 'node20',
   write: false,
 });
+const harnessCode = harnessBundle.outputFiles[0].text;
+let harnessInstances = 0;
+/**
+ * 앱 코드를 새로 불러온다. 스토어는 불러올 때 저장소를 읽고(S2.4: 이때 저장 형식을 정하고 v1 에서 v2 로 옮긴다),
+ * 그 뒤에 저장소를 채워서는 읽은 값이 달라지지 않으므로, 저장소를 채운 다음 이 함수로 다시 불러온다.
+ */
+const loadHarness = () => {
+  harnessInstances += 1;
+  return import(`data:text/javascript;base64,${Buffer.from(`${harnessCode}\n//# instance ${harnessInstances}`).toString('base64')}`);
+};
 const {
   AudioEngine, spec, reference, signals,
   SCHEMA_VERSION, clonePedals, initialPedals, migrateStoredState, usePedalStore,
   applyPresetPedals, defaultPresets, parsePresetJson, usePresetStore,
   useHistoryStore,
-} = await import(`data:text/javascript;base64,${Buffer.from(harnessBundle.outputFiles[0].text).toString('base64')}`);
+} = await loadHarness();
 
 const engine = AudioEngine.getInstance();
 const originalRebuildChain = engine.rebuildChain;
 engine.rebuildChain = () => {};
 
-const PEDAL_KEY = 'guitar-pedalboard:pedals';
-const lastPedalWrite = () => JSON.parse(storageWrites.filter(({ key }) => key === PEDAL_KEY).at(-1).value);
+// S2.4: 작업 상태는 v2 키에 쓴다(옛 v1 키는 백업이라 앱이 다시 쓰지 않는다). v2 에서 음량 보정은 `trimDb` 이고 늘 숫자로 적힌다(M6: 없으면 0).
+const V1_PEDAL_KEY = 'guitar-pedalboard:pedals';
+const V2_STATE_KEY = 'guitar-pedalboard:v2:state';
+const lastPedalWrite = () => JSON.parse(storageWrites.filter(({ key }) => key === V2_STATE_KEY).at(-1).value);
 const pedalStore = () => usePedalStore.getState();
 const presetStore = () => usePresetStore.getState();
 const history = () => useHistoryStore.getState();
@@ -204,9 +216,10 @@ try {
 
   pedalStore().setPresetTrimDb(3.44);
   assert.equal(pedalStore().presetTrimDb, 3.4, '0.1 dB 단위로 정리');
-  assert.equal(lastPedalWrite().presetTrimDb, 3.4, '페달 저장본에 같이 저장된다');
-  assert.equal(lastPedalWrite().version, SCHEMA_VERSION, '선택 필드라 스키마 버전은 그대로');
-  assert.equal(lastPedalWrite().pedals.length, initialPedals.length);
+  assert.equal(lastPedalWrite().trimDb, 3.4, '페달 저장본에 같이 저장된다');
+  assert.equal(lastPedalWrite().schemaVersion, 2, '저장 형식은 v2');
+  assert.equal(lastPedalWrite().chain.length, initialPedals.length);
+  assert.equal(Object.keys(lastPedalWrite().pedals).length, initialPedals.length);
 
   pedalStore().setPresetTrimDb(99);
   assert.equal(pedalStore().presetTrimDb, 24);
@@ -214,7 +227,7 @@ try {
   assert.equal(pedalStore().presetTrimDb, -24);
   pedalStore().setPresetTrimDb(Number.NaN);
   assert.equal(pedalStore().presetTrimDb, 0);
-  assert.ok(!('presetTrimDb' in lastPedalWrite()), '보정이 0 이면 필드를 쓰지 않는다(이전 버전과 같은 모양)');
+  assert.equal(lastPedalWrite().trimDb, 0, '보정이 없으면 0 으로 적는다(v2 는 늘 숫자, M6)');
 
   // 불러오기: 저장된 값이 돌아온다
   pedalStore().setPresetTrimDb(2.5);
@@ -222,7 +235,7 @@ try {
   pedalStore().loadPedalsFromStorage();
   assert.equal(pedalStore().presetTrimDb, 2.5, '다시 열면 마지막 보정값이 돌아온다');
 
-  // 이전 버전이 쓴 저장본(필드 없음)과 이상한 값
+  // 이전 버전이 쓴 v1 저장본(필드 없음)과 이상한 값: 앱을 열 때 v2 로 옮기면서 같은 규칙(M6)으로 읽는다.
   for (const [label, payload, expected] of [
     ['필드 없음(이전 버전)', { version: SCHEMA_VERSION, pedals: [] }, 0],
     ['문자열', { version: SCHEMA_VERSION, pedals: [], presetTrimDb: '5' }, 0],
@@ -231,11 +244,27 @@ try {
     ['정상', { version: SCHEMA_VERSION, pedals: [], presetTrimDb: -6.5 }, -6.5],
     ['옛 배열 형식', [], 0],
   ]) {
-    storageValues.set(PEDAL_KEY, JSON.stringify(payload));
-    usePedalStore.setState({ presetTrimDb: 9 });
-    pedalStore().loadPedalsFromStorage();
-    assert.equal(pedalStore().presetTrimDb, expected, `저장본 ${label}`);
+    storageValues.clear();
+    storageValues.set(V1_PEDAL_KEY, JSON.stringify(payload));
+    const opened = await loadHarness();
+    assert.equal(opened.usePedalStore.getState().presetTrimDb, expected, `v1 저장본 ${label}`);
+    assert.equal(JSON.parse(storageValues.get(V2_STATE_KEY)).trimDb, expected, `v1 저장본 ${label}: 옮긴 v2 에도 같은 값`);
   }
+  // 같은 규칙으로 v2 저장본도 읽는다(손으로 고친 값).
+  for (const [label, trimDb, expected] of [
+    ['문자열', '5', 0],
+    ['null', null, 0],
+    ['한도 초과', 99, 24],
+    ['정상', -6.5, -6.5],
+  ]) {
+    storageValues.clear();
+    storageValues.set('guitar-pedalboard:schema', '2');
+    storageValues.set(V2_STATE_KEY, JSON.stringify({ schemaVersion: 2, chain: [], pedals: {}, trimDb }));
+    const opened = await loadHarness();
+    assert.equal(opened.usePedalStore.getState().presetTrimDb, expected, `v2 저장본 ${label}`);
+  }
+  storageValues.clear();
+  pedalStore().setPresetTrimDb(0);
 
   // 마이그레이션은 페달만 다시 만든다. 보정값은 이어 붙는다.
   assert.equal(migrateStoredState({ version: 3, pedals: [], presetTrimDb: 2 }).presetTrimDb, 2, '옛 버전 저장본의 보정값 유지');
@@ -248,18 +277,18 @@ try {
   assert.equal(pedalStore().presetTrimDb, 4);
   pedalStore().setPedals(clonePedals(initialPedals), -5);
   assert.equal(pedalStore().presetTrimDb, -5);
-  assert.equal(lastPedalWrite().presetTrimDb, -5);
+  assert.equal(lastPedalWrite().trimDb, -5);
 
   // 노브를 돌려 늦게 저장되는 경우에도 보정이 같이 저장된다
   pedalStore().updatePedalParam('delay', 'bpm', 133);
   await delay(400);
-  assert.equal(lastPedalWrite().presetTrimDb, -5, '지연 저장에도 보정값이 들어간다');
-  assert.equal(lastPedalWrite().pedals.find((pedal) => pedal.id === 'delay').params.bpm, 133);
+  assert.equal(lastPedalWrite().trimDb, -5, '지연 저장에도 보정값이 들어간다');
+  assert.equal(lastPedalWrite().pedals.delay.params.bpm, 133);
 
   // 기본 보드로 되돌리면 보정도 0
   pedalStore().resetPedalOrder();
   assert.equal(pedalStore().presetTrimDb, 0);
-  assert.ok(!('presetTrimDb' in lastPedalWrite()));
+  assert.equal(lastPedalWrite().trimDb, 0);
 
   // -------------------------------------------------------------------------------------------
   // 5. 프리셋(presetStore): 팩토리·저장·내보내기·가져오기·불러오기

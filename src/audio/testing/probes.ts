@@ -30,6 +30,8 @@ import {
 } from '../offline/renderChain';
 import type { PedalParamValue, PedalParams, PedalState, PedalType } from '../types';
 import type { ImpulseCache } from '../utils/impulseCache';
+import { runBootstrap } from '../../persistence/bootstrap';
+import { createSafeStorage, type StorageBackend } from '../../persistence/SafeStorage';
 import { clonePedals, initialPedals } from '../../store/pedalStore';
 import { clampPedalsToSchema, isPedalOff, restoreMixOfOffPedals } from '../../presets/normalize';
 import { defaultPresets } from '../../store/presetStore';
@@ -75,14 +77,13 @@ export interface ProbeDefinition {
 function pedal(
   id: string,
   params: Record<string, PedalParamValue> = {},
-  state: { enabled?: boolean; bypassed?: boolean } = {},
+  state: { active?: boolean } = {},
 ): PedalState {
   const base = initialPedals.find((candidate) => candidate.id === id);
   if (!base) throw new Error(`알 수 없는 페달 id: ${id}`);
   return {
     ...base,
-    enabled: state.enabled ?? true,
-    bypassed: state.bypassed ?? false,
+    active: state.active ?? true,
     params: { ...base.params, ...params } as PedalParams,
   };
 }
@@ -91,14 +92,13 @@ function pedal(
 function allPedalsOn(adjust: (pedalState: PedalState) => Record<string, PedalParamValue> = () => ({})): PedalState[] {
   return clonePedals(initialPedals).map((pedalState) => ({
     ...pedalState,
-    enabled: true,
-    bypassed: false,
+    active: true,
     params: { ...pedalState.params, ...adjust(pedalState) } as PedalParams,
   }));
 }
 
 function allPedalsBypassed(): PedalState[] {
-  return clonePedals(initialPedals).map((pedalState) => ({ ...pedalState, enabled: true, bypassed: true }));
+  return clonePedals(initialPedals).map((pedalState) => ({ ...pedalState, active: false }));
 }
 
 function metrics(values: Record<string, MetricValue>): Metrics {
@@ -139,7 +139,7 @@ function residualDb(a: OfflineRender, b: OfflineRender): number {
 
 /** 꺼진 페달은 신호를 그대로 통과시키므로 빼도 소리가 같다. 렌더 시간을 줄이는 데 쓴다(P-05 가 같음을 매번 확인한다). */
 function activePedals(pedals: PedalState[]): PedalState[] {
-  return pedals.filter((candidate) => candidate.enabled && !candidate.bypassed);
+  return pedals.filter((candidate) => candidate.active);
 }
 
 const delayMs = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
@@ -211,7 +211,7 @@ const p03: ProbeDefinition = {
     const raw = await ctx.render({ input: [input], pedals: build(), limiter: false });
     // 앱 기본 구성(initialPedals)에서 Cab 만 끈 경우. Cab 을 끄면 소리가 커져(R1-5) 리미터가 없을 때 깨졌다.
     const defaultCabOff = (): PedalState[] =>
-      clonePedals(initialPedals).map((pedalState) => (pedalState.id === 'cab' ? { ...pedalState, bypassed: true } : pedalState));
+      clonePedals(initialPedals).map((pedalState) => (pedalState.id === 'cab' ? { ...pedalState, active: false } : pedalState));
     const cabOffLimited = await ctx.render({ input: [input], pedals: defaultCabOff() });
     const cabOffRaw = await ctx.render({ input: [input], pedals: defaultCabOff(), limiter: false });
     const peak = (render: OfflineRender) => Math.max(m.peakDb(render.output[0]), m.peakDb(render.output[1]));
@@ -241,7 +241,7 @@ const p04: ProbeDefinition = {
   steps: 'S1.4b',
   async run(ctx) {
     const input = signals.refPc(ctx.sampleRate, 4);
-    const off = await ctx.render({ input: [input], pedals: [pedal('cab', {}, { bypassed: true })] });
+    const off = await ctx.render({ input: [input], pedals: [pedal('cab', {}, { active: false })] });
     const offDb = bodyLevelDb(off);
     const values: Record<string, MetricValue> = { offDb };
     let largest = 0;
@@ -883,14 +883,14 @@ const p15: ProbeDefinition = {
     const impulse = signals.refImpulse(rate, 2, position);
     const values: Record<string, MetricValue> = {};
     for (const type of ['delay', 'reverb'] as const) {
-      const bypass = await ctx.render({ input: [impulse], pedals: [pedal(type, { mix: 30 }, { bypassed: true })] });
+      const bypass = await ctx.render({ input: [impulse], pedals: [pedal(type, { mix: 30 }, { active: false })] });
       const active = await ctx.render({ input: [impulse], pedals: [pedal(type, { mix: 30 })] });
       const from = bypass.leadFrames + position - 2;
       const to = bypass.leadFrames + position + Math.round(rate * 0.01);
       values[`${type}.dryChangeDb`] = m.dbOf(m.peakLinear(active.output[0], from, to)) - m.dbOf(m.peakLinear(bypass.output[0], from, to));
     }
     const pc = signals.refPc(rate, 2);
-    const bypassPc = await ctx.render({ input: [pc], pedals: [pedal('delay', { mix: 30 }, { bypassed: true })] });
+    const bypassPc = await ctx.render({ input: [pc], pedals: [pedal('delay', { mix: 30 }, { active: false })] });
     const activePc = await ctx.render({ input: [pc], pedals: [pedal('delay', { mix: 30 })] });
     values['delay.pcDryChangeDb'] = bodyLevelDb(activePc, 0, 0.25) - bodyLevelDb(bypassPc, 0, 0.25);
     return { metrics: metrics(values) };
@@ -909,7 +909,7 @@ const p16: ProbeDefinition = {
   async run(ctx) {
     const rate = ctx.sampleRate;
     const noise = signals.refNoise(rate, 1.5, -20);
-    const defaults = clonePedals(initialPedals).filter((candidate) => candidate.enabled && !candidate.bypassed);
+    const defaults = clonePedals(initialPedals).filter((candidate) => candidate.active);
     const configurations: Array<[string, PedalState[]]> = [
       ['empty', []],
       ['noiseGate', [pedal('noise-gate')]],
@@ -943,7 +943,7 @@ const p16: ProbeDefinition = {
     const position = Math.round(rate * 0.1);
     const impulse = await ctx.render({
       input: [signals.refImpulse(rate, 1, position)],
-      pedals: clonePedals(initialPedals).filter((candidate) => candidate.enabled && !candidate.bypassed),
+      pedals: clonePedals(initialPedals).filter((candidate) => candidate.active),
       alignOutput: false,
     });
     const channel = impulse.output[0];
@@ -979,7 +979,7 @@ const p17: ProbeDefinition = {
       ['allOn', () => ({ input: [input], pedals: allPedalsOn(), monitoring: false })],
       ['allOnMonitored', () => ({ input: [input], pedals: allPedalsOn(), monitoring: true, guardMode: 'device' })],
       ['allOff', () => ({ input: [input], pedals: allPedalsBypassed(), monitoring: false })],
-      ['phaserOff', () => ({ input: [input], pedals: [pedal('phaser', {}, { bypassed: true })], monitoring: false })],
+      ['phaserOff', () => ({ input: [input], pedals: [pedal('phaser', {}, { active: false })], monitoring: false })],
       ['phaserOn', () => ({ input: [input], pedals: [pedal('phaser')], monitoring: false })],
     ];
     const ATTEMPTS = 5;
@@ -1052,11 +1052,11 @@ const p18: ProbeDefinition = {
     let flatGraphicEq = 0;
     for (const preset of defaultPresets) {
       for (const candidate of preset.pedals) {
-        if (candidate.enabled && !candidate.bypassed) continue;
+        if (candidate.active) continue;
         const key = JSON.stringify([candidate.type, candidate.params]);
         let changed = verdicts.get(key);
         if (changed === undefined) {
-          const turned = analyse(await ctx.render({ input: [input], pedals: [{ ...candidate, enabled: true, bypassed: false }] }));
+          const turned = analyse(await ctx.render({ input: [input], pedals: [{ ...candidate, active: true }] }));
           const levelChange = Math.abs(turned.level - original.level);
           const spectralChange = mean(turned.bands.map((band, index) => Math.abs(band - original.bands[index])));
           changed = levelChange >= 0.5 || spectralChange >= 1;
@@ -1112,6 +1112,176 @@ const p18: ProbeDefinition = {
 };
 
 // ---------------------------------------------------------------------------------------------
+// P-19 — v1 → v2 동일성
+// ---------------------------------------------------------------------------------------------
+/**
+ * v1 저장소 픽스처 6개(e2e/fixtures/storage-v1). 저장 형식을 바꾸기 전 앱이 쓰던 localStorage 를 원문 그대로 고정한 파일이다.
+ * 프로브 빌드(`--mode test`)에만 들어간다: 이 파일은 배포용 번들이 불러오지 않는다.
+ */
+const v1FixtureFiles = import.meta.glob<string>('/e2e/fixtures/storage-v1/*.json', { query: '?raw', import: 'default', eager: true });
+
+interface V1Fixture {
+  /** 파일 이름 앞의 두 자리(01~06) */
+  id: string;
+  /** 앱이 저장하던 localStorage 의 키 → 원문 */
+  storage: Record<string, string>;
+}
+
+function loadV1Fixtures(): V1Fixture[] {
+  return Object.entries(v1FixtureFiles)
+    .map(([path, text]) => {
+      const file = path.slice(path.lastIndexOf('/') + 1);
+      const parsed = JSON.parse(text) as { storage: Record<string, string> };
+      return { id: file.slice(0, 2), storage: parsed.storage };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** 시험용 저장소(Map). 앱이 쓰는 SafeStorage 가 그대로 올라앉는다. 브라우저의 localStorage 는 건드리지 않는다. */
+function memoryBackend(initial: Record<string, string>): StorageBackend {
+  const values = new Map(Object.entries(initial));
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
+    removeItem: (key) => {
+      values.delete(key);
+    },
+    key: (index) => [...values.keys()][index] ?? null,
+    get length() {
+      return values.size;
+    },
+  };
+}
+
+/**
+ * 옛 앱이 소리를 만들던 규칙을 저장된 원문에서 그대로 따라 한다. 변환 코드를 거치지 않으므로 변환이 틀려도 같이 틀릴 수 없다.
+ *   켜짐 = enabled 이고 bypassed 가 아님(둘 중 하나만 꺼져도 소리가 꺼진다), 값은 저장된 그대로(범위 맞춤·Mix 복원 전), 순서는 저장된 순서.
+ * 읽을 수 없는 값이면 옛 앱은 기본 보드로 시작했다.
+ */
+function oldSoundChain(storedPedals: unknown): PedalState[] {
+  if (!Array.isArray(storedPedals)) return clonePedals(initialPedals);
+  const chain: PedalState[] = [];
+  for (const stored of storedPedals) {
+    if (!isPlainRecord(stored) || typeof stored.id !== 'string') continue;
+    const base = initialPedals.find((candidate) => candidate.id === stored.id);
+    if (!base) continue;
+    const params = isPlainRecord(stored.params) ? stored.params : {};
+    chain.push({
+      ...base,
+      active: stored.enabled === true && stored.bypassed === false,
+      params: { ...base.params, ...params } as PedalParams,
+    });
+  }
+  return chain;
+}
+
+/** 저장된 JSON 원문을 읽는다. 없거나 깨졌으면 null. */
+function parseStoredJson(text: string | undefined): Record<string, unknown> | null {
+  if (text === undefined) return null;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return isPlainRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+const activeIdsOf = (pedals: PedalState[]): string => pedals.filter((candidate) => candidate.active).map((candidate) => candidate.id).join(',');
+
+const p19: ProbeDefinition = {
+  id: 'P-19',
+  title: 'v1 → v2 동일성',
+  describe:
+    'v1 저장소 픽스처 6개(e2e/fixtures/storage-v1)를 시험용 저장소에 넣고 앱이 여는 절차(runBootstrap)를 두 번 돈다: 첫 방문에 v1 에서 v2 로 옮기고, 다음 방문에 v2 키에서 읽는다. ' +
+    '다음 방문에서 읽은 작업 보드와 사용자 프리셋의 소리를, 옛 앱이 같은 저장 원문으로 만들던 소리(켜짐 = enabled 이고 bypassed 가 아님, 값은 저장된 그대로 — 변환 코드를 쓰지 않고 원문에서 직접 만든다)와 REF-PC 1초로 견준다. ' +
+    '두 출력의 차(널 테스트)가 출력 대비 몇 dB 인지 적는다(−200 은 완전히 같다). 옛 방식(legacy)으로 열렸다면 변환이 틀린 것이라 소리가 같아 보여도 불합격이다(첫 방문의 legacy 수와 다음 방문이 v2 로 열린 수를 따로 적는다). ' +
+    '켜진 페달 목록이 옛 규칙과 다른 보드·프리셋의 수(activeMismatch)와 다음 방문에서 사라진 프리셋 수(presetMissing)도 적는다. 시간을 줄이려고 꺼진 페달은 체인에서 뺀다(꺼진 페달이 소리를 바꾸지 않음은 P-05 가 본다).',
+  steps: 'S2.4',
+  async run(ctx) {
+    const rate = ctx.sampleRate;
+    const input = signals.refPc(rate, 1);
+    const fixtures = loadV1Fixtures();
+    const values: Record<string, MetricValue> = {};
+    let worst = -200;
+    let boardsChecked = 0;
+    let presetsChecked = 0;
+    let presetMissing = 0;
+    let activeMismatch = 0;
+    const visit1: Record<string, number> = { converted: 0, fresh: 0, legacy: 0, v2: 0 };
+    let visit2V2 = 0;
+
+    const renderPair = async (oldPedals: PedalState[], newPedals: PedalState[], oldTrimDb: number, newTrimDb: number) => {
+      const before = await ctx.render({ input: [input], pedals: activePedals(oldPedals), presetTrimDb: oldTrimDb });
+      const after = await ctx.render({ input: [input], pedals: activePedals(newPedals), presetTrimDb: newTrimDb });
+      return residualDb(before, after);
+    };
+
+    for (const fixture of fixtures) {
+      const backend = memoryBackend(fixture.storage);
+      const open = () => createSafeStorage({ getBackend: () => backend, notify: () => undefined, subscribeToPageHide: () => undefined });
+      const first = runBootstrap(open()); // 첫 방문: v1 키에서 v2 로 옮긴다.
+      const second = runBootstrap(open()); // 다음 방문: v2 키에서 읽는다. 소리는 이쪽으로 낸다.
+      visit1[first.outcome] += 1;
+      if (second.outcome === 'v2') visit2V2 += 1;
+
+      // 작업 보드
+      const storedBoard = parseStoredJson(fixture.storage['guitar-pedalboard:pedals']);
+      const oldBoard = oldSoundChain(storedBoard?.pedals);
+      const oldTrim = typeof storedBoard?.presetTrimDb === 'number' ? storedBoard.presetTrimDb : 0;
+      const newBoard = second.board?.pedals ?? clonePedals(initialPedals);
+      const boardNull = await renderPair(oldBoard, newBoard, oldTrim, second.board?.trimDb ?? 0);
+      values[`nullDb.board.${fixture.id}`] = boardNull;
+      values[`activeCount.${fixture.id}`] = newBoard.filter((candidate) => candidate.active).length;
+      worst = Math.max(worst, boardNull);
+      boardsChecked += 1;
+      if (activeIdsOf(oldBoard) !== activeIdsOf(newBoard)) activeMismatch += 1;
+
+      // 사용자 프리셋
+      const storedPresets = parseStoredJson(fixture.storage['web-guitar-pedalboard-presets']);
+      const storedList = Array.isArray(storedPresets?.presets) ? (storedPresets.presets as unknown[]) : [];
+      let presetIndex = 0;
+      for (const stored of storedList) {
+        if (!isPlainRecord(stored) || typeof stored.id !== 'string') continue;
+        presetIndex += 1;
+        const migrated = second.userPresets.find((candidate) => candidate.id === stored.id);
+        if (!migrated) {
+          presetMissing += 1;
+          continue;
+        }
+        const oldPedals = oldSoundChain(stored.pedals);
+        const oldPresetTrim = typeof stored.trimDb === 'number' ? stored.trimDb : 0;
+        const presetNull = await renderPair(oldPedals, migrated.pedals, oldPresetTrim, migrated.trimDb ?? 0);
+        values[`nullDb.preset.${fixture.id}.${presetIndex}`] = presetNull;
+        worst = Math.max(worst, presetNull);
+        presetsChecked += 1;
+        if (activeIdsOf(oldPedals) !== activeIdsOf(migrated.pedals)) activeMismatch += 1;
+      }
+    }
+
+    return {
+      metrics: metrics({
+        fixtures: fixtures.length,
+        boardsChecked,
+        presetsChecked,
+        'visit1.converted': visit1.converted,
+        'visit1.fresh': visit1.fresh,
+        'visit1.legacy': visit1.legacy,
+        'visit2.v2': visit2V2,
+        presetMissing,
+        activeMismatch,
+        'nullDb.worst': worst,
+        ...values,
+      }),
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------------------------
 // P-20 — Reverb Decay 변환
 // ---------------------------------------------------------------------------------------------
 /** S2.2 이전의 공장 프리셋이 저장하던 Decay(초). 지금은 둘 다 6.0 이다. */
@@ -1135,7 +1305,7 @@ const p20: ProbeDefinition = {
       return reverb;
     };
     const compare = async (key: string, legacy: PedalState): Promise<number> => {
-      const stored = { ...legacy, enabled: true, bypassed: false };
+      const stored = { ...legacy, active: true };
       const converted = clampPedalsToSchema([stored])[0];
       const storedRender = await ctx.render({ input: [input], pedals: [stored] });
       const convertedRender = await ctx.render({ input: [input], pedals: [converted] });
@@ -1289,17 +1459,17 @@ const p23: ProbeDefinition = {
   steps: '모든 Phase',
   async run(ctx) {
     const rate = ctx.sampleRate;
-    const toggles: Array<{ at: number; id: string; bypassed: boolean }> = [
-      { at: 1, id: 'drive', bypassed: true },
-      { at: 3, id: 'drive', bypassed: false },
-      { at: 5, id: 'compressor', bypassed: true },
+    const toggles: Array<{ at: number; id: string; active: boolean }> = [
+      { at: 1, id: 'drive', active: false },
+      { at: 3, id: 'drive', active: true },
+      { at: 5, id: 'compressor', active: false },
     ];
     const created: number[] = [];
     const events: ChainEvent[] = toggles.map((toggle) => ({
       atSeconds: toggle.at,
       run(handle) {
         const before = ctx.nodeCounter.count;
-        handle.patchPedal(toggle.id, { bypassed: toggle.bypassed });
+        handle.patchPedal(toggle.id, { active: toggle.active });
         created.push(ctx.nodeCounter.count - before);
       },
     }));
@@ -1430,7 +1600,7 @@ const p24: ProbeDefinition = {
 };
 
 export const probes: ProbeDefinition[] = [
-  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p20, p21, p22, p23, p24,
+  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24,
 ];
 
 // ---------------------------------------------------------------------------------------------

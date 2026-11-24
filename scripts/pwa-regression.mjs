@@ -43,6 +43,17 @@ const serviceWorker = await readFile(serviceWorkerPath, 'utf8');
 assert.match(serviceWorker, /NetworkFirst/);
 assert.match(serviceWorker, /guitar-pedalboard-runtime/);
 
+// 새 버전 알림(S2.4)이 기대는 동작: 새 서비스 워커가 곧바로 켜지고(skipWaiting) 열린 탭을 넘겨받으며(clientsClaim), 그때 탭에 controllerchange 가 온다.
+// 등록 스크립트는 평범한 등록뿐이다 — 새 서비스 워커가 켜졌다고 페이지를 스스로 다시 불러오지 않는다(연주 중 자동 새로고침 금지).
+assert.ok(serviceWorker.includes('skipWaiting()'), 'the new service worker must activate immediately (skipWaiting)');
+assert.ok(serviceWorker.includes('clientsClaim()'), 'the activated service worker must claim open tabs (clientsClaim)');
+const registerScript = await readFile(path.join(distDirectory, 'registerSW.js'), 'utf8');
+assert.ok(
+  registerScript.includes(`navigator.serviceWorker.register('${expectedBase}sw.js'`),
+  'registerSW.js must register the service worker under the app base path',
+);
+assert.ok(!registerScript.includes('reload'), 'registerSW.js must not reload the page by itself (no automatic reload while playing)');
+
 const assetDirectory = path.join(distDirectory, 'assets');
 const assetNames = await readdir(assetDirectory);
 for (const assetName of assetNames.filter((name) => name.endsWith('.js'))) {
@@ -51,5 +62,5 @@ for (const assetName of assetNames.filter((name) => name.endsWith('.js'))) {
 }
 
 console.log(
-  'PWA regression passed: exact manifest, service worker registration, precache/runtime NetworkFirst contract, and JavaScript budget.',
+  'PWA regression passed: exact manifest, service worker registration (no automatic reload), skipWaiting/clientsClaim, precache/runtime NetworkFirst contract, and JavaScript budget.',
 );

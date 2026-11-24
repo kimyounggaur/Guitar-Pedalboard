@@ -3,7 +3,7 @@
 import { showToast } from '../store/toastStore';
 import { createSafeStorage } from './SafeStorage';
 
-export { STORAGE_KEYS, APP_STORAGE_PREFIX, CORRUPT_KEY_INFIX, type StorageKey } from './keys';
+export { STORAGE_KEYS, APP_STORAGE_PREFIX, CORRUPT_KEY_INFIX, KEPT_ON_RESET_KEYS, type StorageKey } from './keys';
 export { STORAGE_NOTICE_MESSAGES, createSafeStorage } from './SafeStorage';
 export type { SafeStorage, StorageNoticeKind, WriteResult } from './SafeStorage';
 

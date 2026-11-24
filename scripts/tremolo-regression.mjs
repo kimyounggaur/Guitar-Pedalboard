@@ -246,8 +246,7 @@ const pedal = {
   id: 'tremolo',
   type: 'tremolo',
   name: 'Tremolo',
-  enabled: true,
-  bypassed: false,
+  active: true,
   color: '#c98a3f',
   params: defaultParams,
 };

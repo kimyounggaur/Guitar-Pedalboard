@@ -4,7 +4,7 @@
 
 | 파일 | 내용 |
 |---|---|
-| `audio-probe.json` | 기준선. 프로브 23개 × 샘플레이트 2개(44.1·48 kHz), 측정값 1,646개 |
+| `audio-probe.json` | 기준선. 프로브 24개 × 샘플레이트 2개(44.1·48 kHz), 측정값 1,696개 |
 | `tolerances.json` | 항목별 허용 오차. 넓히거나 `ignore` 를 늘리려면 사람 승인이 필요하다(설계서 6.4절) |
 | `e2e.json`, `screenshots/` | 브라우저 시나리오(E-04·E-06) 기준선. 설명은 `README-e2e.md` |
 
@@ -19,7 +19,7 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 ```
 
 - 기준선을 갱신하는 커밋의 메시지는 `baseline: {Step ID} {이유}` 로 쓴다. 이유 없이 갱신하지 않는다.
-- `tolerances.json` 의 `criteria` 는 기준선과 상관없는 **절대 수용 기준**(하한 `atLeast`·상한 `atMost`)이다. 매번 비교할 때 함께 검사하고, 어기는 값은 `--update` 로도 기준선이 되지 못한다. 지금 걸린 것(Step 별): S1.1 P-01 `differenceDb ≥ 30`·P-02 `outputDropDb ≥ 25`, S1.3 P-06 `auto.*` 5개, S1.4a P-03 `peakWithLimiterDb`·`defaultCabOffPeakDb ≤ −0.9`, S1.4b P-04 `maxAbsDiffDb ≤ 1.5`, S1.4c P-05 음량 정렬·리미터 감소량·'음량 맞추기' 오차 10여 개, S1.5 P-07 `hits ≥ 4`·`maxMutedSeconds ≤ 1.5`·`minMutedSeconds ≥ 1.0`·`falseCuts ≤ 0`·`silentFailures ≤ 0`·`disabledModeCuts ≤ 0`·`disabledModeSoundDb ≥ −30` 와 P-17 `ratio.monitorOverheadOverPedals ≤ 0.05`, S2.1 P-18 3개(`unchangedUnexpected ≤ 0`·`loadNullDb ≤ −90`·`loadUntouchedOffPedals ≤ 0`), S2.2 P-20 3개(`nullDb.* ≤ −90`·`convertedDecayError ≤ 0`·`maxFactoryDecay ≤ 6`)·P-21 `displayedSilenceDb` −0.5 ~ 0·P-24 6개(잡음 감소 ≤ −30 dB 둘, 워클릿 정확 일치 둘, 레벨 차 ≤ 0.01 dB, 첫 음 손실 ≥ −1 dB). 전체 목록과 이유는 `tolerances.json` 의 `criteria` 에 있다. Step 이 수용 기준을 맞출 때마다 여기에 더한다.
+- `tolerances.json` 의 `criteria` 는 기준선과 상관없는 **절대 수용 기준**(하한 `atLeast`·상한 `atMost`)이다. 매번 비교할 때 함께 검사하고, 어기는 값은 `--update` 로도 기준선이 되지 못한다. 지금 걸린 것(Step 별): S1.1 P-01 `differenceDb ≥ 30`·P-02 `outputDropDb ≥ 25`, S1.3 P-06 `auto.*` 5개, S1.4a P-03 `peakWithLimiterDb`·`defaultCabOffPeakDb ≤ −0.9`, S1.4b P-04 `maxAbsDiffDb ≤ 1.5`, S1.4c P-05 음량 정렬·리미터 감소량·'음량 맞추기' 오차 10여 개, S1.5 P-07 `hits ≥ 4`·`maxMutedSeconds ≤ 1.5`·`minMutedSeconds ≥ 1.0`·`falseCuts ≤ 0`·`silentFailures ≤ 0`·`disabledModeCuts ≤ 0`·`disabledModeSoundDb ≥ −30` 와 P-17 `ratio.monitorOverheadOverPedals ≤ 0.05`, S2.1 P-18 3개(`unchangedUnexpected ≤ 0`·`loadNullDb ≤ −90`·`loadUntouchedOffPedals ≤ 0`), S2.2 P-20 3개(`nullDb.* ≤ −90`·`convertedDecayError ≤ 0`·`maxFactoryDecay ≤ 6`)·P-21 `displayedSilenceDb` −0.5 ~ 0·P-24 6개(잡음 감소 ≤ −30 dB 둘, 워클릿 정확 일치 둘, 레벨 차 ≤ 0.01 dB, 첫 음 손실 ≥ −1 dB), S2.4 P-19 7개(`nullDb.* ≤ −80` — 이것이 설계서의 기준이고, 판정 규칙은 −90 dB 로 더 엄격하다 — 와 `activeMismatch ≤ 0`·`presetMissing ≤ 0`·`visit1.legacy ≤ 0`·`visit2.v2 ≥ 6`·`boardsChecked ≥ 6`·`presetsChecked ≥ 3`). 전체 목록과 이유는 `tolerances.json` 의 `criteria` 에 있다. Step 이 수용 기준을 맞출 때마다 여기에 더한다.
 - `npm test` 가 `test:probe` 로 이 비교를 함께 돈다. 시험 제한 시간만 900초로 늘려 두었다(`scripts/run-all-tests.mjs`).
 - Chrome 이 없으면 로컬에서는 건너뛰고(종료 코드 0, 경고 출력) CI(`CI=true`)에서는 실패한다. `CHROME_PATH` 로 Chrome 을 지정할 수 있다.
 - 기준선을 만든 환경: Chrome/153.0.8010.12, Linux x64, Node v22. 브라우저 버전이 다르면 비교 때 경고가 나온다. 값이 흔들리면 Chrome 버전을 고정하고 별도 PR 로 기준선을 갱신한다(설계서 6.4절).
@@ -54,6 +54,7 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 | P-16 | 기본 구성 약 10 ms | 시작 시점: 기본 구성 3.02 / 2.79 ms, Drive·Crunch·Fuzz 한 단계가 약 130 샘플(2.94 / 2.71 ms), Cab 0.09 ms, 나머지 0. **S1.4a 이후** 마스터 리미터의 룩어헤드가 모든 값에 +1.0 ms(44.1 kHz 는 44 샘플 = 0.998 ms): 빈 체인 1.0 ms, 기본 구성 4.02 / 3.79 ms | ≤ 2.7 ms (+ 리미터 1.0 ms) = 3.7 ms | ✖ 기본 구성이 3.7 ms 를 44.1 kHz 에서 0.32 ms, 48 kHz 에서 0.09 ms 초과 |
 | P-17 | 모두 꺼짐 22%, Phaser 꺼짐 10% | 모두 꺼짐 13.2 / 15.7%, 모두 켬 21.0 / 26.4% (렌더 시간 ÷ 오디오 길이, 이 기계 기준). 꺼진 Phaser 하나가 빈 체인(0.5%) 위에 1.8%p, 모두 켬 렌더 시간의 8.4%. **S1.5 이후**: 측정 방식을 바꿨다(구성을 라운드마다 섞어 5번 재고 같은 라운드끼리 나눈 비율의 가운뎃값, L-46) — 모두 꺼짐 12.2 / 13.2%, 모두 켬 18.6 / 23.8%(레벨 미터·가드 없는 그래프로 잰 값. 시간 값은 비교하지 않는다). 레벨 미터 둘과 장치 모드 가드가 더한 시간은 15개 페달이 쓰는 시간의 3.3 / 2.5%(`ratio.monitorOverheadOverPedals`, 기준 ≤ 5%) | 모두 꺼짐이 현재의 50% 이하, Phaser 꺼짐 기여 0 | ✖ 기계가 달라 보고서의 22% 와 직접 비교할 수 없다. 이 기계의 기준선 대비로 판정한다 |
 | P-18 | 변화 없음(Mix 0%) | 꺼진 페달 368개 중 40개가 켜도 변화 없음. 모두 Graphic EQ(밴드가 평탄). **S2.1 이후**: 같은 40개를 `unchangedFlatEq` 로 따로 세고(모든 밴드 0 dB 인 EQ 는 켜도 같은 것이 설계, REFACTOR_LOG L-79) 그 밖에 변화 없는 페달 `unchangedUnexpected` 0. 불러온 직후 널 테스트 `loadNullDb` −200 dB(옛 저장본처럼 꺼진 페달 368개의 Mix 를 0 으로 만든 체인과 불러올 때 바로잡은 체인의 출력 차, 두 샘플레이트) | 변화 있음(밴드가 평탄한 Graphic EQ 제외, `unchangedUnexpected` ≤ 0), 널 ≤ −90 dB | ✔ |
+| P-19 | (보고서에 없음 — S2.4 에서 새로 잼) | v1 픽스처 6종을 시험용 저장소에 넣고 앱이 여는 절차를 두 번 돌려(첫 방문에 v2 로 옮기고 둘째 방문에 v2 에서 읽음) 둘째 방문의 작업 보드 6개와 사용자 프리셋 3개를, 같은 v1 원문에서 옛 규칙으로 따로 만든 체인과 REF-PC 1초로 견준 널: **전부 −200 dB**(44.1·48 kHz 같음). 켜진 페달 수 5/2/5/5/6/5(옛 규칙과 다른 곳 0), 사라진 프리셋 0, 첫 방문 변환 5·새로 시작 1·옛 방식 0, 둘째 방문 v2 6 | 널 ≤ −80 dB (판정 규칙은 −90 dB) | ✔ S2.4 에서 새로 확인 |
 | P-20 | 6~10초가 6초와 같음 | 시작 시점: 저장된 Decay 최대 7.5초. 7.5 와 6 으로 렌더한 출력이 같음(잔차 −200 dB). **S2.2 이후**: 지표를 다시 정의했다 — 옛 저장값(공장 6.2·7.5초, 옛 최댓값 10초)으로 렌더한 출력과 불러올 때 맞춘 6.0 의 출력을 견준 널 `nullDb.*` −200 dB, 변환 결과 오차 `convertedDecayError` 0, 공장 프리셋 Decay 최댓값 `maxFactoryDecay` 6(옛 `maxStoredDecay` 7.5 를 대체, REFACTOR_LOG L-89) | 7.5 → 6.0, 소리 변화 0 | ✔ S2.2 에서 해결 |
 | P-21 | 무음에서 −5.9 dB 표시 | 무음 0 dB, −10 dBFS 지속음 −16.6 dB. **S2.2 이후**: 무음 0 dB 를 절대 기준(`displayedSilenceDb` −0.5 ~ 0)으로 걸었다. 표시값은 워클릿이 적용한 감소량이고, 같은 지속음의 출력 레벨 변화(−5.5 dB)와 11 dB 다른 것은 워클릿의 자동 보충 이득 때문이다(L-86) | 0 dB | ✔ |
 | P-22 | 개방현 0센트 | 개방현 최대 0.03 / 0.04 센트, B1·C2 도 0.00 센트 | ±2센트 | ✔ |
@@ -63,14 +64,8 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 ### 이 표에서 읽을 점
 
 - 보고서에 있던 큰 결함 가운데 P-01·P-02·P-04·P-08·P-09·P-11·P-15·P-21 은 이미 고쳐져 있다. 이 항목들의 Step 은 "새로 고치기"가 아니라 "고쳐진 상태가 지켜지는지 확인하기"로 진행한다.
-- 아직 열려 있는 방향: P-12(Phaser 빗살), P-13(Distortion 낮은 노브), P-16(Drive·Crunch·Fuzz 지연), P-17(꺼진 Phaser 비용). P-20(저장된 Decay 7.5초)은 S2.2 에서 해결했다.
+- 아직 열려 있는 방향: P-12(Phaser 빗살), P-13(Distortion 낮은 노브), P-16(Drive·Crunch·Fuzz 지연), P-17(꺼진 Phaser 비용). P-20(저장된 Decay 7.5초)은 S2.2 에서 해결했고, P-19(v1 → v2 동일성)는 S2.4 에서 처음 재어 통과했다.
 - 코드 지도(`docs/refactoring/code-map.md`)가 "구현됨"으로 분류한 Step 중 위 ✖ 에 걸리는 것은 Step 을 시작할 때 다시 대조한다.
-
-## 아직 재지 않는 프로브
-
-| ID | 이유 |
-|---|---|
-| P-19 v1 → v2 동일성 | v2 저장소(S2.4)가 있어야 잰다. 그 Step 에서 추가한다 |
 
 ## 측정 방식 메모
 
@@ -94,3 +89,12 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 - P-20: 옛 저장값(공장 프리셋 6.2·7.5초, 옛 최댓값 10초)으로 렌더한 Reverb 출력과, 앱이 불러올 때 쓰는 함수(`clampPedalsToSchema`)로 맞춘 6.0 초의 출력을 견준다. 엔진은 처음부터 6 초에서 임펄스를 잘라 써서 널은 −200 dB(완전히 같음)이고, 변환이 정확한지는 `convertedDecayError`(바뀐 값과 6.0 의 최대 차이, 초)가, 공장 데이터가 6 초를 넘지 않는지는 `maxFactoryDecay` 가 맡는다.
 - P-24: Fuzz 의 Gate 를 잰다. **체인 전체의 파형 널은 쓰지 않는다** — 같은 체인을 두 번 렌더하면 입력이 1 ppm 만 달라도 약 −80 dB 의 수치 잡음이 남는다(REFACTOR_LOG L-90). 대신 게이트 워클릿만 따로 돌려 입력과 다른 샘플 수(`gate0.workletDiffSamples`·`open.workletDiffSamples`)와 체인 출력 레벨 차(`open.levelDiffDb`)를 본다. `noise.*` 는 앱 기본 Mix(90%)라 게이트를 지나지 않는 원음이 섞여 있고, `noiseMix100.*` 은 Mix 100% 다. `onset.lossDb` 는 쉬었다 시작하는 음(110 Hz)의 처음 10 ms 가 Gate 50 때문에 줄어든 양이다.
 - 기준선이 달라진 프로브는 P-03(최악 조합의 리미터 앞 피크 +0.7 / +0.6 dB — 44.1 / 48 kHz)·P-05(Fuzz 프리셋 5개의 raw·trim)·P-20(지표 재정의)·P-24(신규) 넷이다. 나머지는 허용 오차 안이다.
+
+### P-19 (S2.4) 읽는 법
+
+- 프로브 빌드(`--mode test`)에만 v1 픽스처 6개(`e2e/fixtures/storage-v1`)가 `import.meta.glob` 으로 들어간다. 배포 번들에는 들어가지 않는다. 픽스처마다 시험용 저장소(Map)에 넣고 앱이 열 때의 절차 `runBootstrap` 을 두 번 돈다. 첫 방문은 v1 에서 v2 로 옮기고(`visit1.converted`·`visit1.fresh`·`visit1.legacy` 는 그 결과의 개수. v1 값이 없는 픽스처 01 은 `fresh`), 둘째 방문은 v2 키에서 읽는다(`visit2.v2`).
+- 소리는 둘째 방문에서 읽은 **작업 보드와 사용자 프리셋**으로 낸다. 정답은 같은 v1 원문에서 옛 앱의 규칙(켜짐 = `enabled` 이고 `bypassed` 가 아님, 값은 저장된 그대로, 순서는 저장된 순서)으로 따로 만든 체인이라 변환 코드와 같이 틀릴 수 없다. 둘을 REF-PC 1초로 렌더해 출력 차를 출력 대비 dB 로 적는다(`nullDb.board.NN`·`nullDb.preset.NN.K`, −200 은 완전히 같음).
+- 시간을 줄이려고 꺼진 페달은 체인에서 뺀다(꺼진 페달은 신호를 그대로 통과시킨다). 어느 페달이 켜져 있는지는 `activeMismatch`(켜진 페달 목록이 옛 규칙과 다른 보드·프리셋의 수)가 따로 견준다. `presetMissing` 은 둘째 방문에서 사라진 사용자 프리셋의 수다(둘 다 0). `activeCount.NN` 은 보드의 켜진 페달 수(5/2/5/5/6/5)이고, 이 값이 바뀌면 픽스처나 규칙이 바뀐 것이다.
+- 꺼진 페달의 Mix 복원(M2)은 꺼져 있는 동안 소리에 영향이 없으므로 여기서 보이지 않는다. 그것은 P-18 의 `loadNullDb` 가 본다.
+- 걸린 기준: `criteria` 7개(`nullDb.* ≤ −80` 이 설계서의 기준)와 `rules` 의 `nullDb.* ≤ −90`. 변환이 틀리면 소리가 바뀌기 전에 `visit1.legacy` 가 0 보다 커진다 — 틀린 변환은 v2 로 굳히지 않고 옛 방식으로 열기 때문이다(REFACTOR_LOG L-107).
+- 이 프로브가 재지 않는 것: 실제 사용자의 데이터(고정된 픽스처 6개뿐), S2.2 에서 달라진 Fuzz 의 소리(변환은 값을 바꾸지 않는다 — L-116), 브라우저의 실제 `localStorage`(시험용 Map 이다).

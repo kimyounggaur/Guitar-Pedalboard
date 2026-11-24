@@ -44,11 +44,6 @@
   opacity: 1;
 }
 
-.pedal-card.is-disabled {
-  filter: grayscale(0.8);
-  opacity: 1;
-}
-
 .pedal-card.is-dragging {
   opacity: 0.6;
   transform: scale(1.03);

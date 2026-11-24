@@ -31,12 +31,46 @@ export function stripBypassParams(params: Record<string, PedalParamValue>): Reco
   return nextParams;
 }
 
+/**
+ * 메모리의 페달을 v11 저장 모양으로 적는다. 켜짐은 `enabled && !bypassed` 로 읽히므로(M1) 거꾸로는
+ * `enabled` 를 늘 true 로 두고 꺼짐만 `bypassed` 로 적는다 — 10→11 마이그레이션이 정한 방식 그대로다.
+ * 메모리의 `active` 와 옛 두 필드의 변환은 이 파일에서만 한다.
+ */
 export function toStoredPedals(pedals: PedalState[]): StoredPedal[] {
   return pedals.map((pedal) => ({
     id: pedal.id,
-    enabled: pedal.enabled,
-    bypassed: pedal.bypassed,
+    enabled: true,
+    bypassed: !pedal.active,
     params: stripBypassParams(pedal.params),
+  }));
+}
+
+/** v1 저장본을 만든다. 음량 보정이 0 이면 필드를 쓰지 않아, 보정이 없는 저장본은 이전 버전과 똑같은 모양이다. */
+export function buildStoredState(pedals: PedalState[], presetTrimDb: number): StoredState {
+  const storedState: StoredState = {
+    version: SCHEMA_VERSION,
+    pedals: toStoredPedals(pedals),
+  };
+  const trimDb = clampTrimDb(presetTrimDb);
+  if (trimDb !== 0) storedState.presetTrimDb = trimDb;
+  return storedState;
+}
+
+/**
+ * 프리셋 파일·v1 프리셋 저장본에 적는 페달 모양(S2.7 이 v2 내보내기를 넣기 전까지의 파일 형식).
+ * 이름·종류·색·값은 그대로 두고 `active` 만 옛 두 필드로 풀어서, 이전 버전 앱이 같은 파일을 읽을 수 있게 한다.
+ */
+export type LegacyPedalRecord = Omit<PedalState, 'active'> & { enabled: true; bypassed: boolean };
+
+export function toLegacyPedalRecords(pedals: PedalState[]): LegacyPedalRecord[] {
+  return pedals.map((pedal) => ({
+    id: pedal.id,
+    type: pedal.type,
+    name: pedal.name,
+    enabled: true,
+    bypassed: !pedal.active,
+    color: pedal.color,
+    params: { ...pedal.params } as PedalParams,
   }));
 }
 
@@ -64,14 +98,16 @@ function toStoredPedal(value: unknown): StoredPedal | null {
 
   return {
     id: candidate.id,
-    enabled:
-      typeof candidate.enabled === 'boolean' ? candidate.enabled : (defaultPedal?.enabled ?? true),
+    // 기본 페달은 늘 enabled:true 였다. 꺼짐의 기본값은 기본 페달의 active 를 뒤집어 얻는다.
+    enabled: typeof candidate.enabled === 'boolean' ? candidate.enabled : true,
     bypassed:
       typeof candidate.bypassed === 'boolean'
         ? candidate.bypassed
         : typeof legacyBypass === 'boolean'
           ? legacyBypass
-          : (defaultPedal?.bypassed ?? false),
+          : defaultPedal
+            ? !defaultPedal.active
+            : false,
     params,
   };
 }
@@ -551,8 +587,8 @@ export function mergeStoredPedals(storedPedals: StoredPedal[] | null): PedalStat
     restored.push(
       clonePedal({
         ...defaultPedal,
-        enabled: storedPedal.enabled,
-        bypassed: storedPedal.bypassed,
+        // M1(S2.4): 켜짐은 옛 두 필드의 곱이다. 어느 한쪽이라도 꺼짐이면 소리에 걸리지 않았으니 active=false.
+        active: storedPedal.enabled && !storedPedal.bypassed,
         params: {
           ...defaultPedal.params,
           ...stripBypassParams(storedPedal.params),

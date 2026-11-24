@@ -219,8 +219,7 @@ const pedal = {
   id: 'graphic-eq',
   type: 'graphicEQ',
   name: 'Graphic EQ',
-  enabled: true,
-  bypassed: false,
+  active: true,
   color: '#4a5b7a',
   params: defaultParams,
 };

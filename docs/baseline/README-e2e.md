@@ -11,7 +11,7 @@
 
 ```bash
 npm run build                         # 시험은 빌드 결과(dist/)를 vite preview 로 서비스한다
-npm run e2e                           # 빌드까지 알아서 한다. 전체 137개, 약 5분
+npm run e2e                           # 빌드까지 알아서 한다. 전체 158개, 약 5분
 E2E_SKIP_BUILD=1 npm run e2e          # dist/ 가 이미 있을 때(CI 는 앞 단계에서 빌드해 이렇게 돌린다)
 npm run e2e -- --grep "E-23"          # 일부만
 E2E_UPDATE_BASELINE=1 npm run e2e     # 기준선(e2e.json)과 대표 스크린샷 갱신 (의도한 변화일 때만)
@@ -37,6 +37,8 @@ E2E_UPDATE_BASELINE=1 E2E_SKIP_BUILD=1 npx playwright test e2e/tests/e04-phone-r
   - `geometry.ts` — 도달성(`reachable`: 뷰포트 가운데로 스크롤해 가운데 히트 테스트, `reachableAboveDock`: 휴대폰 도크 위 빈 영역 기준), 노출 비율, 글자 겹침, 도크 위에 온전히 보이는 노브 수(`visibleKnobs`).
   - `switches.ts` — 스위치 15개 측정(`measureSwitches`: 데스크톱, `measureSwitchesAboveDock`: 휴대폰 도크 기준).
   - `app.ts` — 앱 조작(`connectGuitar`, 도크 탭 고르기 `selectMobileTab`, 도크 펼침·접힘 `setMobileDock`: `--dock-h` 가 실제 높이를 따라올 때까지 기다림).
+  - `storage.ts` — 저장소 시험 도우미(S2.4): 저장 키 이름, 페달 15개 표(`PEDALS`)와 기본으로 켜진 다섯, `seedStorage`(픽스처를 `localStorage` 에 한 번만 넣기), 저장된 v2 보드·프리셋 읽기, `toastOf`, 옛 저장본 픽스처 읽기(`loadV1Fixture`).
+  - `dist-server.ts` — `dist/` 를 서비스하는 작은 서버(S2.4). 시험 도중에 `sw.js` 의 바이트를 바꿔 내려 줘서 새 버전 배포를 흉내 낸다(실제 서비스 워커가 필요한 새 버전 알림 시험용). `node:http` 선언은 `types/node-shim.d.ts` 에 있다.
   - `touch.ts` — CDP `Input.dispatchTouchEvent` 로 손가락 드래그를 보내고 스크롤이 가라앉기를 기다린다(Playwright 의 `touchscreen` 은 탭뿐이다).
   - `mocks.ts` — 저장소 차단·가득 참, Web MIDI, 문서 숨김 흉내, `getUserMedia` 오류 7종, `AudioContext` 추적, 출력 가드 관찰.
   - `teardown.ts`(정지 정리 관찰, E-01), `screens.ts`(화면 프로필 11종), `fixtures.ts`·`env.ts`(브라우저 띄우기·환경 상수), `record.ts`(측정값 기록).
@@ -47,6 +49,9 @@ E2E_UPDATE_BASELINE=1 E2E_SKIP_BUILD=1 npx playwright test e2e/tests/e04-phone-r
 - 저장된 옛 데이터를 불러올 때의 화면 시험은 `s2-1-off-pedal-mix.spec.ts`(3개, S2.1) — 픽스처 04(꺼진 Delay·Reverb·Chorus 의 Mix 0%)를 열면 기본 Mix 로 보이고, 같은 사용자 프리셋을 불러와도 같으며, 공장 프리셋에서 꺼진 페달의 Mix 가 0% 인 것이 없다. 소리 자체는 오디오 프로브 P-18 이 본다. 기준선(`e2e.json`)에는 기록하지 않는 단언 시험이다.
 - 조절기 이름·범위·기능 시험은 `s2-2-param-schema.spec.ts`(8개, S2.2) — 화면의 모든 슬라이더(15개 카드)를 읽어 `src/audio/params` 스키마의 이름·범위·간격·표시와 견주고(처음 화면, 양 끝값), Fuzz Gate('출력 감쇠' 는 없음, 0 = 끔, 1~100 = 문턱 dB)·EQ Level 0~200(공장 Solo Boost 108)·Delay Sync(D.Time 막힘·동기된 값·Slapback 예외)·BPM·Reverb Decay 6초(7.5초 저장본과 공장 프리셋 둘)·프리셋 패널(막대·Store 탭 없음)을 단언한다. 그래픽 EQ 와 Reverb Tone 의 `aria-valuetext` 는 화면 글자와 일부러 다르게 풀어 쓴 문구라 숫자·단위가 같은지만 본다. 기준선(`e2e.json`)에는 기록하지 않는 단언 시험이다.
 - 연결 오류 안내 시험은 `e07-connect-errors.spec.ts`(E-07, 17개, S2.3) — `getUserMedia` 를 오류 7종으로 거부시키면 설계서 4.13 의 한국어 문구(시험 파일에 글자 그대로 적었다)가 `role="alert"` 로 **화면 안에 전체가** 보이고 영어 원문·오류 이름이 없음(7개), 워클릿 로드 실패(`addModule` 거부)·비보안 출처(`isSecureContext` false)가 장치 시작 실패와 다른 문구임, 골라 둔 장치가 없을 때(OverconstrainedError·NotFoundError) 기본 장치로 다시 연결되고 경고 토스트가 뜨며 선택이 기본 장치로 돌아오고 다음 연결에서 되풀이되지 않음, 기본 장치로도 실패하면 두 번만 시도하고 컨텍스트가 남지 않음, NotReadableError 는 다시 시도하지 않음, 휴대폰 3종(390×844·360×640·412×915)의 입력 탭에서 안내 전체가 화면 안에 보임을 단언한다. 기준선(`e2e.json`)에는 기록하지 않는 단언 시험이다.
+- 스위치 통합·저장 형식 시험은 `e08-active-led.spec.ts`(E-08, 12개, S2.4) — 발스위치는 카드마다 하나이고 첫 화면의 켜진 LED 가 기본 5개(Noise Gate·Compressor·Drive·EQ·Cab)임, 기타를 연결하면 미터의 이펙트 수 '5개' = LED 수이고 스위치·단축키·프리셋으로 바꿔도 LED·미터·저장된 상태가 함께 바뀜(2개). 옛 저장본 픽스처 6종(`e2e/fixtures/storage-v1`)마다 LED 수 = 저장돼 있던 켜진 페달 수(5/2/5/5/6/5), v1 키 원문은 변환 뒤·스위치·노브·새로고침 뒤에도 그대로(깨진 값을 담은 03 은 원래 키가 보관 사본으로 옮겨지고 원문이 사본에 남음), 새로고침해도 v2 에서 읽음(6개). 옛 사용자 프리셋(02)의 `enabled`·`bypassed` 조합이 켜짐 하나로 불러와지고 프리셋을 더 가져와도 v1 프리셋 키는 그대로(1개). `schema` 3(더 새로운 앱)은 옛 방식 모드로 v1 에서 읽고 v1 키에 쓰며 v2 키를 만들지 않음(2개). 도우미의 페달 표가 화면과 같음(1개). 소리가 같은지는 P-19 가 잰다.
+- 두 탭 경고 시험은 `s2-4-cross-tab.spec.ts`(5개, S2.4) — 다른 탭이 v1 키 둘 중 어느 쪽에 값을 쓰든 경고 알림 한 장(문구는 설계서 4.7 그대로, 닫을 때까지 남음, 2개), 이 앱끼리의 v2 키 쓰기(스위치·노브)·v1 키 삭제·저장소 비우기에는 없음, 닫은 뒤 5분 안에는 다시 안 뜸, 옛 방식 모드로 연 탭은 알리지 않음. 옛 탭은 같은 키에 값을 쓰는 것으로 흉내 낸다.
+- 새 버전 알림 시험은 `s2-4-update-notice.spec.ts`(4개, S2.4) — 진짜 서비스 워커와 `helpers/dist-server.ts` 로 배포를 흉내 낸다: 처음 설치의 제어권 획득은 알림이 없고, 새 서비스 워커가 활성화되면 알림 한 장(버튼을 눌러야만 새로고침), 기타를 연결한 채로도 연결이 안 끊기고 새로고침이 없음, 새로고침한 뒤의 탭도 다음 새 버전을 알림, 바이트가 같으면 알림 없음. 이 시험은 서비스 워커를 막지 않는다(E-05 와 달리).
 - 타입: `tsconfig.e2e.json` 이 `e2e/` 와 `playwright.config.ts` 를 검사한다(`npx tsc -p tsconfig.e2e.json --noEmit`). `@types/node` 는 앱의 `setTimeout` 반환형을 바꿔 `AutoWahEffect.ts` 를 깨뜨려서 넣지 않고, 쓰는 Node API 만 `e2e/types/node-shim.d.ts` 에 직접 선언했다.
 
 ## E-04 와 E-06 (둘 다 정식 단언)
@@ -71,7 +76,7 @@ E2E_UPDATE_BASELINE=1 E2E_SKIP_BUILD=1 npx playwright test e2e/tests/e04-phone-r
 | 저장 공간 가득 참(QuotaExceededError) | 같은 확인, 알림 `storage:quota` |
 | 깨진 저장값(픽스처 03) | 기본값으로 열림(켜진 페달 5개), 깨진 세 키가 원문 그대로 `…:corrupt-<시각>` 로 보관, 알림 `storage:corrupt` 한 번 |
 | 렌더 예외 | 한국어 오류 화면과 포커스, AudioContext 모두 closed·마이크 트랙 모두 ended, 오류 정보 복사(클립보드 내용), 다시 시도, 다시 연결 |
-| 저장된 설정 때문에 죽음 → 초기화 | 새로고침해도 오류 화면, 초기화는 두 번 묻고 취소하면 그대로, 초기화 뒤 `guitar-pedalboard:*` 는 없고 내 프리셋 키는 남음 |
+| 저장된 설정 때문에 죽음 → 초기화 | 새로고침해도 오류 화면, 초기화는 두 번 묻고 취소하면 그대로, 초기화 뒤 `guitar-pedalboard:*` 는 `schema` 와 내 프리셋(`v2:presets`)만 남고 없음(S2.4: 사용자 프리셋은 v2 키로 옮겨 왔다) |
 | 앱 스크립트 실패 | 정적 안내가 뜨고 '페이지 다시 불러오기'로 복구 |
 | 이벤트·타이머·약속 오류 | 알림 한 장(+ 오류 정보 복사), 중단된 요청·ResizeObserver 알림은 걸러짐, 앱은 그대로 |
 
@@ -168,4 +173,5 @@ E2E_UPDATE_BASELINE=1 E2E_SKIP_BUILD=1 npx playwright test e2e/tests/e04-phone-r
 - S1.8: 실제 노트북·태블릿 브라우저에서 오른쪽 패널 서랍(768~1279 px)의 열고 닫는 느낌(Esc·바깥 막 클릭·닫기 버튼), 창 크기를 끌어 1280 px 경계를 오갈 때, 실제 오디오 인터페이스를 연결한 상태 막대(두 줄로 접힌 1280~1680 px 와 한 줄인 1920 px), 카드가 340 px 를 오가며 갑자기 다른 배치로 바뀌는 모습, Tremolo 선택 상자, 키가 커진 카드(L-70·L-74), 노브 가운데를 실제 마우스·손가락으로 끌기(F-4).
 - S1.8: 연결 전 첫 화면에는 페달이 하나도 보이지 않는다(1280×800 에서 첫 카드 윗선 770 px, L-76). 이 입력 패널을 접거나 옆으로 옮길지, 카드 속에서 스위치를 위로 올릴지(L-71)는 디자인 결정이라 사람이 정한다.
 - S1.7: 실제 브라우저에서 사이트 데이터를 막은 상태(Safari 비공개 모드, Chrome 의 쿠키·사이트 데이터 차단)와 정말 가득 찬 저장 공간에서 알림 문구·동작이 맞는지, 오류 화면이 실제 휴대폰에서 어떻게 보이는지, 배포 사이트에서 '설정을 초기화하고 다시 시작' 흐름이 되는지(자세한 목록은 `docs/refactoring/step-reports.md` 의 S1.7).
+- S2.4: 실제 브라우저에서 옛 데이터를 가진 채로 새 버전을 열었을 때 LED·노브·프리셋이 그대로인지, 실제 옛 빌드 탭이 v1 키에 쓸 때 경고가 뜨는지(e2e 는 같은 키에 값을 써서 흉내 냈다), 실제 GitHub Pages 배포에서 열려 있는 탭에 새 서비스 워커가 들어올 때 알림이 뜨는지(`dist-server` 는 배포를 흉내 낸 것이다). 이 알림이 처음 들어가는 배포 전부터 열려 있던 탭에는 알림이 없다. 자세한 것은 `docs/refactoring/step-reports.md` 의 S2.4 절.
 - GitHub Actions 에서 실제로 돌려 본 적이 없다. 처음 PR 을 올릴 때 `Install Playwright Chromium` 단계가 CI 러너에서 통과하는지 확인한다.

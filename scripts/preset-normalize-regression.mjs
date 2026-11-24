@@ -38,7 +38,7 @@ const harnessBundle = await build({
       "export { isPedalOff, restoreMixOfOffPedals } from './presets/normalize.ts';",
       "export { STORAGE_KEYS } from './persistence/index.ts';",
       "export { clonePedals, initialPedals, usePedalStore } from './store/pedalStore.ts';",
-      "export { defaultPresets, parsePresetJson, usePresetStore } from './store/presetStore.ts';",
+      "export { defaultPresets, parsePresetJson, serializePresetPayload, usePresetStore } from './store/presetStore.ts';",
     ].join('\n'),
     resolveDir: fileURLToPath(new URL('../src', import.meta.url)),
     sourcefile: 'preset-normalize-harness.ts',
@@ -49,8 +49,18 @@ const harnessBundle = await build({
   target: 'node20',
   write: false,
 });
-const { isPedalOff, restoreMixOfOffPedals, STORAGE_KEYS, clonePedals, initialPedals, usePedalStore, defaultPresets, parsePresetJson, usePresetStore } =
-  await import(`data:text/javascript;base64,${Buffer.from(harnessBundle.outputFiles[0].text).toString('base64')}`);
+const harnessCode = harnessBundle.outputFiles[0].text;
+let harnessInstances = 0;
+/**
+ * 앱 코드를 새로 불러온다. 스토어는 불러올 때 저장소를 읽고(S2.4: 이때 저장 형식을 정하고 v1 에서 v2 로 옮긴다),
+ * 그 뒤에 저장소를 채워서는 읽은 값이 달라지지 않으므로, 저장소를 채운 다음 이 함수로 다시 불러온다.
+ */
+const loadHarness = () => {
+  harnessInstances += 1;
+  return import(`data:text/javascript;base64,${Buffer.from(`${harnessCode}\n//# instance ${harnessInstances}`).toString('base64')}`);
+};
+const { isPedalOff, restoreMixOfOffPedals, STORAGE_KEYS, clonePedals, initialPedals, defaultPresets, parsePresetJson, serializePresetPayload } =
+  await loadHarness();
 
 const defaultMix = new Map(initialPedals.map((pedal) => [pedal.id, pedal.params.mix]));
 const defaultMixOf = (id) => defaultMix.get(id);
@@ -96,62 +106,55 @@ for (const pedal of initialPedals) {
 }
 
 for (const base of initialPedals) {
-  const off = withState(base.id, { bypassed: true }, { mix: 0 });
+  const off = withState(base.id, { active: false }, { mix: 0 });
   const [restored] = restoreMixOfOffPedals([off], defaultMixOf);
   equal(restored.params.mix, base.params.mix, `${base.id}: 꺼짐 + Mix 0 → 기본 Mix ${base.params.mix}`);
-  equal(restored.bypassed, true, `${base.id}: 꺼진 채로 둔다`);
-  equal(restored.enabled, off.enabled, `${base.id}: enabled 는 그대로`);
+  equal(restored.active, false, `${base.id}: 꺼진 채로 둔다`);
   deepEqual(withoutMix(restored.params), withoutMix(off.params), `${base.id}: Mix 밖의 값은 하나도 바뀌지 않는다`);
   equal(off.params.mix, 0, `${base.id}: 입력 객체는 바뀌지 않는다`);
 }
 
-// 꺼짐의 두 가지 표현: 저장 형식 11 은 bypassed, 이전 형식은 enabled:false. 둘 다(그리고 둘이 겹쳐도) 꺼짐이다.
-equal(isPedalOff({ enabled: true, bypassed: true }), true);
-equal(isPedalOff({ enabled: false, bypassed: false }), true);
-equal(isPedalOff({ enabled: false, bypassed: true }), true);
-equal(isPedalOff({ enabled: true, bypassed: false }), false);
-for (const [enabled, bypassed] of [[true, true], [false, false], [false, true]]) {
-  const [restored] = restoreMixOfOffPedals([withState('delay', { enabled, bypassed }, { mix: 0 })], defaultMixOf);
-  equal(restored.params.mix, 30, `Delay enabled=${enabled} bypassed=${bypassed} + Mix 0 → 기본 30`);
-}
+// 꺼짐의 표현은 active:false 하나다(S2.4). 옛 저장본의 enabled:false·bypassed:true 조합은 읽을 때 active:false 로 합쳐진다(아래 3절).
+equal(isPedalOff({ active: false }), true);
+equal(isPedalOff({ active: true }), false);
 
 // 바꾸지 말아야 할 것: 같은 객체가 그대로 돌아온다.
 const keep = [
-  ['켜진 페달의 Mix 0(사용자가 정한 값)', withState('delay', { enabled: true, bypassed: false }, { mix: 0 })],
-  ['꺼진 페달의 Mix 1', withState('delay', { bypassed: true }, { mix: 1 })],
-  ['꺼진 페달의 Mix 0.4', withState('reverb', { bypassed: true }, { mix: 0.4 })],
-  ['꺼진 페달의 Mix 50', withState('reverb', { bypassed: true }, { mix: 50 })],
-  ['꺼진 페달의 Mix 100', withState('chorus', { bypassed: true }, { mix: 100 })],
-  ['꺼진 페달의 Mix 가 문자열 "0"', withState('chorus', { bypassed: true }, { mix: '0' })],
-  ['꺼진 페달의 Mix 가 false', withState('chorus', { bypassed: true }, { mix: false })],
-  ['꺼진 페달의 Mix 가 없음', (() => { const pedal = withState('chorus', { bypassed: true }); delete pedal.params.mix; return pedal; })()],
-  ['꺼진 페달의 Mix 가 음수', withState('flanger', { bypassed: true }, { mix: -5 })],
+  ['켜진 페달의 Mix 0(사용자가 정한 값)', withState('delay', { active: true }, { mix: 0 })],
+  ['꺼진 페달의 Mix 1', withState('delay', { active: false }, { mix: 1 })],
+  ['꺼진 페달의 Mix 0.4', withState('reverb', { active: false }, { mix: 0.4 })],
+  ['꺼진 페달의 Mix 50', withState('reverb', { active: false }, { mix: 50 })],
+  ['꺼진 페달의 Mix 100', withState('chorus', { active: false }, { mix: 100 })],
+  ['꺼진 페달의 Mix 가 문자열 "0"', withState('chorus', { active: false }, { mix: '0' })],
+  ['꺼진 페달의 Mix 가 false', withState('chorus', { active: false }, { mix: false })],
+  ['꺼진 페달의 Mix 가 없음', (() => { const pedal = withState('chorus', { active: false }); delete pedal.params.mix; return pedal; })()],
+  ['꺼진 페달의 Mix 가 음수', withState('flanger', { active: false }, { mix: -5 })],
 ];
 for (const [label, pedal] of keep) {
   const [result] = restoreMixOfOffPedals([pedal], defaultMixOf);
   ok(result === pedal, `${label}: 건드리지 않는다(같은 객체)`);
 }
-const unknown = { ...withState('delay', { bypassed: true }, { mix: 0 }), id: 'user-made-pedal' };
+const unknown = { ...withState('delay', { active: false }, { mix: 0 }), id: 'user-made-pedal' };
 ok(restoreMixOfOffPedals([unknown], defaultMixOf)[0] === unknown, '기본 Mix 를 모르는 id 는 그대로');
 for (const lookup of [() => undefined, () => 0, () => -3, () => Number.NaN, () => Number.POSITIVE_INFINITY, () => '30']) {
-  const pedal = withState('delay', { bypassed: true }, { mix: 0 });
+  const pedal = withState('delay', { active: false }, { mix: 0 });
   ok(restoreMixOfOffPedals([pedal], lookup)[0] === pedal, `쓸 수 없는 기본값(${String(lookup())})이면 그대로`);
 }
 deepEqual(restoreMixOfOffPedals([], defaultMixOf), [], '빈 목록');
 
 // 입력을 동결해도 던지지 않고(바꾸지 않음), 결과는 새 배열이며, 두 번 적용해도 같다.
 const mixed = deepFreeze(clonePedals(initialPedals).map((pedal, index) =>
-  index % 3 === 0 ? { ...pedal, bypassed: true, params: { ...pedal.params, mix: 0 } }
-    : index % 3 === 1 ? { ...pedal, bypassed: false, params: { ...pedal.params, mix: 0 } }
+  index % 3 === 0 ? { ...pedal, active: false, params: { ...pedal.params, mix: 0 } }
+    : index % 3 === 1 ? { ...pedal, active: true, params: { ...pedal.params, mix: 0 } }
       : pedal));
 const once = restoreMixOfOffPedals(mixed, defaultMixOf);
 ok(once !== mixed, '새 배열을 돌려 준다');
 deepEqual(restoreMixOfOffPedals(once, defaultMixOf), once, '멱등: 두 번 적용해도 같다');
 mixed.forEach((pedal, index) => {
   const result = once[index];
-  const wasOffWithZeroMix = pedal.bypassed && pedal.params.mix === 0;
+  const wasOffWithZeroMix = !pedal.active && pedal.params.mix === 0;
   equal(result.params.mix, wasOffWithZeroMix ? defaultMix.get(pedal.id) : pedal.params.mix, `${pedal.id}: 꺼짐+0 만 바뀐다`);
-  equal(result.bypassed, pedal.bypassed, `${pedal.id}: 스위치 상태는 그대로`);
+  equal(result.active, pedal.active, `${pedal.id}: 스위치 상태는 그대로`);
   equal(result.id, pedal.id);
 });
 deepEqual(once.map((pedal) => pedal.id), mixed.map((pedal) => pedal.id), '순서는 그대로');
@@ -198,11 +201,11 @@ const storedPedal = (id, state, params) => ({ id, ...state, params: { ...byId(in
   const chorus = byId(preset.pedals, 'chorus');
   equal(delay.params.mix, 30, '가져온 꺼진 Delay 의 Mix 0 → 기본 30');
   equal(delay.params.timeMs, 410, 'Delay 의 다른 값은 그대로');
-  equal(delay.bypassed, true, 'Delay 는 꺼진 채');
+  equal(delay.active, false, 'Delay 는 꺼진 채');
   equal(reverb.params.mix, 25, '가져온 꺼진 Reverb 의 Mix 0 → 기본 25');
   equal(reverb.params.decay, 2.5, 'Reverb 의 다른 값은 그대로');
   equal(chorus.params.mix, 0, '가져온 켜진 Chorus 의 Mix 0 은 사용자가 정한 값이라 그대로');
-  equal(chorus.bypassed, false, 'Chorus 는 켜진 채');
+  equal(chorus.active, true, 'Chorus 는 켜진 채');
   equal(byId(preset.pedals, 'crunch').params.mix, 60, '꺼졌어도 Mix > 0 이면 그대로');
   equal(preset.pedals.length, 15, '없는 페달은 기본값으로 채워 15개');
 }
@@ -218,7 +221,7 @@ const storedPedal = (id, state, params) => ({ id, ...state, params: { ...byId(in
     const [preset] = parsePresetJson(presetJson(10, [storedPedal('delay', state, { mix: 0 })]));
     const delay = byId(preset.pedals, 'delay');
     equal(delay.params.mix, expected, `v10 ${label} + Mix 0 → ${note}`);
-    equal(delay.bypassed, !(state.enabled && !state.bypassed), `v10 ${label}: 켜짐·꺼짐은 10→11 이 정한 대로`);
+    equal(delay.active, state.enabled && !state.bypassed, `v10 ${label}: 켜짐·꺼짐은 10→11 이 정한 대로(M1: 두 필드의 곱)`);
   }
 }
 {
@@ -232,15 +235,15 @@ const storedPedal = (id, state, params) => ({ id, ...state, params: { ...byId(in
   const [preset] = parsePresetJson(legacy);
   const delay = byId(preset.pedals, 'delay');
   const reverb = byId(preset.pedals, 'reverb');
-  equal(delay.bypassed, true, 'v1 enabled:false → 꺼짐');
+  equal(delay.active, false, 'v1 enabled:false → 꺼짐');
   equal(delay.params.mix, 30, 'v1 꺼진 Delay 의 Mix 0 → 기본 30');
-  equal(reverb.bypassed, false, 'v1 enabled:true → 켜짐');
+  equal(reverb.active, true, 'v1 enabled:true → 켜짐');
   equal(reverb.params.mix, 0, 'v1 켜진 Reverb 의 Mix 0 은 그대로');
 }
 {
   // 내보냈다 다시 가져와도 같다(멱등). 소리를 정하는 값은 하나도 달라지지 않는다.
   const [first] = parsePresetJson(presetJson(11, [storedPedal('delay', { enabled: true, bypassed: true }, { mix: 0 })]));
-  const reexported = presetJson(11, first.pedals, { id: first.id, name: first.name, updatedAt: first.updatedAt });
+  const reexported = serializePresetPayload([first]);
   const [second] = parsePresetJson(reexported);
   deepEqual(second.pedals, first.pedals, '두 번 가져와도 같다');
 }
@@ -251,17 +254,18 @@ const storedPedal = (id, state, params) => ({ id, ...state, params: { ...byId(in
 const fixturePath = new URL('../e2e/fixtures/storage-v1/04-disabled-pedal-mix0.json', import.meta.url);
 const fixtureText = await readFile(fixturePath, 'utf8');
 const fixture = JSON.parse(fixtureText);
-const storedWorking = JSON.parse(fixture.storage[STORAGE_KEYS.pedals]);
-const storedPresets = JSON.parse(fixture.storage[STORAGE_KEYS.presets]);
+const storedWorking = JSON.parse(fixture.storage[STORAGE_KEYS.v1Pedals]);
+const storedPresets = JSON.parse(fixture.storage[STORAGE_KEYS.v1Presets]);
 const offWithZeroMix = (pedals) => pedals.filter((pedal) => (!pedal.enabled || pedal.bypassed) && pedal.params.mix === 0).map((pedal) => pedal.id).sort();
 deepEqual(offWithZeroMix(storedWorking.pedals), ['chorus', 'delay', 'reverb'], '픽스처 04 의 작업 상태: Chorus·Delay·Reverb 가 꺼짐 + Mix 0');
 deepEqual(offWithZeroMix(storedPresets.presets[0].pedals), ['chorus', 'delay', 'reverb'], '픽스처 04 의 사용자 프리셋도 같다');
 
+// 옛 저장본이 든 저장소에서 앱을 연다: 시작할 때 v1 → v2 로 옮기고(S2.4), 옛 키는 읽기만 한다.
+storageValues.clear();
 for (const [key, value] of Object.entries(fixture.storage)) storageValues.set(key, value);
 storageWrites.length = 0;
-
-usePedalStore.getState().loadPedalsFromStorage();
-usePresetStore.getState().reloadPresets();
+const fresh = await loadHarness();
+const { usePedalStore, usePresetStore } = fresh;
 
 const workingPedals = usePedalStore.getState().pedals;
 const userPreset = usePresetStore.getState().presets.find((preset) => preset.id === storedPresets.presets[0].id);
@@ -273,7 +277,7 @@ for (const [label, pedals, source] of [
   for (const id of ['chorus', 'delay', 'reverb']) {
     const loaded = byId(pedals, id);
     equal(loaded.params.mix, defaultMix.get(id), `${label}: ${id} 의 Mix 0 → 기본 ${defaultMix.get(id)}`);
-    equal(loaded.bypassed, true, `${label}: ${id} 는 꺼진 채`);
+    equal(loaded.active, false, `${label}: ${id} 는 꺼진 채`);
   }
   // Mix 밖의 값과 다른 페달은 저장된 그대로.
   for (const stored of source) {
@@ -283,25 +287,43 @@ for (const [label, pedals, source] of [
       if (changedMix && name === 'mix') continue;
       equal(loaded.params[name], value, `${label}: ${stored.id}.${name} 은 저장된 그대로`);
     }
-    equal(loaded.bypassed, stored.bypassed, `${label}: ${stored.id} 의 켜짐·꺼짐은 저장된 그대로`);
+    equal(loaded.active, stored.enabled && !stored.bypassed, `${label}: ${stored.id} 의 켜짐·꺼짐은 저장된 그대로(옛 두 필드의 곱)`);
   }
   deepEqual(pedals.map((pedal) => pedal.id), source.map((pedal) => pedal.id), `${label}: 순서는 저장된 그대로`);
 }
+// 옛 키는 읽기만 한다(S2.4: 백업으로 남는다). 새 형식은 v2 키에 쓰고, schema 는 맨 마지막이다.
 equal(
-  storageWrites.filter(({ key }) => key === STORAGE_KEYS.pedals || key === STORAGE_KEYS.presets).length,
+  storageWrites.filter(({ key }) => key === STORAGE_KEYS.v1Pedals || key === STORAGE_KEYS.v1Presets).length,
   0,
-  '불러오기만으로는 저장본을 다시 쓰지 않는다(원본이 그대로 남는다)',
+  '불러오기만으로는 옛 저장본을 다시 쓰지 않는다(원본이 그대로 남는다)',
 );
-equal(storageValues.get(STORAGE_KEYS.pedals), fixture.storage[STORAGE_KEYS.pedals], '작업 상태 저장본 원문 그대로');
-equal(storageValues.get(STORAGE_KEYS.presets), fixture.storage[STORAGE_KEYS.presets], '프리셋 저장본 원문 그대로');
+equal(storageValues.get(STORAGE_KEYS.v1Pedals), fixture.storage[STORAGE_KEYS.v1Pedals], '작업 상태 옛 저장본 원문 그대로');
+equal(storageValues.get(STORAGE_KEYS.v1Presets), fixture.storage[STORAGE_KEYS.v1Presets], '프리셋 옛 저장본 원문 그대로');
+deepEqual(
+  storageWrites.map(({ key }) => key),
+  [STORAGE_KEYS.v2State, STORAGE_KEYS.v2Presets, STORAGE_KEYS.schema],
+  '변환은 v2 키 두 개를 쓰고 schema 를 맨 마지막에 쓴다',
+);
+equal(storageValues.get(STORAGE_KEYS.schema), '2', 'schema = 2');
 equal(await readFile(fixturePath, 'utf8'), fixtureText, '픽스처 파일은 읽기만 했다');
+
+// v2 키에서 다시 읽어도(다음 방문과 같다) 같은 값이다: 변환이 값을 바꾸지 않았다.
+{
+  const jsonClone = (value) => JSON.parse(JSON.stringify(value));
+  const before = { pedals: jsonClone(usePedalStore.getState().pedals), preset: jsonClone(userPreset) };
+  usePedalStore.getState().loadPedalsFromStorage();
+  usePresetStore.getState().reloadPresets();
+  deepEqual(usePedalStore.getState().pedals, before.pedals, 'v2 키에서 다시 읽은 작업 상태가 시작할 때와 같다');
+  const again = usePresetStore.getState().presets.find((preset) => preset.id === before.preset.id);
+  deepEqual(again.pedals, before.preset.pedals, 'v2 키에서 다시 읽은 사용자 프리셋 페달이 시작할 때와 같다');
+}
 
 // ---------------------------------------------------------------------------------------------
 // 5. 이 세션에서 사용자가 정한 값은 건드리지 않는다
 // ---------------------------------------------------------------------------------------------
 {
   const board = clonePedals(workingPedals).map((pedal) =>
-    pedal.id === 'delay' ? { ...pedal, bypassed: true, params: { ...pedal.params, mix: 0 } } : pedal);
+    pedal.id === 'delay' ? { ...pedal, active: false, params: { ...pedal.params, mix: 0 } } : pedal);
   usePedalStore.getState().setPedals(board);
   equal(byId(usePedalStore.getState().pedals, 'delay').params.mix, 0, '직접 Mix 를 0 으로 하고 끈 값은 이 세션에서 그대로');
   usePresetStore.getState().savePreset('Mine', usePedalStore.getState().pedals);

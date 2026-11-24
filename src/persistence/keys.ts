@@ -1,13 +1,23 @@
 // 앱이 브라우저 저장소에 쓰는 키 전부(S1.7).
 //
-// 문자열은 바꾸지 않는다. 저장 키 이름·값 형식을 바꾸는 일은 S2.4(v2 키·백업·변환)의 범위다.
+// S2.4 에서 저장 형식이 v2 로 바뀌었다. 작업 상태와 사용자 프리셋은 `v2:` 키에 쓰고, 옛 v1 키는 변환한 뒤에도 지우지 않고
+// 백업으로 남긴다 — 앱은 v1 키를 다시 쓰지 않는다(옛 방식 모드는 예외: persistence/bootstrap 참고).
 // 새 키가 필요하면 여기에 먼저 적고, `SafeStorage` 의 `StorageKey` 타입이 그 키만 받게 한다.
 
 export const STORAGE_KEYS = {
-  /** 페달 15개의 켬/Bypass·노브 값과 프리셋 음량 보정(JSON, 스키마 버전 11) */
-  pedals: 'guitar-pedalboard:pedals',
-  /** 사용자 프리셋(JSON 페이로드). 접두사가 다른 옛 이름이다 */
-  presets: 'web-guitar-pedalboard-presets',
+  /**
+   * 저장 형식 버전(문자열 `2`, S2.4). 이 키가 있어야 v2 키를 읽는다. 변환이 끝난 뒤에 맨 마지막으로 쓴다.
+   * 설정 초기화가 지우지 않는다(지우면 다음 시작이 옛 v1 백업에서 다시 변환해 새 프리셋을 덮어쓴다).
+   */
+  schema: 'guitar-pedalboard:schema',
+  /** v2 작업 상태: 페달 순서·켜짐(`active`)·노브 값·프리셋 음량 보정(JSON, S2.4) */
+  v2State: 'guitar-pedalboard:v2:state',
+  /** v2 사용자 프리셋(JSON, S2.4). 설정 초기화가 지우지 않는다. */
+  v2Presets: 'guitar-pedalboard:v2:presets',
+  /** v1 작업 상태(JSON, 스키마 버전 11). v2 로 옮긴 뒤에는 읽지도 쓰지도 않는 백업이다. */
+  v1Pedals: 'guitar-pedalboard:pedals',
+  /** v1 사용자 프리셋(JSON 페이로드). 접두사가 다른 옛 이름이다. v2 로 옮긴 뒤에는 읽지도 쓰지도 않는 백업이다. */
+  v1Presets: 'web-guitar-pedalboard-presets',
   /** 입력 이득·마스터 볼륨·하울링 보호·튜닝 기준·장치별 입력 채널(JSON) */
   io: 'guitar-pedalboard:io',
   /** 출력 장치 id(JSON 아님, 문자열 그대로) */
@@ -31,8 +41,15 @@ export const STORAGE_KEYS = {
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
 
-/** 앱 키는 대부분 이 접두사로 시작한다(`presets` 만 예외). 설정 초기화가 이 접두사의 키만 지운다. */
+/** 앱 키는 대부분 이 접두사로 시작한다(`v1Presets` 만 예외). 설정 초기화가 이 접두사의 키를 지운다(아래 보존 키는 빼고). */
 export const APP_STORAGE_PREFIX = 'guitar-pedalboard:';
 
 /** 깨진 값을 보관하는 키의 가운데 부분: `{키}:corrupt-{시각}` */
 export const CORRUPT_KEY_INFIX = ':corrupt-';
+
+/**
+ * 설정 초기화가 지우지 않는 키(S2.4). 사용자 프리셋은 '설정'이 아니라 사용자가 만든 자료라서 초기화해도 남는다(S1.7 부터 그랬다).
+ * 사용자 프리셋이 v2 에서 `guitar-pedalboard:` 접두사 아래로 옮겨 왔으므로 이제는 이 목록으로 지킨다.
+ * `schema` 도 함께 남긴다 — 없으면 다음 시작이 v1 백업에서 다시 변환해 v2 프리셋을 옛 값으로 덮어쓴다.
+ */
+export const KEPT_ON_RESET_KEYS: readonly string[] = [STORAGE_KEYS.schema, STORAGE_KEYS.v2Presets];

@@ -23,7 +23,7 @@ export interface PresetLoudness {
 
 /** 꺼진 페달은 신호를 그대로 통과시키므로 빼도 소리가 같다(P-05 가 확인). 렌더 시간을 줄인다. */
 export function activeChain(pedals: PedalState[]): PedalState[] {
-  return pedals.filter((pedal) => pedal.enabled && !pedal.bypassed);
+  return pedals.filter((pedal) => pedal.active);
 }
 
 /**

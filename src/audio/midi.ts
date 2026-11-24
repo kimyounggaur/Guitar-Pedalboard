@@ -29,7 +29,8 @@ export interface ParsedMidiCcMessage {
   channel: number;
   cc: number;
   value: number;
-  bypassed: boolean;
+  /** 이 메시지가 페달을 켜라는 뜻인가. CC 값 64 이상이 켬(S2.4: 옛 `bypassed` 의 반대 방향으로 이름을 바꿨다 — 값의 뜻은 그대로). */
+  active: boolean;
 }
 
 export interface ParsedMidiNoteMessage {
@@ -37,7 +38,8 @@ export interface ParsedMidiNoteMessage {
   channel: number;
   note: number;
   value: number;
-  bypassed: boolean;
+  /** Note On(세기 1 이상)이 켬, Note Off·세기 0 이 끔. */
+  active: boolean;
 }
 
 export type ParsedMidiMessage = ParsedMidiCcMessage | ParsedMidiNoteMessage;
@@ -128,7 +130,7 @@ export function parseMidiMessage(
       channel,
       cc: data1,
       value: data2,
-      bypassed: data2 < 64,
+      active: data2 >= 64,
     };
   }
 
@@ -138,7 +140,7 @@ export function parseMidiMessage(
       channel,
       note: data1,
       value: data2,
-      bypassed: !(messageType === 0x90 && data2 > 0),
+      active: messageType === 0x90 && data2 > 0,
     };
   }
 

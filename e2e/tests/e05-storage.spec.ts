@@ -21,7 +21,10 @@ import { mockStorage, readAudioTracking, trackAudioContexts } from '../helpers/m
 // 서비스 워커가 가운데서 요청을 받아 가면 page.route 가 닿지 않으므로(정적 안내 시험), 이 파일 전체에서 서비스 워커를 쓰지 않는다.
 test.use({ serviceWorkers: 'block' });
 
-const PRESETS_KEY = 'web-guitar-pedalboard-presets';
+// S2.4: 사용자 프리셋은 v2 키에 쓴다. 설정 초기화는 이 키와 schema 키를 지우지 않는다(지우면 다음 시작이 옛 v1 백업에서 다시 변환해 프리셋을 옛 값으로 덮어쓴다).
+const PRESETS_KEY = 'guitar-pedalboard:v2:presets';
+const SCHEMA_KEY = 'guitar-pedalboard:schema';
+const STATE_KEY = 'guitar-pedalboard:v2:state';
 /** '저장된 설정이 있는 동안 죽는' 상태를 만들 때 쓰는 실제 앱 저장 키(값은 빈 객체 → 앱이 정상으로 읽는다). */
 const POISON_KEY = 'guitar-pedalboard:midi';
 const KEYS_AT_START = '__e05-keys-at-start';
@@ -279,8 +282,8 @@ test.describe('E-05 저장소·오류', () => {
     await stompOf(page, 'Drive').click();
     await expect(stompOf(page, 'Drive')).toHaveAttribute('aria-pressed', 'false');
     const saved = await page.evaluate(
-      (presetsKey) => ({ pedals: window.localStorage.getItem('guitar-pedalboard:pedals'), presets: window.localStorage.getItem(presetsKey) }),
-      PRESETS_KEY,
+      ({ stateKey, presetsKey }) => ({ pedals: window.localStorage.getItem(stateKey), presets: window.localStorage.getItem(presetsKey) }),
+      { stateKey: STATE_KEY, presetsKey: PRESETS_KEY },
     );
     expect(saved.pedals, '페달 상태가 저장되어 있어야 합니다').not.toBeNull();
     expect(saved.presets).toContain('E05 내 프리셋');
@@ -311,8 +314,12 @@ test.describe('E-05 저장소·오류', () => {
 
     // 앱이 다시 쓰기 전(초기화 직후 열릴 때)의 목록: 앱 설정은 없고, 내 프리셋은 남아 있다.
     const keysAtStart = JSON.parse((await page.evaluate((key) => window.sessionStorage.getItem(key), KEYS_AT_START)) ?? '[]') as string[];
-    expect(keysAtStart.filter((name) => name.startsWith('guitar-pedalboard:')), '초기화가 앱 설정을 모두 지워야 합니다').toEqual([]);
+    expect(
+      keysAtStart.filter((name) => name.startsWith('guitar-pedalboard:') && name !== SCHEMA_KEY && name !== PRESETS_KEY),
+      '초기화가 프리셋과 저장 형식 표시(schema)를 뺀 앱 설정을 모두 지워야 합니다',
+    ).toEqual([]);
     expect(keysAtStart, '내 프리셋은 남아야 합니다').toContain(PRESETS_KEY);
+    expect(keysAtStart, 'schema 도 남아야 합니다(없으면 다음 시작이 옛 백업으로 프리셋을 덮어씁니다)').toContain(SCHEMA_KEY);
     expect(await page.evaluate((key) => window.localStorage.getItem(key), PRESETS_KEY)).toContain('E05 내 프리셋');
     // 페달은 기본값으로 돌아왔다(Drive 가 다시 켜져 있다).
     await expect(stompOf(page, 'Drive')).toHaveAttribute('aria-pressed', 'true');

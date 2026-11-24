@@ -115,7 +115,7 @@ globalThis.AudioWorkletNode = class extends Node {
   }
 };
 const context = { currentTime: 0, createGain() { const node = new Node(); graph.push(node); return node; } };
-const pedal = { id: 'flanger', type: 'flanger', enabled: true, bypassed: false,
+const pedal = { id: 'flanger', type: 'flanger', active: true,
   params: { mix: 35, level: 100, rate: .25, depth: 55, feedback: 60, manual: 2 } };
 const effect = new FlangerEffect(context, pedal);
 const workletNode = graph.at(-1);
@@ -123,7 +123,7 @@ assert.equal(workletNode.parameters.get('manual').value, .002);
 assert.equal(workletNode.parameters.get('feedback').value, .6);
 const bypassGain = [...effect.input.connections].find((node) => node.connections.has(effect.output));
 assert.equal(bypassGain.gain.value, 0);
-effect.update({ ...pedal, bypassed: true });
+effect.update({ ...pedal, active: false });
 assert.equal(bypassGain.gain.value, 1, 'bypass routes the original signal directly');
 effect.dispose();
 assert.deepEqual(workletNode.port.messages, [{ type: 'dispose' }]);

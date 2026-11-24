@@ -2,16 +2,19 @@
 import type { Preset } from '../../audio/types';
 import { clampTrimDb } from '../../audio/offline/loudnessSpec';
 import { createId } from '../../presets/createId';
-import { migratePedalCollection } from './boardV1';
+import { migratePedalCollection, SCHEMA_VERSION, toLegacyPedalRecords, type LegacyPedalRecord } from './boardV1';
+
+/** 파일·v1 저장본에 적히는 프리셋. 메모리의 `Preset` 과 페달 모양만 다르다 — 켜짐이 옛 `enabled`·`bypassed` 두 필드로 풀려 있다. */
+export type LegacyPreset = Omit<Preset, 'pedals'> & { pedals: LegacyPedalRecord[] };
 
 export type PresetExport = {
   version: number;
   exportedAt?: number;
-  presets: Preset[];
+  presets: LegacyPreset[];
 };
 
-function isPreset(value: unknown): value is Preset {
-  const preset = value as Preset;
+function isPreset(value: unknown): value is LegacyPreset {
+  const preset = value as LegacyPreset;
 
   return (
     !!preset &&
@@ -22,7 +25,7 @@ function isPreset(value: unknown): value is Preset {
   );
 }
 
-function normalizeImportedPreset(preset: Preset, version: number): Preset {
+function normalizeImportedPreset(preset: LegacyPreset, version: number): Preset {
   return {
     id: preset.id || createId(),
     name: preset.name.trim() || 'Imported Preset',
@@ -57,4 +60,27 @@ export function parsePresetJson(json: string): Preset[] {
 
   if (!candidates.every(isPreset)) throw new Error('프리셋 항목이 올바르지 않습니다.');
   return candidates.map((preset) => normalizeImportedPreset(preset, version));
+}
+
+/**
+ * v1(스키마 11) 프리셋 페이로드를 JSON 으로 만든다. 내보내기 파일과 옛 방식 모드의 저장본이 같은 모양을 쓴다.
+ * 파일 형식은 S2.7 이 v2 로 바꾸기 전까지 v11 그대로다. 메모리의 `active` 를 옛 두 필드로 풀어 적어 이전 버전 앱도 읽는다.
+ */
+export function serializePresetPayload(
+  presets: Preset[],
+  options: { exportedAt?: number; pretty?: boolean } = {},
+): string {
+  const payload: PresetExport = {
+    version: SCHEMA_VERSION,
+    presets: presets.map((preset) => ({
+      ...preset,
+      pedals: toLegacyPedalRecords(preset.pedals),
+    })),
+  };
+
+  if (typeof options.exportedAt === 'number') {
+    payload.exportedAt = options.exportedAt;
+  }
+
+  return JSON.stringify(payload, null, options.pretty ? 2 : undefined);
 }

@@ -3,7 +3,7 @@
 > `node docs/refactoring/tools/list-regex-assertions.mjs` 로 생성한 파일이다(수정하지 말고 다시 생성한다). 줄 번호는 생성한 시점의 `scripts/` 기준이므로, 시험 파일을 고친 Step 뒤에는 다시 생성한다.
 > 세는 대상은 `assert.match(` 와 `assert.doesNotMatch(` 호출이다. 보고서의 "337곳"은 기준 커밋 `4ac9cf7`에서 이 두 호출을 센 값과 같다(316 + 21).
 
-**생성 시점 합계: 394곳** (match 360 + doesNotMatch 34)
+**생성 시점 합계: 390곳** (match 356 + doesNotMatch 34)
 
 | 파일 | match | doesNotMatch | 합계 |
 |---|---:|---:|---:|
@@ -12,17 +12,17 @@
 | graphic-eq-regression.mjs | 29 | 5 | 34 |
 | howl-guard-regression.mjs | 9 | 5 | 14 |
 | input-stage-regression.mjs | 2 | 0 | 2 |
-| midi-regression.mjs | 22 | 2 | 24 |
+| midi-regression.mjs | 19 | 2 | 21 |
 | peak-limiter-regression.mjs | 17 | 2 | 19 |
 | preset-ab-regression.mjs | 23 | 0 | 23 |
 | pwa-regression.mjs | 4 | 0 | 4 |
 | recording-regression.mjs | 35 | 2 | 37 |
 | responsive-a11y-regression.mjs | 104 | 8 | 112 |
 | safe-storage-regression.mjs | 13 | 1 | 14 |
-| shortcuts-regression.mjs | 35 | 0 | 35 |
+| shortcuts-regression.mjs | 34 | 0 | 34 |
 | tap-tempo-regression.mjs | 13 | 1 | 14 |
 | tremolo-regression.mjs | 14 | 2 | 16 |
-| **합계** | **360** | **34** | **394** |
+| **합계** | **356** | **34** | **390** |
 
 ## 파일별 위치
 
@@ -157,24 +157,21 @@
 | 41 | match | `audioStoreSource.slice(requestHelperStar` | `/navigator\.requestMIDIAccess\(\{ sysex: false \}\)/, 'MIDI 권한 요청이 Lea` |
 | 49 | match | `messageHandlerSource` | `/if \(learningPedalId\)/` |
 | 50 | match | `messageHandlerSource` | `/createMidiMapping\(message\)/` |
-| 55 | match | `messageHandlerSource` | `/pedalStore\.setPedalBypass\(pedalId, bypassed\)/` |
-| 56 | match | `messageHandlerSource` | `/audioEngine\.setPedalBypass\(pedalId, bypassed\)/` |
-| 57 | match | `audioStoreSource` | `/midiAccess\.onstatechange = handleMidiStateChange/` |
-| 58 | match | `audioStoreSource` | `/input\.onmidimessage = handleMidiMessage/` |
-| 59 | match | `audioStoreSource` | `/input\.onmidimessage = null/` |
-| 60 | match | `audioStoreSource` | `/midiAccess\.onstatechange = null/` |
-| 62 | match | `toggleSource` | `/onContextMenu\?: MouseEventHandler<HTMLLabelElement>/` |
-| 63 | match | `toggleSource` | `/<label className="toggle-switch" onContextMenu=\{onContextMenu\}>/` |
-| 64 | match | `pedalCardSource` | `/role="menu"/` |
-| 65 | match | `pedalCardSource` | `/role="menuitem"/` |
-| 66 | match | `pedalCardSource` | `/>\s*MIDI 학습\s*<\/button>/` |
-| 67 | match | `pedalCardSource` | `/className="midi-learn-button"/` |
-| 68 | match | `pedalCardSource` | `/aria-live="polite"/` |
-| 69 | match | `pedalCardSource` | `/<StompToggleSwitch label="효과" checked=\{pedal.enabled && !pedal.bypas` |
-| 70 | match | `pedalCardSource` | `/aria-haspopup="menu"/` |
-| 71 | !match | `pedalCardSource` | `/label="Bypass"/` |
-| 73 | match | `appShellSource` | `/connectSavedMidi\(\)/` |
-| 367 | match | `useAudioStore.getState().midiError` | `/이미 사용 중/` |
+| 58 | match | `audioStoreSource` | `/midiAccess\.onstatechange = handleMidiStateChange/` |
+| 59 | match | `audioStoreSource` | `/input\.onmidimessage = handleMidiMessage/` |
+| 60 | match | `audioStoreSource` | `/input\.onmidimessage = null/` |
+| 61 | match | `audioStoreSource` | `/midiAccess\.onstatechange = null/` |
+| 63 | match | `toggleSource` | `/onContextMenu\?: MouseEventHandler<HTMLLabelElement>/` |
+| 64 | match | `toggleSource` | `/<label className="toggle-switch" onContextMenu=\{onContextMenu\}>/` |
+| 65 | match | `pedalCardSource` | `/role="menu"/` |
+| 66 | match | `pedalCardSource` | `/role="menuitem"/` |
+| 67 | match | `pedalCardSource` | `/>\s*MIDI 학습\s*<\/button>/` |
+| 68 | match | `pedalCardSource` | `/className="midi-learn-button"/` |
+| 69 | match | `pedalCardSource` | `/aria-live="polite"/` |
+| 71 | match | `pedalCardSource` | `/aria-haspopup="menu"/` |
+| 72 | !match | `pedalCardSource` | `/label="Bypass"/` |
+| 74 | match | `appShellSource` | `/connectSavedMidi\(\)/` |
+| 368 | match | `useAudioStore.getState().midiError` | `/이미 사용 중/` |
 
 ### peak-limiter-regression.mjs
 
@@ -400,60 +397,59 @@
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
 |---:|---|---|---|
-| 268 | match | `notices[0].message` | `/kimyounggaur\.github\.io/` |
-| 654 | match | `lines[3]` | `/^브라우저: /` |
-| 684 | match | `boundarySource` | `/getDerivedStateFromError/` |
-| 685 | match | `boundarySource` | `/componentDidCatch[\s\S]*void stopSessionForError\(\)/, '오류가 나면 먼저 소리를` |
-| 689 | match | `boundarySource` | `/role="alert"/` |
-| 690 | match | `boundarySource` | `/safeStorage\.clearAppSettings\(\` |
-| 691 | !match | `boundarySource` | `/confirmReset[\s\S]*\blocalStorage\b/` |
-| 694 | match | `appSource` | `/<AppErrorBoundary>[\s\S]*<AppShell \/>[\s\S]*<\/AppErrorBoundary>/, '` |
-| 695 | match | `appSource` | `/<ToastRegion \/>/` |
-| 698 | match | `mainSource` | `/installGlobalErrorHandlers\(\)/` |
-| 699 | match | `mainSource` | `/try \{[\s\S]*createRoot\(rootElement\)\.render\([\s\S]*\} catch \(err` |
-| 702 | match | `auditSource` | `/export function stopSessionForError\(\)[\s\S]*stopSession\('error'\)/` |
-| 705 | match | `indexSource` | `/앱을 시작하지 못했습니다/, 'React 가 뜨기 전 실패에 대한 정적 안내'` |
-| 706 | match | `indexSource` | `/<script type="module" src="\/src\/main\.tsx"><\/script>/` |
+| 273 | match | `notices[0].message` | `/kimyounggaur\.github\.io/` |
+| 683 | match | `lines[3]` | `/^브라우저: /` |
+| 713 | match | `boundarySource` | `/getDerivedStateFromError/` |
+| 714 | match | `boundarySource` | `/componentDidCatch[\s\S]*void stopSessionForError\(\)/, '오류가 나면 먼저 소리를` |
+| 718 | match | `boundarySource` | `/role="alert"/` |
+| 719 | match | `boundarySource` | `/safeStorage\.clearAppSettings\(\` |
+| 720 | !match | `boundarySource` | `/confirmReset[\s\S]*\blocalStorage\b/` |
+| 723 | match | `appSource` | `/<AppErrorBoundary>[\s\S]*<AppShell \/>[\s\S]*<\/AppErrorBoundary>/, '` |
+| 724 | match | `appSource` | `/<ToastRegion \/>/` |
+| 727 | match | `mainSource` | `/installGlobalErrorHandlers\(\)/` |
+| 728 | match | `mainSource` | `/try \{[\s\S]*createRoot\(rootElement\)\.render\([\s\S]*\} catch \(err` |
+| 731 | match | `auditSource` | `/export function stopSessionForError\(\)[\s\S]*stopSession\('error'\)/` |
+| 734 | match | `indexSource` | `/앱을 시작하지 못했습니다/, 'React 가 뜨기 전 실패에 대한 정적 안내'` |
+| 735 | match | `indexSource` | `/<script type="module" src="\/src\/main\.tsx"><\/script>/` |
 
 ### shortcuts-regression.mjs
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
 |---:|---|---|---|
-| 79 | match | `globalSource` | `/capture: true/` |
-| 80 | match | `globalSource` | `/tagName === 'input'[\s\S]*tagName === 'select'[\s\S]*tagName === 'tex` |
-| 81 | match | `globalSource` | `/tagName === 'button'/` |
-| 82 | match | `globalSource` | `/tagName === 'a'[\s\S]*hasAttribute\('href'\)/` |
-| 83 | match | `globalSource` | `/contenteditable/` |
-| 84 | match | `globalSource` | `/\[role="button"\]/` |
-| 85 | match | `globalSource` | `/\[tabindex\]:not/` |
-| 92 | match | `globalSource` | `/const pedal = pedalStore\.pedals\[command\.index\]/` |
-| 93 | match | `globalSource` | `/command\.index < 0 \\|\\| command\.index > 14/` |
-| 94 | match | `globalSource` | `/if \(audioState\.isLoading\) return true/` |
-| 95 | match | `globalSource` | `/audioState\.isRunning[\s\S]*audioState\.stop\(\)[\s\S]*audioState\.st` |
-| 96 | match | `globalSource` | `/tapTempoTap\(\)/` |
-| 97 | match | `globalSource` | `/activateSlot\(command\.slot\)/` |
-| 98 | match | `globalSource` | `/getState\(\)\.panic\(\)/` |
-| 100 | match | `globalSource` | `/export function isEscapeOwnedByTarget/` |
-| 101 | match | `globalSource` | `/export function isShortcutBlockedByTarget/` |
-| 102 | match | `globalSource` | `/command\.type === 'panic'\) return event\.isComposing \\|\\| isEscape` |
-| 106 | match | `globalSource` | `/!command \\|\\| isShortcutBlockedByTarget\(command, event\)/` |
-| 111 | match | `globalSource.slice(modalBranch, globalEx` | `/command\?\.type === 'panic'[\s\S]*closeHelp\(\)[\s\S]*return/,` |
-| 116 | match | `routingSource` | `/event\.repeat/` |
-| 117 | match | `routingSource` | `/event\.ctrlKey \\|\\| event\.metaKey \\|\\| event\.altKey/` |
-| 118 | match | `routingSource` | `/event\.shiftKey && !isHelpKey/` |
-| 119 | match | `routingSource` | `/Digit0/` |
-| 121 | match | `helpSource` | `/role="dialog"/` |
-| 122 | match | `helpSource` | `/aria-modal="true"/` |
-| 123 | match | `helpSource` | `/aria-labelledby="shortcut-help-title"/` |
-| 124 | match | `helpSource` | `/closeButtonRef\.current\?\.focus\(\)/` |
-| 125 | match | `helpSource` | `/previousFocus\?\.isConnected[\s\S]*previousFocus\.focus\(\)/` |
-| 126 | match | `helpSource` | `/event\.key !== 'Tab'/` |
-| 127 | match | `helpSource` | `/event\.shiftKey[\s\S]*firstElement[\s\S]*lastElement/` |
-| 128 | match | `helpSource` | `/querySelectorAll<HTMLElement>\(FOCUSABLE_SELECTOR\)/` |
-| 129 | match | `helpSource` | `/onKeyDown=\{handleKeyDown\}/` |
-| 133 | match | `cssSource` | `/\.shortcut-help-backdrop/` |
-| 134 | match | `cssSource` | `/\.shortcut-help-dialog:focus-visible/` |
-| 135 | match | `cssSource` | `/@media \(prefers-reduced-motion: reduce\)/` |
+| 80 | match | `globalSource` | `/capture: true/` |
+| 81 | match | `globalSource` | `/tagName === 'input'[\s\S]*tagName === 'select'[\s\S]*tagName === 'tex` |
+| 82 | match | `globalSource` | `/tagName === 'button'/` |
+| 83 | match | `globalSource` | `/tagName === 'a'[\s\S]*hasAttribute\('href'\)/` |
+| 84 | match | `globalSource` | `/contenteditable/` |
+| 85 | match | `globalSource` | `/\[role="button"\]/` |
+| 86 | match | `globalSource` | `/\[tabindex\]:not/` |
+| 95 | match | `globalSource` | `/command\.index < 0 \\|\\| command\.index > 14/` |
+| 96 | match | `globalSource` | `/if \(audioState\.isLoading\) return true/` |
+| 97 | match | `globalSource` | `/audioState\.isRunning[\s\S]*audioState\.stop\(\)[\s\S]*audioState\.st` |
+| 98 | match | `globalSource` | `/tapTempoTap\(\)/` |
+| 99 | match | `globalSource` | `/activateSlot\(command\.slot\)/` |
+| 100 | match | `globalSource` | `/getState\(\)\.panic\(\)/` |
+| 102 | match | `globalSource` | `/export function isEscapeOwnedByTarget/` |
+| 103 | match | `globalSource` | `/export function isShortcutBlockedByTarget/` |
+| 104 | match | `globalSource` | `/command\.type === 'panic'\) return event\.isComposing \\|\\| isEscape` |
+| 108 | match | `globalSource` | `/!command \\|\\| isShortcutBlockedByTarget\(command, event\)/` |
+| 113 | match | `globalSource.slice(modalBranch, globalEx` | `/command\?\.type === 'panic'[\s\S]*closeHelp\(\)[\s\S]*return/,` |
+| 118 | match | `routingSource` | `/event\.repeat/` |
+| 119 | match | `routingSource` | `/event\.ctrlKey \\|\\| event\.metaKey \\|\\| event\.altKey/` |
+| 120 | match | `routingSource` | `/event\.shiftKey && !isHelpKey/` |
+| 121 | match | `routingSource` | `/Digit0/` |
+| 123 | match | `helpSource` | `/role="dialog"/` |
+| 124 | match | `helpSource` | `/aria-modal="true"/` |
+| 125 | match | `helpSource` | `/aria-labelledby="shortcut-help-title"/` |
+| 126 | match | `helpSource` | `/closeButtonRef\.current\?\.focus\(\)/` |
+| 127 | match | `helpSource` | `/previousFocus\?\.isConnected[\s\S]*previousFocus\.focus\(\)/` |
+| 128 | match | `helpSource` | `/event\.key !== 'Tab'/` |
+| 129 | match | `helpSource` | `/event\.shiftKey[\s\S]*firstElement[\s\S]*lastElement/` |
+| 130 | match | `helpSource` | `/querySelectorAll<HTMLElement>\(FOCUSABLE_SELECTOR\)/` |
+| 131 | match | `helpSource` | `/onKeyDown=\{handleKeyDown\}/` |
+| 135 | match | `cssSource` | `/\.shortcut-help-backdrop/` |
+| 136 | match | `cssSource` | `/\.shortcut-help-dialog:focus-visible/` |
+| 137 | match | `cssSource` | `/@media \(prefers-reduced-motion: reduce\)/` |
 
 ### tap-tempo-regression.mjs
 

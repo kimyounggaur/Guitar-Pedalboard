@@ -867,6 +867,36 @@
           "loadNullDb": -200
         }
       },
+      "P-19": {
+        "title": "v1 → v2 동일성",
+        "metrics": {
+          "fixtures": 6,
+          "boardsChecked": 6,
+          "presetsChecked": 3,
+          "visit1.converted": 5,
+          "visit1.fresh": 1,
+          "visit1.legacy": 0,
+          "visit2.v2": 6,
+          "presetMissing": 0,
+          "activeMismatch": 0,
+          "nullDb.worst": -200,
+          "nullDb.board.01": -200,
+          "activeCount.01": 5,
+          "nullDb.board.02": -200,
+          "activeCount.02": 2,
+          "nullDb.preset.02.1": -200,
+          "nullDb.preset.02.2": -200,
+          "nullDb.board.03": -200,
+          "activeCount.03": 5,
+          "nullDb.board.04": -200,
+          "activeCount.04": 5,
+          "nullDb.preset.04.1": -200,
+          "nullDb.board.05": -200,
+          "activeCount.05": 6,
+          "nullDb.board.06": -200,
+          "activeCount.06": 5
+        }
+      },
       "P-20": {
         "title": "Reverb Decay 변환",
         "metrics": {
@@ -1805,6 +1835,36 @@
           "loadRestoredPedals": 368,
           "loadUntouchedOffPedals": 0,
           "loadNullDb": -200
+        }
+      },
+      "P-19": {
+        "title": "v1 → v2 동일성",
+        "metrics": {
+          "fixtures": 6,
+          "boardsChecked": 6,
+          "presetsChecked": 3,
+          "visit1.converted": 5,
+          "visit1.fresh": 1,
+          "visit1.legacy": 0,
+          "visit2.v2": 6,
+          "presetMissing": 0,
+          "activeMismatch": 0,
+          "nullDb.worst": -200,
+          "nullDb.board.01": -200,
+          "activeCount.01": 5,
+          "nullDb.board.02": -200,
+          "activeCount.02": 2,
+          "nullDb.preset.02.1": -200,
+          "nullDb.preset.02.2": -200,
+          "nullDb.board.03": -200,
+          "activeCount.03": 5,
+          "nullDb.board.04": -200,
+          "activeCount.04": 5,
+          "nullDb.preset.04.1": -200,
+          "nullDb.board.05": -200,
+          "activeCount.05": 6,
+          "nullDb.board.06": -200,
+          "activeCount.06": 5
         }
       },
       "P-20": {

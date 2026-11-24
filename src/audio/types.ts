@@ -23,8 +23,8 @@ export type Pedal = {
   id: string;
   type: PedalType;
   name: string;
-  enabled: boolean;
-  bypassed: boolean;
+  /** 소리에 걸리는가. 화면의 발스위치·LED 가 이 값 하나다(S2.4: 옛 `enabled` 와 `bypassed` 를 하나로 합쳤다). */
+  active: boolean;
   params: Record<string, PedalParamValue>;
 };
 
@@ -194,8 +194,7 @@ export interface PedalState extends Omit<Pedal, 'params'> {
   id: string;
   type: PedalType;
   name: string;
-  enabled: boolean;
-  bypassed: boolean;
+  active: boolean;
   color: string;
   params: PedalParams;
 }
@@ -207,7 +206,6 @@ export interface EffectNodeWrapper {
   readonly output: AudioNode;
   connect(destination: AudioNode): void;
   disconnect(): void;
-  setEnabled(enabled: boolean): void;
   update(pedal: PedalState): void;
   dispose(): void;
 }

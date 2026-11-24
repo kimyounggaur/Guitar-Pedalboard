@@ -9,7 +9,7 @@
 //   깨진 값            | 해석 실패 또는 검증 실패          | 원문을 `{키}:corrupt-{시각}` 에 보관, 기본값 | corrupt
 //
 // 이 파일은 React·zustand 에 기대지 않는다. 안내를 보여 주는 방법은 `notify` 로 받는다(앱에서는 토스트, 시험에서는 기록).
-import { APP_STORAGE_PREFIX, CORRUPT_KEY_INFIX, STORAGE_KEYS, type StorageKey } from './keys';
+import { APP_STORAGE_PREFIX, CORRUPT_KEY_INFIX, KEPT_ON_RESET_KEYS, STORAGE_KEYS, type StorageKey } from './keys';
 
 export type WriteFailureReason = 'blocked' | 'quota' | 'unknown';
 export type WriteResult = { ok: true } | { ok: false; reason: WriteFailureReason };
@@ -80,8 +80,9 @@ export interface SafeStorage {
   /** 이 앱의 키(깨진 값 보관본 포함)가 저장소에 차지하는 바이트 수. UTF-16 글자 하나를 2바이트로 센 근삿값이다. */
   usageBytes(): number;
   /**
-   * 이 앱의 설정 키(`guitar-pedalboard:` 로 시작하는 것, 깨진 값 보관본 포함)를 모두 지우고 지운 개수를 돌려 준다.
-   * 접두사는 고정이다 — 같은 주소(kimyounggaur.github.io)의 다른 앱 데이터와, 접두사가 다른 사용자 프리셋 키는 건드리지 않는다.
+   * 이 앱의 설정 키(`guitar-pedalboard:` 로 시작하는 것, 깨진 값 보관본 포함)를 지우고 지운 개수를 돌려 준다.
+   * 사용자 프리셋은 지우지 않는다: v2 프리셋 키(`v2:presets`, 보관본 포함)와 그것을 가리키는 `schema` 키, 접두사가 다른 v1 프리셋 키(백업).
+   * 접두사는 고정이다 — 같은 주소(kimyounggaur.github.io)의 다른 앱 데이터는 건드리지 않는다.
    * 오류 화면의 '설정을 초기화하고 다시 시작'이 쓴다. 던지지 않는다.
    */
   clearAppSettings(): number;
@@ -107,6 +108,11 @@ export function classifyStorageError(error: unknown): WriteFailureReason {
   }
   if (name === 'SecurityError' || code === 18 || /insecure|access is denied/i.test(message)) return 'blocked';
   return 'unknown';
+}
+
+/** 설정 초기화가 지키는 키인가: 사용자 프리셋(v2)과 그것을 가리키는 schema 키, 그리고 그 깨진 값 보관본(S2.4). */
+function isKeptOnReset(name: string): boolean {
+  return KEPT_ON_RESET_KEYS.some((key) => name === key || name.startsWith(`${key}${CORRUPT_KEY_INFIX}`));
 }
 
 /** 이 앱의 키인가: `guitar-pedalboard:` 로 시작하거나(앞으로 생길 키 포함), 접두사가 다른 기존 키(사용자 프리셋)와 그 깨진 값 보관본 */
@@ -369,13 +375,13 @@ export function createSafeStorage(options: SafeStorageOptions = {}): SafeStorage
     // 지운 뒤에 밀려 있던 지연 저장이 되살아나지 않도록 먼저 취소한다.
     for (const key of [...pending.keys()]) cancelPending(key);
 
-    const names = new Set<string>((Object.values(STORAGE_KEYS) as string[]).filter((name) => name.startsWith(APP_STORAGE_PREFIX)));
+    const names = new Set<string>((Object.values(STORAGE_KEYS) as string[]).filter((name) => name.startsWith(APP_STORAGE_PREFIX) && !isKeptOnReset(name)));
     const target = backend();
     if (target && typeof target.key === 'function' && typeof target.length === 'number') {
       try {
         for (let index = 0; index < target.length; index += 1) {
           const name = target.key(index);
-          if (name && name.startsWith(APP_STORAGE_PREFIX)) names.add(name);
+          if (name && name.startsWith(APP_STORAGE_PREFIX) && !isKeptOnReset(name)) names.add(name);
         }
       } catch {
         // 열거하지 못하면 알려진 키만 지운다.

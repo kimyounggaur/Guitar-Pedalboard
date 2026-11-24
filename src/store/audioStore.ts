@@ -44,6 +44,7 @@ import { recordingFormatFromMime, selectRecorderMimeType, WavRecorder, type Reco
 import { ko } from '../i18n/ko';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { monitorSink } from './monitorStore';
+import { setPedalActive } from './pedalActions';
 import { usePedalStore } from './pedalStore';
 import { showToast } from './toastStore';
 
@@ -242,20 +243,18 @@ function handleMidiMessage(event: MIDIMessageEvent): void {
   Object.entries(audioState.midiMappings).forEach(([pedalId, mapping]) => {
     if (!midiMappingMatches(mapping, message)) return;
 
-    const pedalStore = usePedalStore.getState();
-    const pedal = pedalStore.pedals.find((candidate) => candidate.id === pedalId);
+    const pedal = usePedalStore.getState().pedals.find((candidate) => candidate.id === pedalId);
     if (!pedal) return;
-    let bypassed = message.bypassed;
+    let active = message.active;
     if (mapping.mode === 'toggle') {
-      const pressed = !message.bypassed;
+      const pressed = message.active;
       const wasPressed = midiPressed.get(pedalId) ?? false;
       midiPressed.set(pedalId, pressed);
       if (!pressed || wasPressed) return;
-      bypassed = !pedal.bypassed;
+      active = !pedal.active;
     }
-    if (pedal.bypassed === bypassed) return;
-    pedalStore.setPedalBypass(pedalId, bypassed);
-    audioEngine.setPedalBypass(pedalId, bypassed);
+    // 이미 그 상태면 아무것도 하지 않는다(저장도 엔진 호출도 없다). 켜고 끄는 입구는 하나다.
+    setPedalActive(pedalId, active);
   });
 }
 
@@ -955,8 +954,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       .getState()
       .pedals.filter(
         (pedal) =>
-          pedal.enabled &&
-          !pedal.bypassed &&
+          pedal.active &&
           (pedal.type === 'drive' || pedal.type === 'crunch' || pedal.type === 'fuzz'),
       )
       .map((pedal) => {
@@ -1362,7 +1360,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     const playback = engine.readFilePlayback();
     const activeEffectCount = usePedalStore
       .getState()
-      .pedals.filter((pedal) => pedal.enabled && !pedal.bypassed).length;
+      .pedals.filter((pedal) => pedal.active).length;
     const audioGlitchCount = engine.readAudioGlitchCount();
 
     set((current) => ({

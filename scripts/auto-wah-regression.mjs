@@ -393,8 +393,7 @@ const pedal = {
   id: 'auto-wah',
   type: 'autoWah',
   name: 'Auto Wah',
-  enabled: true,
-  bypassed: false,
+  active: true,
   color: '#6fa83f',
   params: defaultParams,
 };

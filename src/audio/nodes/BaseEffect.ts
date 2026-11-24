@@ -25,8 +25,8 @@ export class BaseEffect {
     mix: 100,
     level: 100,
   };
-  private enabled = true;
-  private bypassed = false;
+  /** 소리에 걸리는가(S2.4: 옛 enabled·bypassed 두 값의 곱을 하나로 합쳤다). 켜고 끄는 크로스페이드가 이 값 하나로 움직인다. */
+  private active = true;
   private trails = false;
 
   constructor(context: BaseAudioContext, pedal: PedalState) {
@@ -61,7 +61,7 @@ export class BaseEffect {
     this.makeupGain.connect(this.levelGain);
     this.levelGain.connect(this.output);
 
-    this.updateCommon(pedal.params, pedal.enabled, pedal.bypassed, this.hasTrails(pedal), true);
+    this.updateCommon(pedal.params, pedal.active, this.hasTrails(pedal), true);
   }
 
   connect(destination: AudioNode): void {
@@ -72,16 +72,10 @@ export class BaseEffect {
     this.output.disconnect();
   }
 
-  setEnabled(enabled: boolean): void {
-    this.enabled = enabled;
-    this.applyRouting();
-  }
-
   update(pedal: PedalState): void {
     this.updateCommon(
       pedal.params,
-      pedal.enabled,
-      pedal.bypassed,
+      pedal.active,
       this.hasTrails(pedal),
     );
   }
@@ -105,8 +99,7 @@ export class BaseEffect {
 
   protected updateCommon(
     params: BasePedalParams,
-    enabled: boolean,
-    bypassed: boolean,
+    active: boolean,
     trails: boolean,
     immediate = false,
   ): void {
@@ -115,8 +108,7 @@ export class BaseEffect {
       level: params.level,
     };
 
-    this.enabled = enabled;
-    this.bypassed = bypassed;
+    this.active = active;
     this.trails = trails;
 
     const level = clamp(params.level / 100, 0, 2);
@@ -126,7 +118,7 @@ export class BaseEffect {
 
   private applyRouting(immediate = false): void {
     const mix = clamp(this.commonParams.mix / 100, 0, 1);
-    const active = this.enabled && !this.bypassed;
+    const active = this.active;
     const preserveTrails = !active && this.trails;
     // Time-based effects add repeats/ambience without attenuating the direct guitar.
     const dry = active ? (this.type === 'delay' || this.type === 'reverb' ? 1 : 1 - mix) : 0;

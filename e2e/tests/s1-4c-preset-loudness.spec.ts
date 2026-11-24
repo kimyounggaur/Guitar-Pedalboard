@@ -35,7 +35,8 @@ function parseTrim(text: string): number {
   return match[1] === '+' || match[1] === '' ? value : -value;
 }
 
-const PEDAL_KEY = 'guitar-pedalboard:pedals';
+// S2.4: 작업 상태는 v2 키에 쓴다. 음량 보정은 `trimDb` 이다.
+const PEDAL_KEY = 'guitar-pedalboard:v2:state';
 const TEXAS_PUSH = 'factory-texas-push';
 const FUNK_COMP = 'factory-funk-comp';
 
@@ -86,9 +87,10 @@ test.describe('S1.4c 프리셋 음량 보정', () => {
     // 저장은 조금 늦춰서 하므로 저장본에 들어갈 때까지 기다린 뒤 다시 연다.
     await expect
       .poll(() => page.evaluate((key) => window.localStorage.getItem(key) ?? '', PEDAL_KEY), { timeout: 5_000 })
-      .toContain('"presetTrimDb"');
-    const saved = JSON.parse(await page.evaluate((key) => window.localStorage.getItem(key) ?? '{}', PEDAL_KEY)) as { version?: number; presetTrimDb?: number };
-    expect(saved.presetTrimDb).toBe(trimOf(FUNK_COMP));
+      .toContain('"trimDb"');
+    const saved = JSON.parse(await page.evaluate((key) => window.localStorage.getItem(key) ?? '{}', PEDAL_KEY)) as { schemaVersion?: number; trimDb?: number };
+    expect(saved.schemaVersion).toBe(2);
+    expect(saved.trimDb).toBe(trimOf(FUNK_COMP));
 
     await page.reload();
     await expect(pedalCards(page)).toHaveCount(PEDAL_COUNT);
