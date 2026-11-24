@@ -5,6 +5,13 @@
 import type { MonitorMsg } from '../engine/guardSpec';
 import { CompressorEffect } from '../nodes/CompressorEffect';
 import {
+  FUZZ_GATE_ATTACK_MS,
+  FUZZ_GATE_HOLD_MS,
+  FUZZ_GATE_HYSTERESIS_DB,
+  FUZZ_GATE_RELEASE_MS,
+  fuzzGateWorkletSettings,
+} from '../params/definitions/fuzz';
+import {
   achievableTargetDbfs,
   isHeadroomLimited,
   limiterReductionDb,
@@ -24,7 +31,7 @@ import {
 import type { PedalParamValue, PedalParams, PedalState, PedalType } from '../types';
 import type { ImpulseCache } from '../utils/impulseCache';
 import { clonePedals, initialPedals } from '../../store/pedalStore';
-import { isPedalOff, restoreMixOfOffPedals } from '../../presets/normalize';
+import { clampPedalsToSchema, isPedalOff, restoreMixOfOffPedals } from '../../presets/normalize';
 import { defaultPresets } from '../../store/presetStore';
 import * as m from './measure';
 import * as signals from './signals';
@@ -1107,33 +1114,52 @@ const p18: ProbeDefinition = {
 // ---------------------------------------------------------------------------------------------
 // P-20 — Reverb Decay 변환
 // ---------------------------------------------------------------------------------------------
+/** S2.2 이전의 공장 프리셋이 저장하던 Decay(초). 지금은 둘 다 6.0 이다. */
+const LEGACY_FACTORY_DECAYS: Record<string, number> = { 'factory-ambient-delay': 6.2, 'factory-tape-swell': 7.5 };
+/** 예전 저장소가 받을 수 있던 가장 긴 Decay. */
+const LEGACY_MAX_DECAY = 10;
+
 const p20: ProbeDefinition = {
   id: 'P-20',
   title: 'Reverb Decay 변환',
   describe:
-    'Decay 가 6초를 넘는 공장 프리셋의 Reverb 를 저장값 그대로와 decay 6.0 으로 바꾼 것으로 REF-PC 3초를 렌더해, 두 출력의 차(널 테스트)가 출력 대비 몇 dB 인지 잰다. −200 은 완전히 같다는 뜻이다.',
+    '예전에 저장될 수 있던 6초 넘는 Decay(공장 프리셋 6.2·7.5초와 옛 최댓값 10초)로 Reverb 를 REF-PC 3초에 통과시킨 출력과, 불러올 때 범위 맞춤(M3)을 거친 값(6.0)의 출력을 비교한다. 두 출력의 차(널 테스트)가 출력 대비 몇 dB 인지 적는다(−200 은 완전히 같다). 공장 프리셋의 Decay 최댓값도 적는다.',
   steps: 'S2.2',
   async run(ctx) {
     const input = signals.refPc(ctx.sampleRate, 3);
     const values: Record<string, MetricValue> = {};
-    let maxDecay = 0;
+    const reverbOf = (presetId: string): PedalState => {
+      const preset = defaultPresets.find((candidate) => candidate.id === presetId);
+      const reverb = preset?.pedals.find((candidate) => candidate.type === 'reverb');
+      if (!reverb) throw new Error(`Reverb 가 있는 공장 프리셋을 찾을 수 없습니다: ${presetId}`);
+      return reverb;
+    };
+    const compare = async (key: string, legacy: PedalState): Promise<number> => {
+      const stored = { ...legacy, enabled: true, bypassed: false };
+      const converted = clampPedalsToSchema([stored])[0];
+      const storedRender = await ctx.render({ input: [input], pedals: [stored] });
+      const convertedRender = await ctx.render({ input: [input], pedals: [converted] });
+      values[`nullDb.${key}`] = residualDb(storedRender, convertedRender);
+      return Number(converted.params.decay);
+    };
+
+    let worstConvertedError = 0;
+    for (const [presetId, legacyDecay] of Object.entries(LEGACY_FACTORY_DECAYS)) {
+      const reverb = reverbOf(presetId);
+      const legacy = { ...reverb, params: { ...reverb.params, decay: legacyDecay } as PedalParams };
+      values[`storedDecay.${presetId}`] = legacyDecay;
+      worstConvertedError = Math.max(worstConvertedError, Math.abs((await compare(presetId, legacy)) - 6));
+    }
+    const base = pedal('reverb', { decay: LEGACY_MAX_DECAY });
+    worstConvertedError = Math.max(worstConvertedError, Math.abs((await compare(`decay${LEGACY_MAX_DECAY}`, base)) - 6));
+
+    let maxFactoryDecay = 0;
     for (const preset of defaultPresets) {
       const reverb = preset.pedals.find((candidate) => candidate.type === 'reverb');
-      if (!reverb) continue;
-      const decay = Number(reverb.params.decay);
-      maxDecay = Math.max(maxDecay, decay);
-      if (decay <= 6) continue;
-      const render = (value: number) =>
-        ctx.render({
-          input: [input],
-          pedals: [{ ...reverb, enabled: true, bypassed: false, params: { ...reverb.params, decay: value } as PedalParams }],
-        });
-      const stored = await render(decay);
-      const converted = await render(6);
-      values[`nullDb.${preset.id}`] = residualDb(stored, converted);
-      values[`storedDecay.${preset.id}`] = decay;
+      if (reverb) maxFactoryDecay = Math.max(maxFactoryDecay, Number(reverb.params.decay));
     }
-    values.maxStoredDecay = maxDecay;
+    values.convertedDecayError = worstConvertedError;
+    values.maxFactoryDecay = maxFactoryDecay;
     return { metrics: metrics(values) };
   },
 };
@@ -1302,8 +1328,109 @@ const p23: ProbeDefinition = {
   },
 };
 
+// ---------------------------------------------------------------------------------------------
+// P-24 — Fuzz Gate(D15)
+// ---------------------------------------------------------------------------------------------
+const p24: ProbeDefinition = {
+  id: 'P-24',
+  title: 'Fuzz Gate',
+  describe:
+    'Fuzz(기본값)에 무연주 잡음(G-3: −70 dBFS RMS 4초)을 넣고 Gate 0 과 Gate 50 의 출력 RMS 를 신호 2초 뒤부터 잰다(Mix 기본 90% 와 100%). reduction = Gate 50 − Gate 0. ' +
+    '일정한 −20 dBFS 사인파(220 Hz)에서 Gate 0 과 Gate 1(문턱 −80 dBFS: 열려 있는 게이트)의 출력 레벨 차를 1초 뒤부터 잰다(open.levelDiffDb). ' +
+    '체인의 필터는 입력이 1 ppm 만 달라도 −80 dB 쯤의 반올림 잡음 차이를 내므로(S2.2 에서 확인) 체인 출력의 파형 널 테스트는 쓰지 않는다. ' +
+    '대신 게이트 워클릿만 따로 돌려, Gate 0 이면 출력이 입력과 한 샘플도 다르지 않은지(gate0.workletDiffSamples), 게이트가 열린 뒤에는 입력이 그대로 지나가는지(open.workletDiffSamples), ' +
+    '쉬었다 시작하는 소리에서 게이트가 다시 열려 입력과 같아지기까지 걸리는 시간(open.workletOpenMs)을 적는다. ' +
+    '쉬었다 시작하는 음의 처음 10 ms 가 게이트 때문에 얼마나 줄어드는지(onset.lossDb)도 적는다.',
+  steps: 'S2.2',
+  async run(ctx) {
+    const rate = ctx.sampleRate;
+    const noise = signals.noiseFloor(rate, 4);
+    const noiseLevel = async (gate: number, mix?: number) =>
+      bodyLevelDb(
+        await ctx.render({ input: [noise], pedals: [pedal('fuzz', { gate, ...(mix === undefined ? {} : { mix }) })] }),
+        2,
+      );
+    const gate0 = await noiseLevel(0);
+    const gate50 = await noiseLevel(50);
+    const gate0Wet = await noiseLevel(0, 100);
+    const gate50Wet = await noiseLevel(50, 100);
+
+    // 열려 있는 게이트(Gate 1 = 문턱 −80 dBFS)가 연주 소리의 크기를 바꾸지 않는지: 레벨 차이만 본다.
+    const tone = signals.refSine(rate, 3, 220, -20);
+    const renderTone = (gate: number) => ctx.render({ input: [tone], pedals: [pedal('fuzz', { gate })] });
+    const levelGate0 = bodyLevelDb(await renderTone(0), 1);
+    const levelGate1 = bodyLevelDb(await renderTone(1), 1);
+
+    // 게이트 워클릿만 따로: 0.5초 쉬었다가 220 Hz 사인(−20 dBFS)이 시작한다. 게이트는 쉬는 동안 닫혔다가 소리가 시작하면 열린다.
+    const bareGate = async (gate: number) => {
+      const seconds = 2.5;
+      const length = Math.round(rate * seconds);
+      const lead = Math.round((rate * 0.5) / 128) * 128;
+      const input = new Float32Array(length);
+      for (let i = lead; i < length; i += 1) input[i] = 0.1 * Math.sin((2 * Math.PI * 220 * (i - lead)) / rate);
+      const context = await ctx.createBareContext(seconds);
+      const buffer = context.createBuffer(1, length, rate);
+      buffer.copyToChannel(input, 0);
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      const node = new AudioWorkletNode(context, 'noise-gate-processor', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        parameterData: {
+          ...fuzzGateWorkletSettings(gate),
+          attackMs: FUZZ_GATE_ATTACK_MS,
+          holdMs: FUZZ_GATE_HOLD_MS,
+          releaseMs: FUZZ_GATE_RELEASE_MS,
+          hysteresisDb: FUZZ_GATE_HYSTERESIS_DB,
+        },
+        processorOptions: { startOpen: true, silent: true },
+      });
+      source.connect(node);
+      node.connect(context.destination);
+      source.start();
+      const output = (await context.startRendering()).getChannelData(0);
+      const settledFrom = lead + Math.round(rate * 0.1);
+      let different = 0;
+      let differentAfterOnset = 0;
+      let lastDifferent = -1;
+      for (let i = 0; i < length; i += 1) {
+        if (output[i] === input[i]) continue;
+        different += 1;
+        lastDifferent = i;
+        if (i >= settledFrom) differentAfterOnset += 1;
+      }
+      return { different, differentAfterOnset, openMs: lastDifferent < 0 ? 0 : ((lastDifferent - lead) / rate) * 1000 };
+    };
+    const bareOff = await bareGate(0);
+    const bareOn = await bareGate(1);
+
+    const note = signals.pluckedNote(rate, 110, 1.5);
+    const renderNote = (gate: number) => ctx.render({ input: [note], pedals: [pedal('fuzz', { gate })] });
+    const onsetGate0 = bodyLevelDb(await renderNote(0), 0, 0.01);
+    const onsetGate50 = bodyLevelDb(await renderNote(50), 0, 0.01);
+
+    return {
+      metrics: metrics({
+        'noise.gate0Db': gate0,
+        'noise.gate50Db': gate50,
+        'noise.reductionDb': gate50 - gate0,
+        'noiseMix100.gate0Db': gate0Wet,
+        'noiseMix100.gate50Db': gate50Wet,
+        'noiseMix100.reductionDb': gate50Wet - gate0Wet,
+        'open.levelDiffDb': Math.abs(levelGate1 - levelGate0),
+        'gate0.workletDiffSamples': bareOff.different,
+        'open.workletDiffSamples': bareOn.differentAfterOnset,
+        'open.workletOpenMs': bareOn.openMs,
+        'onset.gate0Db': onsetGate0,
+        'onset.gate50Db': onsetGate50,
+        'onset.lossDb': onsetGate50 - onsetGate0,
+      }),
+    };
+  },
+};
+
 export const probes: ProbeDefinition[] = [
-  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p20, p21, p22, p23,
+  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p20, p21, p22, p23, p24,
 ];
 
 // ---------------------------------------------------------------------------------------------

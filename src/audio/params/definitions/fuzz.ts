@@ -23,6 +23,17 @@ export function fuzzGateThresholdDb(gate: number): number | null {
   return FUZZ_GATE_MIN_THRESHOLD_DB + ((clamped - 1) / 99) * (FUZZ_GATE_MAX_THRESHOLD_DB - FUZZ_GATE_MIN_THRESHOLD_DB);
 }
 
+/**
+ * Gate 값 → 게이트 워클릿에 넣을 문턱과 줄이는 크기. 0(끔)은 줄이는 크기가 0 dB 라 게이트가 닫혀도 입력이 한 샘플도 바뀌지 않고 지나간다.
+ * 1 이상은 문턱이 −80 ~ −30 dBFS 이고 닫히면 FUZZ_GATE_CLOSED_REDUCTION_DB 만큼 줄인다.
+ */
+export function fuzzGateWorkletSettings(gate: number): { thresholdDb: number; reductionDb: number } {
+  const thresholdDb = fuzzGateThresholdDb(gate);
+  return thresholdDb === null
+    ? { thresholdDb: FUZZ_GATE_MIN_THRESHOLD_DB, reductionDb: 0 }
+    : { thresholdDb, reductionDb: FUZZ_GATE_CLOSED_REDUCTION_DB };
+}
+
 export const fuzzSchema: EffectSchema = {
   type: 'fuzz',
   params: [
