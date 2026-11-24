@@ -1,3 +1,4 @@
+import { REVERB_DECAY_MAX, REVERB_DECAY_MIN } from '../params/definitions/reverb';
 import type { ReverbMode } from '../types';
 import type {
   ImpulseWorkerFailure,
@@ -111,7 +112,7 @@ workerScope.onmessage = (event) => {
   const request = event.data;
 
   try {
-    const seconds = clamp(Number.isFinite(request.seconds) ? request.seconds : 1.8, 0.2, 6);
+    const seconds = clamp(Number.isFinite(request.seconds) ? request.seconds : 1.8, REVERB_DECAY_MIN, REVERB_DECAY_MAX);
     const sampleRate = Math.round(
       clamp(Number.isFinite(request.sampleRate) ? request.sampleRate : 48000, 8000, 384000),
     );

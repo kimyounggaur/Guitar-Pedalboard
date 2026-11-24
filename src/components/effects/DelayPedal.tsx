@@ -8,6 +8,8 @@ import { TapTempoControl } from '../TapTempoControl';
 import { ToggleSwitch } from '../ToggleSwitch';
 import { useKnobDrag } from '../../hooks/useKnobDrag';
 import { initialPedals } from '../../store/pedalStore';
+import { getParamDef } from '../../audio/params';
+import { delaySyncedLabel, delayTimeSeconds } from '../../audio/params/definitions/delay';
 
 interface DelayPedalProps {
   pedalId: string;
@@ -24,9 +26,14 @@ const delayModeLabels: Record<DelayParams['mode'], string> = {
   pingpong: 'Pingpong',
 };
 
+const timeDef = getParamDef('delay', 'timeMs');
+
 export function DelayPedal({ pedalId, params, onChange }: DelayPedalProps) {
   const modeIndex = delayModes.indexOf(params.mode);
   const setTempoSync = useAudioStore((state) => state.setTempoSync);
+  // Sync 가 시간을 정할 때(Slapback 은 Sync 를 무시한다)는 D.Time 을 막고, 엔진이 실제로 쓰는 값('1/4 · 500 ms')을 보여 준다.
+  const followsSync = timeDef.disabledWhen?.(params as unknown as Record<string, unknown>) ?? false;
+  const syncedMilliseconds = Math.round(delayTimeSeconds(params) * 1000);
 
   return (
     <div className="delay-echo-ui" role="group" aria-label="Delay Echo controls">
@@ -43,11 +50,11 @@ export function DelayPedal({ pedalId, params, onChange }: DelayPedalProps) {
         />
         <DelayKnob
           label="D.Time"
-          value={params.timeMs}
-          min={20}
-          max={2000}
-          ariaValueText={`${Math.round(params.timeMs)} ms`}
-          disabled={params.sync}
+          value={followsSync ? Math.min(timeDef.max, Math.max(timeDef.min, syncedMilliseconds)) : params.timeMs}
+          min={timeDef.min}
+          max={timeDef.max}
+          ariaValueText={followsSync ? delaySyncedLabel(params) : `${Math.round(params.timeMs)} ms`}
+          disabled={followsSync}
           onChange={(value) => onChange('timeMs', value)}
         />
         <DelayKnob
@@ -152,6 +159,7 @@ function DelayKnob({ label, value, min, max, step = 1, ariaValueText, disabled =
           value={value}
           {...dragHandlers}
           disabled={disabled}
+          aria-disabled={disabled || undefined}
           aria-label={label}
           aria-valuetext={`${label} ${ariaValueText}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
@@ -159,7 +167,7 @@ function DelayKnob({ label, value, min, max, step = 1, ariaValueText, disabled =
         <i />
       </span>
       <span>{label}</span>
-      <output>{disabled ? 'Sync' : ariaValueText}</output>
+      <output>{ariaValueText}</output>
       <KnobNumberInput label={label} value={value} min={min} max={max} step={step} disabled={disabled} onChange={onChange} />
     </div>
   );

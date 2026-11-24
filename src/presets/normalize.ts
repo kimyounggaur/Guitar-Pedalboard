@@ -1,5 +1,6 @@
 // 불러온 페달 목록을 앱이 쓰는 모양으로 바로잡는 순수 함수들(S2.1).
 // 저장소에서 읽을 때·프리셋 파일을 가져올 때 같은 함수를 쓴다. 저장 형식을 바꾸는 S2.4 의 마이그레이션 M2 도 이 함수를 그대로 쓴다.
+import { clampParamsToSchema } from '../audio/params';
 import type { PedalParams, PedalState } from '../audio/types';
 
 /** 페달 id → 그 페달의 기본 Mix(%). 기본값을 모르는 id 는 undefined. */
@@ -29,5 +30,21 @@ export function restoreMixOfOffPedals(pedals: PedalState[], defaultMixOf: Defaul
     const fallback = defaultMixOf(pedal.id);
     if (typeof fallback !== 'number' || !Number.isFinite(fallback) || fallback <= 0) return pedal;
     return { ...pedal, params: { ...pedal.params, mix: fallback } as PedalParams };
+  });
+}
+
+/**
+ * M3 — 범위를 벗어난 저장값을 4.9 스키마의 범위 안으로 맞춘다(S2.2). 예: Reverb Decay 7.5 → 6.0.
+ *
+ * Reverb 는 6 초를 넘는 Decay 를 엔진이 어차피 6 초로 잘라 써서, 이 바꿈은 소리를 바꾸지 않는다(P-20 의 널 시험).
+ * 저장된 작업 상태와 프리셋(저장·가져오기)이 모두 이 함수를 지난다.
+ *
+ * - 스키마에 정의가 있는 키의 유한한 숫자만 건드린다. 문자열·알 수 없는 키(M7)는 그대로 둔다.
+ * - 바꿀 것이 없으면 같은 페달 객체를 그대로 돌려준다(입력은 바꾸지 않고, 몇 번을 적용해도 결과가 같다).
+ */
+export function clampPedalsToSchema(pedals: PedalState[]): PedalState[] {
+  return pedals.map((pedal) => {
+    const params = clampParamsToSchema(pedal.type, pedal.params as Record<string, unknown>);
+    return params === pedal.params ? pedal : { ...pedal, params: params as PedalParams };
   });
 }

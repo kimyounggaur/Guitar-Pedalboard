@@ -1,6 +1,7 @@
 import { knobDefault } from '../knobDefaults';
 import { KnobNumberInput } from '../KnobNumberInput';
 import { useKnobDrag } from '../../hooks/useKnobDrag';
+import { getParamDef } from '../../audio/params';
 import type { EQParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 
@@ -56,6 +57,9 @@ function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFad
     </div>
   );
 }
+
+// Level 의 범위는 스키마가 정한다(0~200). 공장 프리셋 'Solo Boost' 가 108 을 쓰므로 0~100 으로는 그 값을 그릴 수 없었다(기록 L-81).
+const levelDef = getParamDef('eq', 'level');
 
 export function EQPedal({ params, onChange }: EQPedalProps) {
   const applyPreset = (name: string) => {
@@ -135,9 +139,9 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
           <EQFader
             label="Level"
             value={params.level}
-            min={0}
-            max={100}
-            step={1}
+            min={levelDef.min}
+            max={levelDef.max}
+            step={levelDef.step}
             displayValue={`${Math.round(params.level)}%`}
             onChange={(value) => onChange('level', value)}
           />
