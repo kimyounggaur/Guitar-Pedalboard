@@ -52,13 +52,23 @@ const harnessBundle = await build({
   target: 'node20',
   write: false,
 });
+const harnessCode = harnessBundle.outputFiles[0].text;
+let harnessInstances = 0;
+/**
+ * 앱 코드를 새로 불러온다. 스토어는 불러올 때 저장소를 읽고(S2.4: 이때 저장 형식을 정하고 v1 에서 v2 로 옮긴다),
+ * 그 뒤에 저장소를 채워서는 읽은 값이 달라지지 않으므로, 저장소를 채운 다음 이 함수로 다시 불러온다.
+ */
+const loadHarness = () => {
+  harnessInstances += 1;
+  return import(`data:text/javascript;base64,${Buffer.from(`${harnessCode}\n//# instance ${harnessInstances}`).toString('base64')}`);
+};
 const {
   clampParamsToSchema, clampToParamDef, effectSchemas, findChoiceDef, findParamDef, formatParamValue, getParamDef,
   FUZZ_GATE_MAX_THRESHOLD_DB, FUZZ_GATE_MIN_THRESHOLD_DB, fuzzGateThresholdDb,
   REVERB_DECAY_MAX, REVERB_DECAY_MIN,
   delayFollowsSync, delaySyncedLabel, delayTimeSeconds,
-  clampPedalsToSchema, STORAGE_KEYS, clonePedals, initialPedals, migratePedalCollection, usePedalStore, defaultPresets, parsePresetJson, serializePresetPayload, usePresetStore,
-} = await import(`data:text/javascript;base64,${Buffer.from(harnessBundle.outputFiles[0].text).toString('base64')}`);
+  clampPedalsToSchema, STORAGE_KEYS, clonePedals, initialPedals, migratePedalCollection, defaultPresets, parsePresetJson, serializePresetPayload,
+} = await loadHarness();
 
 let checks = 0;
 const ok = (condition, message) => {
@@ -382,14 +392,16 @@ deepEqual(longDecays, ['Ambient Delay=6', 'Tape Swell=6'], 'Decay 6 초인 공�
 const fixturePath = new URL('../e2e/fixtures/storage-v1/05-reverb-decay-7.5.json', import.meta.url);
 const fixtureText = await readFile(fixturePath, 'utf8');
 const fixture = JSON.parse(fixtureText);
-const storedWorking = JSON.parse(fixture.storage[STORAGE_KEYS.pedals]);
+const storedWorking = JSON.parse(fixture.storage[STORAGE_KEYS.v1Pedals]);
 equal(byId(storedWorking.pedals, 'reverb').params.decay, 7.5, '픽스처 05 의 저장값은 Decay 7.5');
 
+// 옛 저장본이 든 저장소에서 앱을 연다: 시작할 때 v1 → v2 로 옮기고(S2.4), 옛 키는 읽기만 한다.
+storageValues.clear();
 for (const [key, value] of Object.entries(fixture.storage)) storageValues.set(key, value);
 storageWrites.length = 0;
-usePedalStore.getState().loadPedalsFromStorage();
+const fresh = await loadHarness();
 {
-  const loaded = usePedalStore.getState().pedals;
+  const loaded = fresh.usePedalStore.getState().pedals;
   equal(byId(loaded, 'reverb').params.decay, 6, '저장된 작업 상태: Reverb Decay 7.5 → 6.0');
   for (const stored of storedWorking.pedals) {
     for (const [name, value] of Object.entries(stored.params)) {
@@ -397,9 +409,14 @@ usePedalStore.getState().loadPedalsFromStorage();
       equal(byId(loaded, stored.id).params[name], value, `작업 상태: ${stored.id}.${name} 은 저장된 그대로`);
     }
   }
-  equal(storageWrites.filter(({ key }) => key === STORAGE_KEYS.pedals).length, 0, '불러오기만으로는 저장본을 다시 쓰지 않는다');
-  equal(storageValues.get(STORAGE_KEYS.pedals), fixture.storage[STORAGE_KEYS.pedals], '저장본 원문 그대로');
+  equal(storageWrites.filter(({ key }) => key === STORAGE_KEYS.v1Pedals).length, 0, '불러오기만으로는 옛 저장본을 다시 쓰지 않는다');
+  equal(storageValues.get(STORAGE_KEYS.v1Pedals), fixture.storage[STORAGE_KEYS.v1Pedals], '옛 저장본 원문 그대로');
   equal(await readFile(fixturePath, 'utf8'), fixtureText, '픽스처 파일은 읽기만 했다');
+  // 옮긴 v2 저장본에는 이미 범위 안으로 맞춘 값(6.0)이 적혀 있다 — 다음 방문은 v2 에서 같은 값을 읽는다.
+  const v2State = JSON.parse(storageValues.get(STORAGE_KEYS.v2State));
+  equal(v2State.pedals.reverb.params.decay, 6, 'v2 작업 상태에는 Decay 6.0 이 적힌다(M3)');
+  fresh.usePedalStore.getState().loadPedalsFromStorage();
+  equal(byId(fresh.usePedalStore.getState().pedals, 'reverb').params.decay, 6, 'v2 키에서 다시 읽어도 6.0');
 }
 {
   // 이전 형식(버전 10)도 같은 길을 지난다.
@@ -431,8 +448,9 @@ usePedalStore.getState().loadPedalsFromStorage();
       pedals: [{ id: 'reverb', enabled: true, bypassed: false, params: { ...byId(initialPedals, 'reverb').params, decay: 9 } }],
     }],
   });
-  storageValues.set(STORAGE_KEYS.presets, userPresets);
-  usePresetStore.getState().reloadPresets();
+  storageValues.clear();
+  storageValues.set(STORAGE_KEYS.v1Presets, userPresets);
+  const { usePresetStore } = await loadHarness();
   const found = usePresetStore.getState().presets.find((preset) => preset.id === 'user-long');
   ok(found, '사용자 프리셋을 읽었다');
   equal(byId(found.pedals, 'reverb').params.decay, 6, '사용자 프리셋: Decay 9 → 6.0');

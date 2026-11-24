@@ -34,6 +34,7 @@ const bundle = await build({
 });
 const {
   STORAGE_KEYS,
+  KEPT_ON_RESET_KEYS,
   APP_STORAGE_PREFIX,
   STORAGE_NOTICE_MESSAGES,
   createSafeStorage,
@@ -114,13 +115,16 @@ console.warn = (...args) => {
 };
 
 // ---------------------------------------------------------------------------------------------
-// 0. 키 이름은 그대로다(키 이름·값 형식 변경은 S2.4 범위)
+// 0. 키 이름: S2.4 에서 v2 키 3개가 늘었고, 옛 두 키는 이름만 v1 로 바뀌었다(문자열은 그대로 — 백업으로 남는다)
 // ---------------------------------------------------------------------------------------------
 assert.deepEqual(
   { ...STORAGE_KEYS },
   {
-    pedals: 'guitar-pedalboard:pedals',
-    presets: 'web-guitar-pedalboard-presets',
+    schema: 'guitar-pedalboard:schema',
+    v2State: 'guitar-pedalboard:v2:state',
+    v2Presets: 'guitar-pedalboard:v2:presets',
+    v1Pedals: 'guitar-pedalboard:pedals',
+    v1Presets: 'web-guitar-pedalboard-presets',
     io: 'guitar-pedalboard:io',
     outputDevice: 'guitar-pedalboard:output-device',
     midi: 'guitar-pedalboard:midi',
@@ -131,8 +135,9 @@ assert.deepEqual(
     // S1.8 에서 더한 키: 넓은 화면의 오른쪽 오디오 패널 열림 상태(`{ sidebarOpen: boolean }`).
     ui: 'guitar-pedalboard:ui',
   },
-  '저장 키 문자열이 바뀌었습니다(S2.4 범위)',
+  '저장 키 문자열이 바뀌었습니다',
 );
+assert.deepEqual([...KEPT_ON_RESET_KEYS], [K.schema, K.v2Presets], '설정 초기화가 지키는 키');
 assert.equal(APP_STORAGE_PREFIX, 'guitar-pedalboard:');
 
 // 안내 문구는 설계서 4.8절 표 그대로다.
@@ -176,7 +181,7 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
   storage.setRaw(K.mobileAudioNotice, 'true');
   assert.equal(backend.map.get(K.mobileAudioNotice), 'true');
   assert.equal(storage.getRaw(K.mobileAudioNotice), 'true');
-  assert.equal(storage.getRaw(K.presets), null, '없는 키는 null');
+  assert.equal(storage.getRaw(K.v1Presets), null, '없는 키는 null');
 
   // read: 직접 만든 해석 함수
   backend.map.set(K.presetFavorites, '["a","b"]');
@@ -204,23 +209,23 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
   assert.deepEqual(notices.map((notice) => notice.kind), ['blocked'], '접근 검사에서 한 번');
 
   // 읽기: 기본값
-  assert.deepEqual(storage.get(K.pedals, { version: 0 }), { version: 0 });
+  assert.deepEqual(storage.get(K.v1Pedals, { version: 0 }), { version: 0 });
   assert.equal(storage.getRaw(K.outputDevice), null);
 
   // 쓰기: 실패로 알리되 던지지 않고, 이번 방문 동안은 메모리에 남는다.
-  assert.deepEqual(storage.set(K.pedals, { version: 11, bypass: true }), { ok: false, reason: 'blocked' });
-  assert.deepEqual(storage.get(K.pedals, null), { version: 11, bypass: true }, '메모리에 값이 남는다');
+  assert.deepEqual(storage.set(K.v1Pedals, { version: 11, bypass: true }), { ok: false, reason: 'blocked' });
+  assert.deepEqual(storage.get(K.v1Pedals, null), { version: 11, bypass: true }, '메모리에 값이 남는다');
   storage.setRaw(K.outputDevice, 'device-1');
   assert.equal(storage.getRaw(K.outputDevice), 'device-1');
   storage.setDebounced(K.io, { gain: 1 }, 5);
   await delay(30);
   assert.deepEqual(storage.get(K.io, null), { gain: 1 }, '지연 저장도 메모리에 남는다');
-  storage.remove(K.pedals);
-  assert.equal(storage.get(K.pedals, 'empty'), 'empty', '지운 값은 이번 방문 동안 지워진 채다');
+  storage.remove(K.v1Pedals);
+  assert.equal(storage.get(K.v1Pedals, 'empty'), 'empty', '지운 값은 이번 방문 동안 지워진 채다');
 
   for (let i = 0; i < 20; i += 1) {
-    storage.set(K.pedals, { i });
-    storage.get(K.pedals, null);
+    storage.set(K.v1Pedals, { i });
+    storage.get(K.v1Pedals, null);
   }
   assert.equal(notices.length, 1, '안내는 여러 번 쓰고 읽어도 한 번만');
   assert.equal(notices[0].message, STORAGE_NOTICE_MESSAGES.blocked);
@@ -255,24 +260,24 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
   const { storage, notices } = createHarness({ backend });
   assert.equal(storage.mode, 'persistent', '읽기는 된다');
 
-  assert.deepEqual(storage.set(K.pedals, { version: 11, n: 1 }), { ok: false, reason: 'quota' });
-  assert.deepEqual(storage.get(K.pedals, null), { version: 11, n: 1 }, '실패한 값도 이번 방문 동안은 읽힌다');
-  assert.equal(backend.map.has(K.pedals), false);
-  assert.deepEqual(storage.set(K.pedals, { version: 11, n: 2 }), { ok: false, reason: 'quota' });
-  storage.setRaw(K.presets, '{"version":1,"presets":[]}');
+  assert.deepEqual(storage.set(K.v1Pedals, { version: 11, n: 1 }), { ok: false, reason: 'quota' });
+  assert.deepEqual(storage.get(K.v1Pedals, null), { version: 11, n: 1 }, '실패한 값도 이번 방문 동안은 읽힌다');
+  assert.equal(backend.map.has(K.v1Pedals), false);
+  assert.deepEqual(storage.set(K.v1Pedals, { version: 11, n: 2 }), { ok: false, reason: 'quota' });
+  storage.setRaw(K.v1Presets, '{"version":1,"presets":[]}');
   storage.setDebounced(K.io, { gain: 2 }, 5);
   await delay(30);
 
   assert.equal(notices.length, 1, '여러 번 실패해도 안내는 한 번');
   assert.equal(notices[0].kind, 'quota');
   assert.match(notices[0].message, /kimyounggaur\.github\.io/);
-  assert.deepEqual(storage.get(K.pedals, null), { version: 11, n: 2 });
+  assert.deepEqual(storage.get(K.v1Pedals, null), { version: 11, n: 2 });
 
   // 공간이 생기면 다음 저장이 성공하고 메모리 값은 저장소 값으로 돌아간다.
   full = false;
-  assert.deepEqual(storage.set(K.pedals, { version: 11, n: 3 }), { ok: true });
-  assert.equal(backend.map.get(K.pedals), '{"version":11,"n":3}');
-  assert.deepEqual(storage.get(K.pedals, null), { version: 11, n: 3 });
+  assert.deepEqual(storage.set(K.v1Pedals, { version: 11, n: 3 }), { ok: true });
+  assert.equal(backend.map.get(K.v1Pedals), '{"version":11,"n":3}');
+  assert.deepEqual(storage.get(K.v1Pedals, null), { version: 11, n: 3 });
   assert.equal(notices.length, 1, '복구되어도 안내를 되풀이하지 않는다');
 }
 
@@ -299,12 +304,12 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
 // 5. 깨진 값: 원문을 `…:corrupt-{시각}` 에 보관, 기본값, 안내 한 번
 // ---------------------------------------------------------------------------------------------
 {
-  const backend = createBackend({ [K.pedals]: '{not json', [K.io]: '{"gain":"x"}', [K.presetFavorites]: '{"a":1}' });
+  const backend = createBackend({ [K.v1Pedals]: '{not json', [K.io]: '{"gain":"x"}', [K.presetFavorites]: '{"a":1}' });
   const { storage, notices } = createHarness({ backend, now: () => 111 });
 
-  assert.deepEqual(storage.get(K.pedals, { fresh: true }), { fresh: true }, 'JSON 해석 실패 → 기본값');
-  assert.equal(backend.map.get(`${K.pedals}:corrupt-111`), '{not json', '원문이 보관된다');
-  assert.equal(backend.map.has(K.pedals), false, '보관한 뒤 원래 키는 비운다');
+  assert.deepEqual(storage.get(K.v1Pedals, { fresh: true }), { fresh: true }, 'JSON 해석 실패 → 기본값');
+  assert.equal(backend.map.get(`${K.v1Pedals}:corrupt-111`), '{not json', '원문이 보관된다');
+  assert.equal(backend.map.has(K.v1Pedals), false, '보관한 뒤 원래 키는 비운다');
 
   // 검증 실패도 깨진 값
   const isGoodIo = (value) => typeof value === 'object' && value !== null && typeof value.gain === 'number';
@@ -328,8 +333,8 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
   assert.equal(notices[0].message, STORAGE_NOTICE_MESSAGES.corrupt);
 
   // 기본값으로 시작한 뒤의 첫 저장은 정상 키에 쓰고, 보관본은 그대로다.
-  assert.deepEqual(storage.set(K.pedals, { version: 11 }), { ok: true });
-  assert.equal(backend.map.get(`${K.pedals}:corrupt-111`), '{not json');
+  assert.deepEqual(storage.set(K.v1Pedals, { version: 11 }), { ok: true });
+  assert.equal(backend.map.get(`${K.v1Pedals}:corrupt-111`), '{not json');
 }
 
 // 빈 문자열은 깨진 값이 아니라 '값 없음'
@@ -343,21 +348,21 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
 // 보관본은 키마다 최신 3개만 남긴다.
 {
   const seed = {};
-  for (const stamp of [1, 2, 3, 4, 5]) seed[`${K.pedals}:corrupt-${stamp}`] = `old-${stamp}`;
-  seed[K.pedals] = '{bad';
+  for (const stamp of [1, 2, 3, 4, 5]) seed[`${K.v1Pedals}:corrupt-${stamp}`] = `old-${stamp}`;
+  seed[K.v1Pedals] = '{bad';
   const backend = createBackend(seed);
   const { storage } = createHarness({ backend, now: () => 6 });
-  storage.get(K.pedals, null);
-  const archives = [...backend.map.keys()].filter((name) => name.startsWith(`${K.pedals}:corrupt-`)).sort();
-  assert.deepEqual(archives, [`${K.pedals}:corrupt-4`, `${K.pedals}:corrupt-5`, `${K.pedals}:corrupt-6`]);
+  storage.get(K.v1Pedals, null);
+  const archives = [...backend.map.keys()].filter((name) => name.startsWith(`${K.v1Pedals}:corrupt-`)).sort();
+  assert.deepEqual(archives, [`${K.v1Pedals}:corrupt-4`, `${K.v1Pedals}:corrupt-5`, `${K.v1Pedals}:corrupt-6`]);
 }
 
 // 보관하지 못하면(저장 공간 가득) 원래 값을 지우지 않는다 — 되돌릴 길을 없애지 않는다.
 {
-  const backend = createBackend({ [K.pedals]: '{bad' }, { setItem: () => { throw quotaError(); } });
+  const backend = createBackend({ [K.v1Pedals]: '{bad' }, { setItem: () => { throw quotaError(); } });
   const { storage, notices } = createHarness({ backend });
-  assert.deepEqual(storage.get(K.pedals, { fresh: true }), { fresh: true });
-  assert.equal(backend.map.get(K.pedals), '{bad', '보관에 실패하면 원본이 남는다');
+  assert.deepEqual(storage.get(K.v1Pedals, { fresh: true }), { fresh: true });
+  assert.equal(backend.map.get(K.v1Pedals), '{bad', '보관에 실패하면 원본이 남는다');
   assert.deepEqual(notices.map((notice) => notice.kind), ['corrupt']);
 }
 
@@ -369,14 +374,14 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
   const { storage, hook } = createHarness({ backend });
   assert.equal(hook.subscriptions, 0, '지연 저장을 쓰기 전에는 훅을 걸지 않는다');
 
-  storage.setDebounced(K.pedals, { v: 1 }, 40);
-  storage.setDebounced(K.pedals, { v: 2 }, 40);
-  storage.setDebounced(K.pedals, { v: 3 }, 40);
+  storage.setDebounced(K.v1Pedals, { v: 1 }, 40);
+  storage.setDebounced(K.v1Pedals, { v: 2 }, 40);
+  storage.setDebounced(K.v1Pedals, { v: 3 }, 40);
   assert.equal(hook.subscriptions, 1, '페이지 가림 훅은 한 번만 건다');
   assert.equal(backend.calls.setItem, 0, '타이머가 돌기 전에는 쓰지 않는다');
   await delay(120);
   assert.equal(backend.calls.setItem, 1, '세 번 불러도 한 번만 쓴다');
-  assert.equal(backend.map.get(K.pedals), '{"v":3}', '마지막 값');
+  assert.equal(backend.map.get(K.v1Pedals), '{"v":3}', '마지막 값');
 
   // 값이 함수면 쓰는 순간에 부른다(그 사이 바뀐 최신 값을 읽는다).
   let latest = 'a';
@@ -395,12 +400,12 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
   assert.equal(backend.map.get(K.presetRecents), '["x"]');
 
   // 페이지가 가려지거나 닫히면(pagehide·visibilitychange hidden) 밀린 저장을 바로 쓴다.
-  storage.setDebounced(K.pedals, { v: 4 }, 10_000);
-  assert.equal(backend.map.get(K.pedals), '{"v":3}');
+  storage.setDebounced(K.v1Pedals, { v: 4 }, 10_000);
+  assert.equal(backend.map.get(K.v1Pedals), '{"v":3}');
   hook.flush();
-  assert.equal(backend.map.get(K.pedals), '{"v":4}', 'flush 훅이 바로 쓴다');
+  assert.equal(backend.map.get(K.v1Pedals), '{"v":4}', 'flush 훅이 바로 쓴다');
   hook.flush();
-  assert.equal(backend.map.get(K.pedals), '{"v":4}', '밀린 것이 없으면 아무 일도 없다');
+  assert.equal(backend.map.get(K.v1Pedals), '{"v":4}', '밀린 것이 없으면 아무 일도 없다');
 
   // flush() 직접 호출, 그 뒤 타이머는 다시 쓰지 않는다.
   storage.setDebounced(K.io, { latest: 'c' }, 60);
@@ -411,10 +416,10 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
   assert.equal(backend.calls.setItem, afterFlush, 'flush 한 저장은 타이머가 다시 쓰지 않는다');
 
   // set() 은 같은 키에 밀려 있던 지연 저장을 대신한다(오래된 값이 나중에 덮어쓰지 않는다).
-  storage.setDebounced(K.pedals, { v: 'old' }, 40);
-  storage.set(K.pedals, { v: 'new' });
+  storage.setDebounced(K.v1Pedals, { v: 'old' }, 40);
+  storage.set(K.v1Pedals, { v: 'new' });
   await delay(120);
-  assert.equal(backend.map.get(K.pedals), '{"v":"new"}');
+  assert.equal(backend.map.get(K.v1Pedals), '{"v":"new"}');
 
   // remove() 도 밀린 저장을 취소한다.
   storage.setDebounced(K.presetFavorites, ['z'], 40);
@@ -428,14 +433,14 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
 // ---------------------------------------------------------------------------------------------
 {
   const backend = createBackend({
-    [K.pedals]: 'abcd',
-    [`${K.pedals}:corrupt-1`]: 'xy',
-    [K.presets]: '12',
+    [K.v1Pedals]: 'abcd',
+    [`${K.v1Pedals}:corrupt-1`]: 'xy',
+    [K.v1Presets]: '12',
     'other-app:data': 'z'.repeat(1000),
     'guitar-pedalboard:future-key': 'q',
   });
   const { storage } = createHarness({ backend });
-  const expected = (K.pedals.length + 4 + `${K.pedals}:corrupt-1`.length + 2 + K.presets.length + 2 + 'guitar-pedalboard:future-key'.length + 1) * 2;
+  const expected = (K.v1Pedals.length + 4 + `${K.v1Pedals}:corrupt-1`.length + 2 + K.v1Presets.length + 2 + 'guitar-pedalboard:future-key'.length + 1) * 2;
   assert.equal(storage.usageBytes(), expected);
 }
 
@@ -444,11 +449,11 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
 // ---------------------------------------------------------------------------------------------
 {
   const backend = createBackend({
-    [K.pedals]: '1',
+    [K.v1Pedals]: '1',
     [K.io]: '2',
-    [`${K.pedals}:corrupt-9`]: '3',
+    [`${K.v1Pedals}:corrupt-9`]: '3',
     'guitar-pedalboard:future-key': '4',
-    [K.presets]: '{"version":1,"presets":[]}',
+    [K.v1Presets]: '{"version":1,"presets":[]}',
     'other-app:data': 'keep',
     'guitar-pedalboardX': 'keep-too',
   });
@@ -458,12 +463,36 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
   assert.equal(removed, 4);
   assert.deepEqual(
     [...backend.map.keys()].sort(),
-    ['guitar-pedalboardX', K.presets, 'other-app:data'].sort(),
+    ['guitar-pedalboardX', K.v1Presets, 'other-app:data'].sort(),
     '이 앱의 설정 키 외에는 건드리지 않는다(사용자 프리셋·다른 앱 데이터 포함)',
   );
   await delay(120);
   assert.equal(backend.map.has(K.midi), false, '밀려 있던 저장이 지운 뒤에 되살아나지 않는다');
-  assert.equal(storage.getRaw(K.pedals), null);
+  assert.equal(storage.getRaw(K.v1Pedals), null);
+}
+
+// S2.4: 사용자 프리셋은 v2 에서 `guitar-pedalboard:` 접두사 아래로 옮겨 왔다. 초기화는 그것과 schema 키(와 보관본)를 지우지 않는다.
+{
+  const backend = createBackend({
+    [K.schema]: '2',
+    [`${K.schema}:corrupt-1`]: 'x',
+    [K.v2State]: '{}',
+    [`${K.v2State}:corrupt-2`]: 'old state',
+    [K.v2Presets]: '{"schemaVersion":2,"presets":[]}',
+    [`${K.v2Presets}:corrupt-3`]: 'old presets',
+    [K.v1Pedals]: '1',
+    [K.v1Presets]: '{"version":11,"presets":[]}',
+    [`${K.v1Presets}:corrupt-4`]: 'old v1 presets',
+    [K.io]: '2',
+  });
+  const { storage } = createHarness({ backend });
+  const removed = storage.clearAppSettings();
+  assert.equal(removed, 4, '지운 것: v2State, 그 보관본, v1Pedals, io');
+  assert.deepEqual(
+    [...backend.map.keys()].sort(),
+    [K.schema, `${K.schema}:corrupt-1`, K.v2Presets, `${K.v2Presets}:corrupt-3`, K.v1Presets, `${K.v1Presets}:corrupt-4`].sort(),
+    'schema·v2 프리셋(보관본 포함)·v1 프리셋 백업은 남기고, 나머지 앱 설정은 지운다',
+  );
 }
 
 // 차단된 환경에서도 던지지 않는다.
@@ -536,8 +565,8 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
   assert.deepEqual(storage.get(K.io, null), { a: 1 });
   storage.remove(K.io);
   assert.equal(storage.getRaw(K.io), null, 'removeItem 이 없어도 이번 방문 동안은 지워진 것으로 본다');
-  map.set(K.pedals, '{bad');
-  assert.deepEqual(storage.get(K.pedals, 'fb'), 'fb');
+  map.set(K.v1Pedals, '{bad');
+  assert.deepEqual(storage.get(K.v1Pedals, 'fb'), 'fb');
   assert.deepEqual(notices.map((notice) => notice.kind), ['corrupt']);
 }
 

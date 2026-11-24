@@ -397,20 +397,20 @@
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
 |---:|---|---|---|
-| 268 | match | `notices[0].message` | `/kimyounggaur\.github\.io/` |
-| 654 | match | `lines[3]` | `/^브라우저: /` |
-| 684 | match | `boundarySource` | `/getDerivedStateFromError/` |
-| 685 | match | `boundarySource` | `/componentDidCatch[\s\S]*void stopSessionForError\(\)/, '오류가 나면 먼저 소리를` |
-| 689 | match | `boundarySource` | `/role="alert"/` |
-| 690 | match | `boundarySource` | `/safeStorage\.clearAppSettings\(\` |
-| 691 | !match | `boundarySource` | `/confirmReset[\s\S]*\blocalStorage\b/` |
-| 694 | match | `appSource` | `/<AppErrorBoundary>[\s\S]*<AppShell \/>[\s\S]*<\/AppErrorBoundary>/, '` |
-| 695 | match | `appSource` | `/<ToastRegion \/>/` |
-| 698 | match | `mainSource` | `/installGlobalErrorHandlers\(\)/` |
-| 699 | match | `mainSource` | `/try \{[\s\S]*createRoot\(rootElement\)\.render\([\s\S]*\} catch \(err` |
-| 702 | match | `auditSource` | `/export function stopSessionForError\(\)[\s\S]*stopSession\('error'\)/` |
-| 705 | match | `indexSource` | `/앱을 시작하지 못했습니다/, 'React 가 뜨기 전 실패에 대한 정적 안내'` |
-| 706 | match | `indexSource` | `/<script type="module" src="\/src\/main\.tsx"><\/script>/` |
+| 273 | match | `notices[0].message` | `/kimyounggaur\.github\.io/` |
+| 683 | match | `lines[3]` | `/^브라우저: /` |
+| 713 | match | `boundarySource` | `/getDerivedStateFromError/` |
+| 714 | match | `boundarySource` | `/componentDidCatch[\s\S]*void stopSessionForError\(\)/, '오류가 나면 먼저 소리를` |
+| 718 | match | `boundarySource` | `/role="alert"/` |
+| 719 | match | `boundarySource` | `/safeStorage\.clearAppSettings\(\` |
+| 720 | !match | `boundarySource` | `/confirmReset[\s\S]*\blocalStorage\b/` |
+| 723 | match | `appSource` | `/<AppErrorBoundary>[\s\S]*<AppShell \/>[\s\S]*<\/AppErrorBoundary>/, '` |
+| 724 | match | `appSource` | `/<ToastRegion \/>/` |
+| 727 | match | `mainSource` | `/installGlobalErrorHandlers\(\)/` |
+| 728 | match | `mainSource` | `/try \{[\s\S]*createRoot\(rootElement\)\.render\([\s\S]*\} catch \(err` |
+| 731 | match | `auditSource` | `/export function stopSessionForError\(\)[\s\S]*stopSession\('error'\)/` |
+| 734 | match | `indexSource` | `/앱을 시작하지 못했습니다/, 'React 가 뜨기 전 실패에 대한 정적 안내'` |
+| 735 | match | `indexSource` | `/<script type="module" src="\/src\/main\.tsx"><\/script>/` |
 
 ### shortcuts-regression.mjs
 

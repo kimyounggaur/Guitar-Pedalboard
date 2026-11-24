@@ -1,14 +1,15 @@
 import { create } from 'zustand';
-import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { AudioEngine } from '../audio/AudioEngine';
 import { clampTrimDb } from '../audio/offline/loudnessSpec';
-import { toLegacyPedalRecords } from '../persistence/legacy/boardV1';
-import { parsePresetJson, normalizeTrimField, type PresetExport } from '../persistence/legacy/presetsV1';
+import { getBoot, readUserPresets, writeUserPresets } from '../persistence/appData';
+import { parsePresetJson, normalizeTrimField, serializePresetPayload } from '../persistence/legacy/presetsV1';
+import { findFactoryCopies } from '../persistence/schema';
 import { createId } from '../presets/createId';
 import type { PedalParamValue, PedalState, Preset } from '../audio/types';
 import factoryTrims from '../presets/factoryTrims.json';
-import { clonePedals, initialPedals, SCHEMA_VERSION, usePedalStore } from './pedalStore';
+import { clonePedals, initialPedals, usePedalStore } from './pedalStore';
 import { useAudioStore } from './audioStore';
+import { showToast } from './toastStore';
 
 const FACTORY_TIMESTAMP = 1767225600000;
 
@@ -360,36 +361,6 @@ export const defaultPresets: PresetListItem[] = [
   }),
 ];
 
-export function serializePresetPayload(
-  presets: Preset[],
-  options: { exportedAt?: number; pretty?: boolean } = {},
-): string {
-  const payload: PresetExport = {
-    version: SCHEMA_VERSION,
-    // 파일 형식은 S2.7 이 v2 로 바꾸기 전까지 v11 그대로다. 메모리의 `active` 를 옛 두 필드로 풀어 적어 이전 버전 앱도 읽는다.
-    presets: presets.map((preset) => ({
-      ...preset,
-      pedals: toLegacyPedalRecords(preset.pedals),
-    })),
-  };
-
-  if (typeof options.exportedAt === 'number') {
-    payload.exportedAt = options.exportedAt;
-  }
-
-  return JSON.stringify(payload, null, options.pretty ? 2 : undefined);
-}
-
-function readUserPresets(): Preset[] {
-  // 읽지 못하는 목록은 SafeStorage 가 원문을 보관해 두고 한 번 알린 뒤 빈 목록을 돌려 준다 — 다음 저장이 원문을 덮어써도 보관본이 남는다.
-  return safeStorage.read<Preset[]>(STORAGE_KEYS.presets, parsePresetJson, []);
-}
-
-function writeUserPresets(presets: Preset[]): void {
-  // 값의 모양(version·presets)은 내보내기와 같은 직렬화를 그대로 쓴다. 실패는 SafeStorage 가 한 번 알리고 메모리에 유지한다.
-  safeStorage.setRaw(STORAGE_KEYS.presets, serializePresetPayload(presets));
-}
-
 function toPresetList(userPresets: Preset[]): PresetListItem[] {
   const normalizedUserPresets = userPresets.map((preset) => ({
     ...preset,
@@ -433,7 +404,8 @@ export function applyPresetPedals(pedals: PedalState[], trimDb?: number): void {
 }
 
 export const usePresetStore = create<PresetStore>((set, get) => ({
-  presets: toPresetList(readUserPresets()),
+  // 사용자 프리셋은 앱을 열 때 한 번 읽어 온 값을 쓴다(persistence/bootstrap). 코드에 있는 팩토리 프리셋과 합쳐 보여 준다.
+  presets: toPresetList(getBoot().userPresets),
   slotA: null,
   slotB: null,
   slotATrimDb: 0,
@@ -528,4 +500,28 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
 }));
 
 // 이전 위치에서 쓰던 이름을 그대로 내보낸다(S2.4 선행 이동: 가져오는 쪽 코드는 바꾸지 않는다).
-export { parsePresetJson } from '../persistence/legacy/presetsV1';
+export { parsePresetJson, serializePresetPayload } from '../persistence/legacy/presetsV1';
+
+/**
+ * M5(S2.4): 이번 방문에 v1 에서 v2 로 옮겼고, 사용자 프리셋 중 팩토리 프리셋과 이름·내용이 똑같은 사본이 있으면 한 번 묻는다.
+ * 알려 주기만 하고 지우지는 않는다 — '정리'를 누르면 그때 다시 확인해서 지금도 똑같은 사본만 지운다.
+ */
+export function announceFactoryCopies(): void {
+  if (getBoot().outcome !== 'converted') return;
+  const copyIds = findFactoryCopies(getBoot().userPresets, defaultPresets);
+  if (copyIds.length === 0) return;
+  showToast({
+    key: 'storage:factory-copies',
+    kind: 'info',
+    durationMs: 0,
+    message: `팩토리 프리셋과 똑같은 사본 ${copyIds.length}개가 있습니다. 정리할까요?`,
+    action: {
+      label: '정리',
+      onAction: () => {
+        const store = usePresetStore.getState();
+        const stillCopies = new Set(findFactoryCopies(store.presets.filter((preset) => !preset.isFactory), defaultPresets));
+        copyIds.filter((id) => stillCopies.has(id)).forEach((id) => store.deletePreset(id));
+      },
+    },
+  });
+}

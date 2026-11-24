@@ -49,8 +49,18 @@ const harnessBundle = await build({
   target: 'node20',
   write: false,
 });
-const { isPedalOff, restoreMixOfOffPedals, STORAGE_KEYS, clonePedals, initialPedals, usePedalStore, defaultPresets, parsePresetJson, serializePresetPayload, usePresetStore } =
-  await import(`data:text/javascript;base64,${Buffer.from(harnessBundle.outputFiles[0].text).toString('base64')}`);
+const harnessCode = harnessBundle.outputFiles[0].text;
+let harnessInstances = 0;
+/**
+ * 앱 코드를 새로 불러온다. 스토어는 불러올 때 저장소를 읽고(S2.4: 이때 저장 형식을 정하고 v1 에서 v2 로 옮긴다),
+ * 그 뒤에 저장소를 채워서는 읽은 값이 달라지지 않으므로, 저장소를 채운 다음 이 함수로 다시 불러온다.
+ */
+const loadHarness = () => {
+  harnessInstances += 1;
+  return import(`data:text/javascript;base64,${Buffer.from(`${harnessCode}\n//# instance ${harnessInstances}`).toString('base64')}`);
+};
+const { isPedalOff, restoreMixOfOffPedals, STORAGE_KEYS, clonePedals, initialPedals, defaultPresets, parsePresetJson, serializePresetPayload } =
+  await loadHarness();
 
 const defaultMix = new Map(initialPedals.map((pedal) => [pedal.id, pedal.params.mix]));
 const defaultMixOf = (id) => defaultMix.get(id);
@@ -244,17 +254,18 @@ const storedPedal = (id, state, params) => ({ id, ...state, params: { ...byId(in
 const fixturePath = new URL('../e2e/fixtures/storage-v1/04-disabled-pedal-mix0.json', import.meta.url);
 const fixtureText = await readFile(fixturePath, 'utf8');
 const fixture = JSON.parse(fixtureText);
-const storedWorking = JSON.parse(fixture.storage[STORAGE_KEYS.pedals]);
-const storedPresets = JSON.parse(fixture.storage[STORAGE_KEYS.presets]);
+const storedWorking = JSON.parse(fixture.storage[STORAGE_KEYS.v1Pedals]);
+const storedPresets = JSON.parse(fixture.storage[STORAGE_KEYS.v1Presets]);
 const offWithZeroMix = (pedals) => pedals.filter((pedal) => (!pedal.enabled || pedal.bypassed) && pedal.params.mix === 0).map((pedal) => pedal.id).sort();
 deepEqual(offWithZeroMix(storedWorking.pedals), ['chorus', 'delay', 'reverb'], '픽스처 04 의 작업 상태: Chorus·Delay·Reverb 가 꺼짐 + Mix 0');
 deepEqual(offWithZeroMix(storedPresets.presets[0].pedals), ['chorus', 'delay', 'reverb'], '픽스처 04 의 사용자 프리셋도 같다');
 
+// 옛 저장본이 든 저장소에서 앱을 연다: 시작할 때 v1 → v2 로 옮기고(S2.4), 옛 키는 읽기만 한다.
+storageValues.clear();
 for (const [key, value] of Object.entries(fixture.storage)) storageValues.set(key, value);
 storageWrites.length = 0;
-
-usePedalStore.getState().loadPedalsFromStorage();
-usePresetStore.getState().reloadPresets();
+const fresh = await loadHarness();
+const { usePedalStore, usePresetStore } = fresh;
 
 const workingPedals = usePedalStore.getState().pedals;
 const userPreset = usePresetStore.getState().presets.find((preset) => preset.id === storedPresets.presets[0].id);
@@ -280,14 +291,32 @@ for (const [label, pedals, source] of [
   }
   deepEqual(pedals.map((pedal) => pedal.id), source.map((pedal) => pedal.id), `${label}: 순서는 저장된 그대로`);
 }
+// 옛 키는 읽기만 한다(S2.4: 백업으로 남는다). 새 형식은 v2 키에 쓰고, schema 는 맨 마지막이다.
 equal(
-  storageWrites.filter(({ key }) => key === STORAGE_KEYS.pedals || key === STORAGE_KEYS.presets).length,
+  storageWrites.filter(({ key }) => key === STORAGE_KEYS.v1Pedals || key === STORAGE_KEYS.v1Presets).length,
   0,
-  '불러오기만으로는 저장본을 다시 쓰지 않는다(원본이 그대로 남는다)',
+  '불러오기만으로는 옛 저장본을 다시 쓰지 않는다(원본이 그대로 남는다)',
 );
-equal(storageValues.get(STORAGE_KEYS.pedals), fixture.storage[STORAGE_KEYS.pedals], '작업 상태 저장본 원문 그대로');
-equal(storageValues.get(STORAGE_KEYS.presets), fixture.storage[STORAGE_KEYS.presets], '프리셋 저장본 원문 그대로');
+equal(storageValues.get(STORAGE_KEYS.v1Pedals), fixture.storage[STORAGE_KEYS.v1Pedals], '작업 상태 옛 저장본 원문 그대로');
+equal(storageValues.get(STORAGE_KEYS.v1Presets), fixture.storage[STORAGE_KEYS.v1Presets], '프리셋 옛 저장본 원문 그대로');
+deepEqual(
+  storageWrites.map(({ key }) => key),
+  [STORAGE_KEYS.v2State, STORAGE_KEYS.v2Presets, STORAGE_KEYS.schema],
+  '변환은 v2 키 두 개를 쓰고 schema 를 맨 마지막에 쓴다',
+);
+equal(storageValues.get(STORAGE_KEYS.schema), '2', 'schema = 2');
 equal(await readFile(fixturePath, 'utf8'), fixtureText, '픽스처 파일은 읽기만 했다');
+
+// v2 키에서 다시 읽어도(다음 방문과 같다) 같은 값이다: 변환이 값을 바꾸지 않았다.
+{
+  const jsonClone = (value) => JSON.parse(JSON.stringify(value));
+  const before = { pedals: jsonClone(usePedalStore.getState().pedals), preset: jsonClone(userPreset) };
+  usePedalStore.getState().loadPedalsFromStorage();
+  usePresetStore.getState().reloadPresets();
+  deepEqual(usePedalStore.getState().pedals, before.pedals, 'v2 키에서 다시 읽은 작업 상태가 시작할 때와 같다');
+  const again = usePresetStore.getState().presets.find((preset) => preset.id === before.preset.id);
+  deepEqual(again.pedals, before.preset.pedals, 'v2 키에서 다시 읽은 사용자 프리셋 페달이 시작할 때와 같다');
+}
 
 // ---------------------------------------------------------------------------------------------
 // 5. 이 세션에서 사용자가 정한 값은 건드리지 않는다

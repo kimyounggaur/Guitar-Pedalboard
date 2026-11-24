@@ -60,6 +60,9 @@ assert.equal(
 );
 assert.equal([...keyboardSource.matchAll(/removeEventListener\('keydown'/g)].length, 1);
 
+// S2.4: 사용자 프리셋과 작업 상태는 v2 키에 쓴다(옛 v1 키는 백업이라 앱이 다시 쓰지 않는다).
+const USER_PRESETS_KEY = 'guitar-pedalboard:v2:presets';
+const PEDAL_STATE_KEY = 'guitar-pedalboard:v2:state';
 const storageWrites = [];
 const storageValues = new Map();
 globalThis.window = {
@@ -143,7 +146,7 @@ try {
   const sourceA = pedalsWithTempo(137, 23);
   usePedalStore.getState().setPedals(sourceA);
   const presetWritesBeforeCapture = storageWrites.filter(
-    ({ key }) => key === 'web-guitar-pedalboard-presets',
+    ({ key }) => key === USER_PRESETS_KEY,
   ).length;
   usePresetStore.getState().captureCurrentToSlot('A');
 
@@ -157,7 +160,7 @@ try {
     '슬롯 params deep copy 누락',
   );
   assert.equal(
-    storageWrites.filter(({ key }) => key === 'web-guitar-pedalboard-presets').length,
+    storageWrites.filter(({ key }) => key === USER_PRESETS_KEY).length,
     presetWritesBeforeCapture,
     '세션 슬롯 캡처가 사용자 프리셋 localStorage를 변경했습니다.',
   );
@@ -270,12 +273,12 @@ try {
   );
   assert.ok(!('slotA' in exported) && !('slotB' in exported) && !('activeSlot' in exported));
   assert.ok(
-    storageWrites.some(({ key }) => key === 'web-guitar-pedalboard-presets'),
+    storageWrites.some(({ key }) => key === USER_PRESETS_KEY),
     '사용자 프리셋 localStorage 검증용 write가 발생하지 않았습니다.',
   );
   assert.ok(
     storageWrites
-      .filter(({ key }) => key === 'web-guitar-pedalboard-presets')
+      .filter(({ key }) => key === USER_PRESETS_KEY)
       .every(({ value }) => !/"slotA"|"slotB"|"activeSlot"/.test(value)),
     '사용자 프리셋 localStorage에 세션 슬롯이 저장되었습니다.',
   );
@@ -293,7 +296,15 @@ assert.equal(parsedDirty.libraryId, undefined);
 assert.equal(parsedDirty.description, undefined);
 assert.deepEqual(parsedDirty.tags, ['clean']);
 assert.equal(parsedDirty.name, dirtyPreset.name);
-storageValues.set('web-guitar-pedalboard-presets', dirtyPayload);
+// 저장소에서 다시 읽는 길(v2): 모양이 틀린 표시용 필드는 버리고 읽는다.
+storageValues.set(USER_PRESETS_KEY, JSON.stringify({
+  schemaVersion: 2,
+  presets: [{
+    schemaVersion: 2, id: 'unsafe-meta', name: '복구 프리셋', origin: 'user', chain: [], pedals: {}, trimDb: 0,
+    createdAt: new Date(100).toISOString(), updatedAt: new Date(100).toISOString(),
+    libraryName: 123, libraryId: { bad: true }, description: ['bad'], tags: ['clean', 123, null, { value: 'bad' }],
+  }],
+}));
 usePresetStore.getState().reloadPresets();
 const restoredDirty = usePresetStore.getState().presets.find((preset) => preset.id === 'unsafe-meta');
 assert.equal(typeof restoredDirty.libraryName, 'string');
@@ -325,7 +336,7 @@ try {
 
 // Frequent knob changes are coalesced while the most recent value stays in memory.
 usePedalStore.getState().savePedalsToStorage();
-const pedalWriteCount = () => storageWrites.filter(({ key }) => key === 'guitar-pedalboard:pedals').length;
+const pedalWriteCount = () => storageWrites.filter(({ key }) => key === PEDAL_STATE_KEY).length;
 const writesBeforeKnob = pedalWriteCount();
 usePedalStore.getState().updatePedalParam('delay', 'bpm', 135);
 usePedalStore.getState().updatePedalParam('delay', 'bpm', 136);

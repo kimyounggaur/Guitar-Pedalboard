@@ -5,6 +5,7 @@ import { installGlobalErrorHandlers } from './app/globalErrors';
 import { showStaticFallback } from './app/staticFallback';
 import { AudioEngine } from './audio/AudioEngine';
 import { usePedalStore } from './store/pedalStore';
+import { announceFactoryCopies } from './store/presetStore';
 import './styles/globals.css';
 
 // 오류 경계가 잡지 못하는 오류(이벤트 핸들러·비동기·타이머)는 토스트로 알리고 앱은 계속 둔다(S1.7).
@@ -34,6 +35,13 @@ try {
       <App />
     </StrictMode>,
   );
+
+  // 저장 형식을 v2 로 처음 옮긴 방문에서만, 팩토리 프리셋과 똑같은 사본이 있으면 한 번 묻는다(M5). 실패해도 앱은 계속 둔다.
+  try {
+    announceFactoryCopies();
+  } catch (error) {
+    console.warn('팩토리 사본 안내를 띄우지 못했습니다.', error);
+  }
 } catch (error) {
   // React 가 아예 뜨지 못한 경우: 흰 화면 대신 정적 안내를 넣는다.
   console.error('앱을 시작하지 못했습니다.', error);

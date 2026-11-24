@@ -1,13 +1,5 @@
 import { create } from 'zustand';
-import { safeStorage, STORAGE_KEYS } from '../persistence';
-import {
-  mergeStoredPedals,
-  migrateStoredState,
-  normalizeStoredState,
-  SCHEMA_VERSION,
-  toStoredPedals,
-  type StoredState,
-} from '../persistence/legacy/boardV1';
+import { getBoot, readBoard, writeBoard, writeBoardDebounced } from '../persistence/appData';
 import { clonePedal, clonePedals, initialPedals } from '../presets/initialPedals';
 import type { PedalParamValue, PedalParams, PedalState } from '../audio/types';
 import { clampTrimDb, roundTrimDb } from '../audio/offline/loudnessSpec';
@@ -17,34 +9,14 @@ export { clonePedals, initialPedals } from '../presets/initialPedals';
 export { migratePedalCollection, migrations, migrateStoredState, SCHEMA_VERSION } from '../persistence/legacy/boardV1';
 export type { StoredPedal, StoredState } from '../persistence/legacy/boardV1';
 
-/** 저장본을 만든다. 음량 보정이 0 이면 필드를 쓰지 않아, 보정이 없는 저장본은 이전 버전과 똑같은 모양이다. */
-function buildStoredState(pedals: PedalState[], presetTrimDb: number): StoredState {
-  const storedState: StoredState = {
-    version: SCHEMA_VERSION,
-    pedals: toStoredPedals(pedals),
-  };
-  const trimDb = clampTrimDb(presetTrimDb);
-  if (trimDb !== 0) storedState.presetTrimDb = trimDb;
-  return storedState;
-}
-
-/** 지금 쓴다(밀려 있던 지연 저장은 SafeStorage 가 이 값으로 대신한다). 실패는 SafeStorage 가 한 번 알리고 메모리에 유지한다. */
+/** 지금 쓴다(밀려 있던 지연 저장은 SafeStorage 가 이 값으로 대신한다). 어느 키에 어떤 모양으로 쓰는지는 persistence/appData 가 정한다(S2.4). */
 function savePedals(pedals: PedalState[], presetTrimDb: number): void {
-  safeStorage.set(STORAGE_KEYS.pedals, buildStoredState(pedals, presetTrimDb));
+  writeBoard(pedals, presetTrimDb);
 }
 
 /** 노브를 돌리는 동안에는 쓰지 않고 마지막 변경 300 ms 뒤에 한 번 쓴다. 페이지가 가려지거나 닫히면 SafeStorage 가 바로 쓴다. */
 function schedulePedalSave(pedals: PedalState[], presetTrimDb: number): void {
-  safeStorage.setDebounced(STORAGE_KEYS.pedals, () => buildStoredState(pedals, presetTrimDb), 300);
-}
-
-function readStoredState(): StoredState | null {
-  // 읽지 못하는 값(깨졌거나 더 새로운 버전)은 SafeStorage 가 보관해 두고 한 번 알린 뒤 null 을 돌려 준다 — 기본값으로 시작한다.
-  return safeStorage.read<StoredState | null>(
-    STORAGE_KEYS.pedals,
-    (raw) => migrateStoredState(normalizeStoredState(JSON.parse(raw))),
-    null,
-  );
+  writeBoardDebounced(pedals, presetTrimDb, 300);
 }
 
 function movePedal(pedals: PedalState[], oldIndex: number, newIndex: number): PedalState[] {
@@ -89,11 +61,12 @@ interface PedalStore {
   updatePedal: (pedal: PedalState) => void;
 }
 
-const restoredState = readStoredState();
+// 저장 형식은 앱을 열 때 한 번 정해지고(필요하면 v1 에서 v2 로 옮긴다), 읽어 온 보드는 이미 메모리 모양이다.
+const restoredBoard = getBoot().board;
 
 export const usePedalStore = create<PedalStore>((set, get) => ({
-  pedals: mergeStoredPedals(restoredState?.pedals ?? null),
-  presetTrimDb: clampTrimDb(restoredState?.presetTrimDb),
+  pedals: restoredBoard ? clonePedals(restoredBoard.pedals) : clonePedals(initialPedals),
+  presetTrimDb: clampTrimDb(restoredBoard?.trimDb),
   activePedalId: null,
   draggingPedalId: null,
 
@@ -142,10 +115,10 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
   setDraggingPedal: (id) => set({ draggingPedalId: id }),
 
   loadPedalsFromStorage: () => {
-    const stored = readStoredState();
+    const board = readBoard();
     set({
-      pedals: mergeStoredPedals(stored?.pedals ?? null),
-      presetTrimDb: clampTrimDb(stored?.presetTrimDb),
+      pedals: board ? clonePedals(board.pedals) : clonePedals(initialPedals),
+      presetTrimDb: clampTrimDb(board?.trimDb),
     });
   },
 

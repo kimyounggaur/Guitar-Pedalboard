@@ -45,6 +45,17 @@ export function toStoredPedals(pedals: PedalState[]): StoredPedal[] {
   }));
 }
 
+/** v1 저장본을 만든다. 음량 보정이 0 이면 필드를 쓰지 않아, 보정이 없는 저장본은 이전 버전과 똑같은 모양이다. */
+export function buildStoredState(pedals: PedalState[], presetTrimDb: number): StoredState {
+  const storedState: StoredState = {
+    version: SCHEMA_VERSION,
+    pedals: toStoredPedals(pedals),
+  };
+  const trimDb = clampTrimDb(presetTrimDb);
+  if (trimDb !== 0) storedState.presetTrimDb = trimDb;
+  return storedState;
+}
+
 /**
  * 프리셋 파일·v1 프리셋 저장본에 적는 페달 모양(S2.7 이 v2 내보내기를 넣기 전까지의 파일 형식).
  * 이름·종류·색·값은 그대로 두고 `active` 만 옛 두 필드로 풀어서, 이전 버전 앱이 같은 파일을 읽을 수 있게 한다.
