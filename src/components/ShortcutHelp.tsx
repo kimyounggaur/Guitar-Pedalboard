@@ -1,4 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { SHORTCUT_HELP_ROWS } from '../input/shortcutKeys';
 
 interface ShortcutHelpProps {
   onClose: () => void;
@@ -12,15 +13,6 @@ const FOCUSABLE_SELECTOR = [
   'textarea:not([disabled])',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
-
-const shortcutItems = [
-  { key: '1–9 / 0 / Q W E R Y', description: '현재 순서의 1–15번째 페달 전환' },
-  { key: 'Space', description: '음원 파일이 열려 있으면 재생·일시정지, 아니면 기타 입력 연결·해제' },
-  { key: 'T', description: '탭 템포 입력' },
-  { key: 'A / B', description: '저장된 프리셋 비교 슬롯 활성화' },
-  { key: 'Esc', description: '긴급 정지 (도움말이 열려 있으면 도움말 닫기)' },
-  { key: '?', description: '이 단축키 도움말 열기' },
-] as const;
 
 export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -115,10 +107,10 @@ export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
         </p>
 
         <dl className="shortcut-help-list">
-          {shortcutItems.map((item) => (
-            <div key={item.key}>
+          {SHORTCUT_HELP_ROWS.map((item) => (
+            <div key={item.label}>
               <dt>
-                <kbd>{item.key}</kbd>
+                <kbd>{item.label}</kbd>
               </dt>
               <dd>{item.description}</dd>
             </div>

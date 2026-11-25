@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { isEscapeOwnedByTarget } from '../components/GlobalKeyboardShortcuts';
+import { isEscapeOwnedByTarget } from '../input/ShortcutService';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { useMediaQuery } from './useMediaQuery';
 

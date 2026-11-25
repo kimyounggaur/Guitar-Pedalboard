@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useHistoryStore } from '../store/historyStore';
-import { isInteractiveShortcutTarget } from './GlobalKeyboardShortcuts';
+import { isInteractiveShortcutTarget } from '../input/ShortcutService';
 
 export function HistoryControls() {
   const canUndo = useHistoryStore((state) => state.past.length > 0);
