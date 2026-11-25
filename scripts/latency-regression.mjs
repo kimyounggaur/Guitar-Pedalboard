@@ -214,7 +214,9 @@ for (const sampleRate of [44100, 48000]) {
 }
 {
   const context = fakeContext(48000);
-  const cabOff = new CabEffect(context, pedalState('cab', true, { model: 'off' }));
+  // 지연 값만 보는 시험이라 IR 교체 타이머(S3.2)는 아무 일도 하지 않는 타이머로 막아 둔다.
+  const noTimers = { setTimeout: () => 0, clearTimeout: () => undefined };
+  const cabOff = new CabEffect(context, pedalState('cab', true, { model: 'off' }), noTimers);
   assert.equal(cabOff.latencySeconds, 0, '캐비닛 model off 는 컨볼버를 거치지 않는다');
   cabOff.update(pedalState('cab', true, { model: 'v30-4x12' }));
   assert.equal(cabOff.latencySeconds, 0.000089, '모델을 고르면 컨볼버 지연');
