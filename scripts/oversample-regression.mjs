@@ -200,6 +200,13 @@ for (const rate of ['44100', '48000']) {
   assert.ok(measure([[bin, 0.5], [2 * bin, 0.25], [3 * bin, 0.1], [7 * bin, 0.05]]) <= -190, '배음(2·3·7 배)은 세지 않는다');
   near(measure([[bin, 0.5], [2 * bin, 0.25], [777, 0.005]]), -40, 0.01, '배음이 있어도 에일리어스만 센다');
   assert.ok(measure([[bin, 0.5]], 0.1) <= -190, '직류는 세지 않는다');
+  {
+    // 나이퀴스트(size/2 번째 bin)에 접힌 성분도 센다: 샘플마다 부호가 바뀌는 신호(진폭 0.005)를 더한다.
+    const signal = build_([[bin, 0.5]]);
+    for (let i = 0; i < signal.length; i += 1) signal[i] += i % 2 === 0 ? 0.005 : -0.005;
+    const nyquist = nonHarmonicDb(signal, size, bin, 0);
+    assert.ok(nyquist > -45 && nyquist < -30, `나이퀴스트 성분이 센다: ${nyquist}`);
+  }
   // guard: 배음 자리 ±guard bin 을 가린다. Hann 창은 한 성분을 ±1 bin 로 번지게 하므로 가장자리 성분은 번진 한 칸이 세어진다.
   assert.ok(measure([[bin, 0.5], [3 * bin + 1, 0.005]]) <= -190, '배음에서 1칸 떨어진 성분은 번짐까지 가려진다');
   near(measure([[bin, 0.5], [3 * bin + 2, 0.005]]), -47.78, 0.05, '배음에서 2칸: 가운데는 가려지고 번진 한 칸(1/6 전력)만 센다');
