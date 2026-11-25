@@ -201,6 +201,19 @@ for (const reference of [415, 432, 442, 466]) {
   near(d2.cents, -200, `${reference}Hz 기준 D2`);
 }
 
+// 허용 범위(400~480Hz) 밖이거나 숫자가 아닌 기준음은 440 으로 본다.
+for (const bad of [399, 481, 300, 500, Number.NaN, Number.POSITIVE_INFINITY]) {
+  const chromatic = getPitchReading(440, 'chromatic', bad);
+  assert.equal(chromatic.note, 'A4', `기준음 ${bad}`);
+  near(chromatic.cents, 0, `기준음 ${bad} 은 440 으로 본다`);
+  const standard = getPitchReading(82.4068892282175, 'standard', bad);
+  assert.equal(standard.stringNumber, 6, `기준음 ${bad}`);
+  near(standard.cents, 0, `기준음 ${bad} 의 줄 판독`, 1e-6);
+}
+for (const edge of [400, 480]) {
+  near(getPitchReading(edge, 'chromatic', edge).cents, 0, `기준음 ${edge} 은 그대로 쓴다`);
+}
+
 // ── 줄 번호를 확인하세요: 가장 가까운 줄과도 600센트보다 멀다 ───────
 {
   assert.equal(STRING_CHECK_CENTS, 600);
@@ -242,6 +255,8 @@ for (const reference of [415, 432, 442, 466]) {
     assert.equal(reading.octavesAbove, undefined);
     assert.equal(reading.checkString, undefined);
   }
+  assert.equal(show(hz('E2'), 'standard').frequencyText, '82.4 Hz', '주파수는 소수점 한 자리');
+  assert.equal(show(1234.5678, 'chromatic').frequencyText, '1234.6 Hz');
   const sharp = show(detune(hz('A4'), 20), 'chromatic');
   assert.equal(sharp.note, 'A4');
   assert.equal(sharp.statusText, '20센트 높음');

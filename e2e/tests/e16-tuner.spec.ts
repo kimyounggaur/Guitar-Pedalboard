@@ -71,6 +71,11 @@ test.describe('E-16 튜너: 줄·옥타브·크로매틱', () => {
     expect(reading.cents).toBe('-200 ¢');
     await expect(page.locator('.tuner-reading')).toHaveClass(/is-far/);
     await expect(page.locator('.tuner-targets .is-target')).toHaveText('6번 E2');
+    // 센트 막대: -200센트는 막대 끝(-50)에서 멈추고, 읽어 주는 값은 화면 문구와 같다
+    const strip = page.locator('.cent-strip');
+    await expect(strip).toHaveAttribute('aria-valuenow', '-50');
+    await expect(strip).toHaveAttribute('aria-valuetext', '200센트 낮음');
+    await expect(strip).toHaveAttribute('style', /--cent-position: 0%/);
 
     await tuningSelect(page).selectOption('drop-d');
     const dropD = await waitForTuner(page, '정확함', 'D2');
@@ -161,6 +166,7 @@ test.describe('E-16 튜너: 줄·옥타브·크로매틱', () => {
     await expect(modeButton(page, '크로매틱')).toHaveAttribute('aria-pressed', 'true');
     await expect(modeButton(page, '기타')).toHaveAttribute('aria-pressed', 'false');
     await expect(tuningSelect(page)).toBeDisabled();
+    await expect(tuningSelect(page)).toHaveValue('open-g');
     await expect(page.locator('.tuner-targets')).toBeHidden();
 
     await modeButton(page, '기타').click();
