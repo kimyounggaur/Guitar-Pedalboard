@@ -218,7 +218,10 @@ ok(additiveTypes.has('delay') && additiveTypes.has('reverb') && typesInBoard.has
 // ---------------------------------------------------------------------------------------------
 {
   const base = await read('src/audio/nodes/BaseEffect.ts');
-  ok(!/this\.type\s*===\s*'(delay|reverb)'/.test(base.split('applyRouting')[1] ?? ''), 'applyRouting 이 페달 형 이름으로 원음을 가르지 않는다(mixLaw 로 정한다)');
+  // 형 이름('delay'·'reverb')은 꼬리(trails)를 가르는 hasTrails 에만 남는다. 원음·효과음을 정하는 곳에는 없다.
+  const withoutTrailsRule = base.replace(/private hasTrails[\s\S]*?\n {2}\}\n/, '');
+  ok(withoutTrailsRule.length < base.length, 'hasTrails 를 찾아 뺐다(이 단언이 헛돌지 않는다)');
+  ok(!/'(delay|reverb)'/.test(withoutTrailsRule), 'BaseEffect 의 합성 코드가 페달 형 이름으로 원음을 가르지 않는다(mixLaw 로 정한다)');
   ok(base.includes("options.mixLaw ?? 'crossfade'"), '방식을 정하지 않으면 crossfade 다');
   ok(base.includes('mixGains(this.mixLaw'), 'BaseEffect 는 순수 함수 mixGains 로 목표 게인을 구한다');
   const dir = new URL('src/audio/nodes/', rootUrl);
