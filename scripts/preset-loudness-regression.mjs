@@ -317,9 +317,10 @@ try {
   assert.equal(presetStore().presets.find((preset) => preset.name === '직접 지정').trimDb, -4, '세 번째 인자가 우선');
 
   // 내보내기·가져오기
+  // 내보내기 파일은 v2(S2.7)다: 프리셋마다 `trimDb` 가 늘 있고, 보정이 없으면 0 이다(옛 v11 파일은 0 이면 필드를 뺐다).
   const exported = JSON.parse(presetStore().exportPresets());
   assert.equal(exported.presets.find((preset) => preset.name === '보정 있는 프리셋').trimDb, 3.2);
-  assert.ok(!('trimDb' in exported.presets.find((preset) => preset.name === '보정 없는 프리셋')));
+  assert.equal(exported.presets.find((preset) => preset.name === '보정 없는 프리셋').trimDb, 0);
   const base = { id: 'x', name: 'n', updatedAt: 1, pedals: [] };
   const parsed = (trimDb) => parsePresetJson(JSON.stringify({ version: SCHEMA_VERSION, presets: [{ ...base, ...(trimDb === undefined ? {} : { trimDb }) }] }))[0];
   assert.ok(!('trimDb' in parsed(undefined)), '이전 버전이 내보낸 파일(필드 없음)은 보정 없음');

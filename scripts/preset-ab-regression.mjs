@@ -268,7 +268,7 @@ try {
   const exported = JSON.parse(usePresetStore.getState().exportPresets());
   assert.deepEqual(
     Object.keys(exported).sort(),
-    ['exportedAt', 'presets', 'version'],
+    ['appVersion', 'exportedAt', 'format', 'presets', 'schemaVersion'],
     'Export payload에 세션 슬롯 필드가 포함되었습니다.',
   );
   assert.ok(!('slotA' in exported) && !('slotB' in exported) && !('activeSlot' in exported));

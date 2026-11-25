@@ -16,6 +16,7 @@
     "test:phaser": "node scripts/phaser-regression.mjs",
     "test:tremolo": "node scripts/tremolo-regression.mjs",
     "test:tap-tempo": "node scripts/tap-tempo-regression.mjs",
+    "test:export-format": "node scripts/export-format-regression.mjs",
     "test:preset-ab": "node scripts/preset-ab-regression.mjs",
     "test:safe-storage": "node scripts/safe-storage-regression.mjs",
     "test:storage-v2": "node scripts/storage-v2-regression.mjs",

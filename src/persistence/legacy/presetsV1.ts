@@ -63,8 +63,8 @@ export function parsePresetJson(json: string): Preset[] {
 }
 
 /**
- * v1(스키마 11) 프리셋 페이로드를 JSON 으로 만든다. 내보내기 파일과 옛 방식 모드의 저장본이 같은 모양을 쓴다.
- * 파일 형식은 S2.7 이 v2 로 바꾸기 전까지 v11 그대로다. 메모리의 `active` 를 옛 두 필드로 풀어 적어 이전 버전 앱도 읽는다.
+ * v1(스키마 11) 프리셋 페이로드를 JSON 으로 만든다. 옛 방식 모드(v1 저장소)의 저장본에만 쓴다.
+ * 내보내기 파일은 S2.7 부터 `persistence/exportFormat.ts` 의 v2 형식이다. 메모리의 `active` 를 옛 두 필드로 풀어 적어 이전 버전 앱도 읽는다.
  */
 export function serializePresetPayload(
   presets: Preset[],

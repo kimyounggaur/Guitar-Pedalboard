@@ -1,8 +1,19 @@
 import { create } from 'zustand';
 import { AudioEngine } from '../audio/AudioEngine';
 import { clampTrimDb } from '../audio/offline/loudnessSpec';
-import { getBoot, readUserPresets, writeUserPresets } from '../persistence/appData';
-import { parsePresetJson, normalizeTrimField, serializePresetPayload } from '../persistence/legacy/presetsV1';
+import { appVersion } from '../app/errorReport';
+import { getBoot, getPresetCarry, readUserPresets, writeUserPresets } from '../persistence/appData';
+import {
+  applyImport,
+  buildExportFile,
+  parseImportFile,
+  planImport,
+  serializeExportFile,
+  type ConflictResolution,
+  type ImportPlan,
+  type ImportResult,
+} from '../persistence/exportFormat';
+import { normalizeTrimField } from '../persistence/legacy/presetsV1';
 import { findFactoryCopies } from '../persistence/schema';
 import { createId } from '../presets/createId';
 import type { PedalParamValue, PedalState, Preset } from '../audio/types';
@@ -385,8 +396,12 @@ interface PresetStore {
   savePreset: (name: string, pedals: PedalState[], trimDb?: number) => void;
   deletePreset: (id: string) => void;
   reloadPresets: () => void;
-  exportPresets: () => string;
-  importPresets: (json: string) => number;
+  /** 내 프리셋을 v2 파일 문자열로 만든다(S2.7). 내 프리셋이 하나도 없으면 빈 파일을 만들지 않고 null 을 돌려 준다. */
+  exportPresets: () => string | null;
+  /** 가져올 파일을 읽어 무엇을 추가·건너뛰고 무엇이 충돌하는지 계산한다. 저장하지 않는다. 파일이 틀렸으면 한국어 메시지로 던진다. */
+  planImport: (text: string) => ImportPlan;
+  /** `planImport` 의 계획을 저장한다. `resolutions[i]` 가 `plan.conflicts[i]` 에 대한 선택이다. 바뀐 것이 없으면 저장하지 않는다. */
+  commitImport: (plan: ImportPlan, resolutions: readonly ConflictResolution[]) => ImportResult;
   captureCurrentToSlot: (slot: PresetComparisonSlot) => void;
   activateSlot: (slot: PresetComparisonSlot) => boolean;
 }
@@ -451,31 +466,29 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
 
   exportPresets: () => {
     const presets = get().presets.filter((preset) => !preset.isFactory).map(({ isFactory: _isFactory, ...preset }) => preset);
+    if (presets.length === 0) return null;
 
-    return serializePresetPayload(presets, {
-      exportedAt: Date.now(),
-      pretty: true,
-    });
+    return serializeExportFile(
+      buildExportFile(presets, { appVersion, exportedAt: Date.now(), carryOf: getPresetCarry }),
+    );
   },
 
-  importPresets: (json) => {
-    const importedPresets = parsePresetJson(json).map((preset) => ({
-      ...preset,
-      id: preset.id.startsWith('factory-') ? createId() : preset.id,
-      updatedAt: Date.now(),
-    }));
-    const userPresets = get().presets.filter((preset) => !preset.isFactory);
-    const nextByName = new Map<string, Preset>();
+  planImport: (text) =>
+    planImport(
+      parseImportFile(text),
+      get().presets.filter((preset) => !preset.isFactory),
+      defaultPresets,
+    ),
 
-    [...userPresets, ...importedPresets].forEach((preset) => {
-      nextByName.set(preset.name, preset);
-    });
-
-    const nextUserPresets = Array.from(nextByName.values());
-    writeUserPresets(nextUserPresets);
-    set({ presets: toPresetList(nextUserPresets) });
-
-    return importedPresets.length;
+  commitImport: (plan, resolutions) => {
+    const userPresets = get().presets.filter((preset) => !preset.isFactory).map(({ isFactory: _isFactory, ...preset }) => preset);
+    const result = applyImport(plan, userPresets, resolutions, { now: Date.now(), createId });
+    // 바뀐 것이 없으면(같은 파일을 다시 가져온 경우 등) 저장소를 건드리지 않는다.
+    if (result.imported > 0) {
+      writeUserPresets(result.next);
+      set({ presets: toPresetList(result.next) });
+    }
+    return result;
   },
 
   captureCurrentToSlot: (slot) => {

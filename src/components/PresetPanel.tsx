@@ -3,6 +3,7 @@ import { AudioEngine } from '../audio/AudioEngine';
 import { formatTrimDb } from '../audio/offline/loudnessSpec';
 import { safeStorage, STORAGE_KEYS, type StorageKey } from '../persistence';
 import { usePedalStore } from '../store/pedalStore';
+import { formatImportSummary, type ConflictResolution, type ImportPlan } from '../persistence/exportFormat';
 import {
   applyPresetPedals,
   presetLibraries,
@@ -10,6 +11,7 @@ import {
   type PresetComparisonSlot,
   type PresetListItem,
 } from '../store/presetStore';
+import { ImportConflictDialog, PasteImportDialog } from './PresetImportDialogs';
 
 const FAVORITES_KEY = STORAGE_KEYS.presetFavorites;
 const RECENTS_KEY = STORAGE_KEYS.presetRecents;
@@ -45,7 +47,9 @@ function normalizeText(value: string): string {
 export function PresetPanel() {
   const [name, setName] = useState('Clean Practice');
   const [message, setMessage] = useState<string | null>(null);
-  const [presetJson, setPresetJson] = useState('');
+  const [pasteOpen, setPasteOpen] = useState(false);
+  /** 충돌을 하나씩 묻는 중인 가져오기. `resolutions` 는 지금까지 고른 것(충돌 순서대로). */
+  const [pendingImport, setPendingImport] = useState<{ plan: ImportPlan; resolutions: ConflictResolution[] } | null>(null);
   const [activeLibraryId, setActiveLibraryId] = useState('all');
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -62,7 +66,8 @@ export function PresetPanel() {
   const savePreset = usePresetStore((state) => state.savePreset);
   const deletePreset = usePresetStore((state) => state.deletePreset);
   const exportPresets = usePresetStore((state) => state.exportPresets);
-  const importPresets = usePresetStore((state) => state.importPresets);
+  const planImport = usePresetStore((state) => state.planImport);
+  const commitImport = usePresetStore((state) => state.commitImport);
   const slotA = usePresetStore((state) => state.slotA);
   const slotB = usePresetStore((state) => state.slotB);
   const activeSlot = usePresetStore((state) => state.activeSlot);
@@ -226,8 +231,13 @@ export function PresetPanel() {
   };
 
   const exportJson = () => {
+    // 파일로만 내보낸다. 내 프리셋이 없으면 빈 파일을 만들지 않는다(S2.7).
     const json = exportPresets();
-    setPresetJson(json);
+    if (json === null) {
+      setMessage('내보낼 내 프리셋이 없습니다.');
+      return;
+    }
+    const count = presets.filter((preset) => !preset.isFactory).length;
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -235,29 +245,62 @@ export function PresetPanel() {
     link.download = `guitar-pedalboard-presets-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    setMessage('내 프리셋을 내보냈습니다.');
+    setMessage(`내 프리셋 ${count}개를 내보냈습니다.`);
   };
 
-  const importJsonText = () => {
-    if (!presetJson.trim()) { setMessage('가져올 JSON을 붙여 넣어 주세요.'); return; }
+  const finishImport = (plan: ImportPlan, resolutions: readonly ConflictResolution[]) => {
+    const result = commitImport(plan, resolutions);
+    if (result.imported > 0) setActiveLibraryId('user');
+    setMessage(formatImportSummary(result));
+  };
 
+  /** 가져올 글을 읽어 계획을 세운다. 충돌이 없으면 바로 저장하고, 있으면 하나씩 묻는다. 틀렸으면 메시지를 돌려 준다. */
+  const startImport = (text: string): string | null => {
     try {
-      const importedCount = importPresets(presetJson);
-      setActiveLibraryId('user');
-      setMessage(`${importedCount}개의 프리셋을 가져왔습니다.`);
+      const plan = planImport(text);
+      if (plan.conflicts.length === 0) finishImport(plan, []);
+      else setPendingImport({ plan, resolutions: [] });
+      return null;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '프리셋을 가져오지 못했습니다.');
+      return error instanceof Error ? error.message : '프리셋을 가져오지 못했습니다.';
     }
   };
 
   const importJson = async (file: File) => {
+    let text: string;
     try {
-      const importedCount = importPresets(await file.text());
-      setActiveLibraryId('user');
-      setMessage(`${importedCount}개의 프리셋을 가져왔습니다.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '프리셋을 가져오지 못했습니다.');
+      text = await file.text();
+    } catch {
+      setMessage('파일을 읽지 못했습니다.');
+      return;
     }
+    const error = startImport(text);
+    if (error) setMessage(error);
+  };
+
+  const submitPastedJson = (text: string): string | null => {
+    const error = startImport(text);
+    if (error === null) setPasteOpen(false);
+    return error;
+  };
+
+  const resolveConflict = (resolution: ConflictResolution, applyToRest: boolean) => {
+    if (!pendingImport) return;
+    const { plan, resolutions } = pendingImport;
+    const chosen = [...resolutions, resolution];
+    const done = applyToRest || chosen.length >= plan.conflicts.length;
+    if (!done) {
+      setPendingImport({ plan, resolutions: chosen });
+      return;
+    }
+    const all = plan.conflicts.map((_, index) => chosen[index] ?? resolution);
+    setPendingImport(null);
+    finishImport(plan, all);
+  };
+
+  const cancelImport = () => {
+    setPendingImport(null);
+    setMessage('가져오기를 취소했습니다.');
   };
 
   return (
@@ -365,14 +408,17 @@ export function PresetPanel() {
               }}
             />
           </div>
-          <button type="button" className="secondary-button" onClick={importJsonText}>붙여넣은 JSON 가져오기</button>
-          <textarea
-            value={presetJson}
-            onChange={(event) => setPresetJson(event.currentTarget.value)}
-            placeholder="프리셋 JSON 붙여넣기"
-            aria-label="가져올 프리셋 JSON"
-            rows={4}
-          />
+          <button type="button" className="secondary-button" onClick={() => setPasteOpen(true)}>텍스트로 붙여넣기</button>
+          {pasteOpen ? <PasteImportDialog onSubmit={submitPastedJson} onClose={() => setPasteOpen(false)} /> : null}
+          {pendingImport ? (
+            <ImportConflictDialog
+              conflict={pendingImport.plan.conflicts[pendingImport.resolutions.length]}
+              position={pendingImport.resolutions.length + 1}
+              total={pendingImport.plan.conflicts.length}
+              onResolve={resolveConflict}
+              onCancel={cancelImport}
+            />
+          ) : null}
         </div>
 
 
