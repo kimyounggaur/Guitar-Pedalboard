@@ -49,12 +49,14 @@ test.describe('F-1 그래픽 EQ 숫자 입력이 화면을 덮던 결함', () =>
     await expect(number).toHaveCSS('pointer-events', 'none');
   });
 
-  test('F-1 레일 안의 range 입력은 포인터를 받는다(드래그 대상이 유지된다)', async ({ page }) => {
+  // S4.4 부터 끌기는 레일(`[data-knob-drag]`)이 받고 레일 안의 투명 range 는 포인터를 받지 않는다(`pointer-events: none`).
+  // 그래서 '숫자 입력이 레일을 덮지 않는다'는 레일의 가운데 점을 받는 것이 레일 자신(또는 그 안쪽 장식)이라는 것으로 본다.
+  test('F-1 레일은 포인터를 받는다(숫자 입력이 덮지 않고, 드래그 대상이 유지된다)', async ({ page }) => {
     await openApp(page);
-    const ranges = page.locator('.vertical-fader-rail input[type="range"]');
-    await expect(ranges).toHaveCount(GRAPHIC_EQ_FADERS);
+    const rails = page.locator('.vertical-fader-rail[data-knob-drag]');
+    await expect(rails).toHaveCount(GRAPHIC_EQ_FADERS);
     for (let index = 0; index < GRAPHIC_EQ_FADERS; index += 1) {
-      const result = await reachable(ranges.nth(index));
+      const result = await reachable(rails.nth(index));
       expect(result, `페이더 ${index + 1}`).toMatchObject({ reachable: true });
     }
   });
