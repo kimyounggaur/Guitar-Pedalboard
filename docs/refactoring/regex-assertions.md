@@ -3,7 +3,7 @@
 > `node docs/refactoring/tools/list-regex-assertions.mjs` 로 생성한 파일이다(수정하지 말고 다시 생성한다). 줄 번호는 생성한 시점의 `scripts/` 기준이므로, 시험 파일을 고친 Step 뒤에는 다시 생성한다.
 > 세는 대상은 `assert.match(` 와 `assert.doesNotMatch(` 호출이다. 보고서의 "337곳"은 기준 커밋 `4ac9cf7`에서 이 두 호출을 센 값과 같다(316 + 21).
 
-**생성 시점 합계: 391곳** (match 357 + doesNotMatch 34)
+**생성 시점 합계: 392곳** (match 357 + doesNotMatch 35)
 
 | 파일 | match | doesNotMatch | 합계 |
 |---|---:|---:|---:|
@@ -12,7 +12,7 @@
 | graphic-eq-regression.mjs | 29 | 5 | 34 |
 | howl-guard-regression.mjs | 9 | 5 | 14 |
 | input-stage-regression.mjs | 2 | 0 | 2 |
-| midi-regression.mjs | 20 | 2 | 22 |
+| midi-regression.mjs | 20 | 3 | 23 |
 | peak-limiter-regression.mjs | 17 | 2 | 19 |
 | preset-ab-regression.mjs | 23 | 0 | 23 |
 | pwa-regression.mjs | 4 | 0 | 4 |
@@ -22,7 +22,7 @@
 | shortcuts-regression.mjs | 33 | 0 | 33 |
 | tap-tempo-regression.mjs | 13 | 1 | 14 |
 | tremolo-regression.mjs | 14 | 2 | 16 |
-| **합계** | **357** | **34** | **391** |
+| **합계** | **357** | **35** | **392** |
 
 ## 파일별 위치
 
@@ -154,28 +154,29 @@
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
 |---:|---|---|---|
-| 34 | match | `keysSource` | `/midi: 'guitar-pedalboard:midi'/, 'MIDI storage key'` |
-| 35 | match | `audioStoreSource` | `/STORAGE_KEYS\.midi/` |
-| 36 | !match | `midiSource` | `/localStorage\|guitar-pedalboard:midi/, 'MIDI 해석 모듈은 저장소와 키 문자열을 모른다'` |
-| 50 | match | `midiServiceSource.slice(connectStart, di` | `/navigator\.requestMIDIAccess\(\{ sysex: false \}\)/, 'MIDI 권한 요청이 con` |
-| 58 | match | `routerHandleSource` | `/if \(learningPedalId\)/` |
-| 59 | match | `midiRouterSource` | `/createMidiMapping\(message\)/` |
-| 67 | match | `audioStoreSource` | `/setPedalActive: \(pedalId, active\) => \{\s*setPedalActive\(pedalId, ` |
-| 68 | match | `midiServiceSource` | `/access\.onstatechange = this\.stateChangeHandler/` |
-| 69 | match | `midiServiceSource` | `/input\.onmidimessage = this\.messageHandler/` |
-| 70 | match | `midiServiceSource` | `/input\.onmidimessage = null/` |
-| 71 | match | `midiServiceSource` | `/this\.access\.onstatechange = null/` |
-| 73 | match | `toggleSource` | `/onContextMenu\?: MouseEventHandler<HTMLLabelElement>/` |
-| 74 | match | `toggleSource` | `/<label className="toggle-switch" onContextMenu=\{onContextMenu\}>/` |
-| 75 | match | `pedalCardSource` | `/role="menu"/` |
-| 76 | match | `pedalCardSource` | `/role="menuitem"/` |
-| 77 | match | `pedalCardSource` | `/>\s*MIDI 학습\s*<\/button>/` |
-| 78 | match | `pedalCardSource` | `/className="midi-learn-button"/` |
-| 79 | match | `pedalCardSource` | `/aria-live="polite"/` |
-| 81 | match | `pedalCardSource` | `/aria-haspopup="menu"/` |
-| 82 | !match | `pedalCardSource` | `/label="Bypass"/` |
-| 84 | match | `appShellSource` | `/connectSavedMidi\(\)/` |
-| 380 | match | `useAudioStore.getState().midiError` | `/이미 사용 중/` |
+| 39 | match | `keysSource` | `/midi: 'guitar-pedalboard:midi'/, 'MIDI storage key'` |
+| 40 | match | `audioStoreSource` | `/STORAGE_KEYS\.midi/` |
+| 41 | !match | `midiSource` | `/localStorage\|guitar-pedalboard:midi/, 'MIDI 해석 모듈은 저장소와 키 문자열을 모른다'` |
+| 55 | match | `midiServiceSource.slice(connectStart, di` | `/navigator\.requestMIDIAccess\(\{ sysex: false \}\)/, 'MIDI 권한 요청이 con` |
+| 63 | match | `routerHandleSource` | `/if \(learningPedalId\)/` |
+| 64 | match | `midiRouterSource` | `/createMidiMapping\(message\)/` |
+| 72 | match | `audioStoreSource` | `/setPedalActive: \(pedalId, active\) => \{\s*setPedalActive\(pedalId, ` |
+| 73 | match | `midiServiceSource` | `/access\.onstatechange = this\.stateChangeHandler/` |
+| 74 | match | `midiServiceSource` | `/input\.onmidimessage = this\.messageHandler/` |
+| 75 | match | `midiServiceSource` | `/input\.onmidimessage = null/` |
+| 76 | match | `midiServiceSource` | `/this\.access\.onstatechange = null/` |
+| 78 | match | `toggleSource` | `/onContextMenu\?: MouseEventHandler<HTMLLabelElement>/` |
+| 79 | match | `toggleSource` | `/<label className="toggle-switch" onContextMenu=\{onContextMenu\}>/` |
+| 80 | match | `pedalFooterSource` | `/role="menu"/` |
+| 81 | match | `pedalFooterSource` | `/role="menuitem"/` |
+| 82 | match | `pedalFooterSource` | `/>\s*MIDI 학습\s*<\/button>/` |
+| 83 | match | `pedalFooterSource` | `/className="midi-learn-button"/` |
+| 84 | match | `pedalFooterSource` | `/aria-live="polite"/` |
+| 86 | match | `pedalFooterSource` | `/aria-haspopup="menu"/` |
+| 87 | !match | `pedalCardSource` | `/label="Bypass"/` |
+| 88 | !match | `pedalFooterSource` | `/label="Bypass"/` |
+| 90 | match | `appShellSource` | `/connectSavedMidi\(\)/` |
+| 386 | match | `useAudioStore.getState().midiError` | `/이미 사용 중/` |
 
 ### peak-limiter-regression.mjs
 

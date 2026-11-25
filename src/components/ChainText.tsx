@@ -1,11 +1,16 @@
-import { usePedalStore } from '../store/pedalStore';
+import { useChainItems } from '../store/pedalSelectors';
+import { useRenderCount } from '../testing/renderCount';
 import { useAudioStore } from '../store/audioStore';
 import { PedalIcon } from './PedalIcon';
 
 export function ChainText() {
-  const pedals = usePedalStore((state) => state.pedals);
-  const chainGainWarning = useAudioStore((state) => state.chainGainWarning);
-  const estimatedChainGainDb = useAudioStore((state) => state.estimatedChainGainDb);
+  useRenderCount('ChainText');
+  // 이름·종류·색·켜짐만 구독한다. 노브 값이 바뀔 때는 다시 그려지지 않는다(S4.3).
+  const pedals = useChainItems(true);
+  // 경고가 있을 때만 쓰는 문구라 한 문자열로 구독한다. 경고가 없으면 추정 게인이 바뀌어도(Drive 노브를 돌려도) 다시 그려지지 않는다.
+  const chainGainNotice = useAudioStore((state) =>
+    state.chainGainWarning ? `${state.chainGainWarning} (추정 +${state.estimatedChainGainDb.toFixed(1)} dB)` : null,
+  );
 
   return (
     <section className="side-panel chain-panel">
@@ -25,9 +30,9 @@ export function ChainText() {
           </li>
         ))}
       </ol>
-      {chainGainWarning ? (
+      {chainGainNotice ? (
         <p className="warning-message" role="status">
-          {chainGainWarning} (추정 +{estimatedChainGainDb.toFixed(1)} dB)
+          {chainGainNotice}
         </p>
       ) : null}
     </section>

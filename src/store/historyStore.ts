@@ -26,6 +26,7 @@ function changedParameterKey(before: PedalState[], after: PedalState[]): string 
   for (let i = 0; i < before.length; i++) {
     const oldPedal = before[i];
     const newPedal = after[i];
+    if (oldPedal === newPedal) continue; // 바뀌지 않은 페달은 참조가 같다(S4.3)
     if (oldPedal.id !== newPedal.id || oldPedal.active !== newPedal.active) return null;
     for (const param of new Set([...Object.keys(oldPedal.params), ...Object.keys(newPedal.params)])) {
       if (oldPedal.params[param] !== newPedal.params[param]) {
@@ -35,6 +36,16 @@ function changedParameterKey(before: PedalState[], after: PedalState[]): string 
     }
   }
   return key;
+}
+
+/**
+ * 페달 목록의 내용이 달라졌는가. 참조가 같은 페달은 견주지 않고(S4.3: 바뀌지 않은 페달은 참조를 유지한다),
+ * 참조가 다른 페달만 내용(JSON)을 견준다. 배열 전체를 JSON 으로 견준 것과 결과가 같다.
+ */
+function pedalListChanged(before: PedalState[], after: PedalState[]): boolean {
+  if (before === after) return false;
+  if (before.length !== after.length) return true;
+  return after.some((pedal, index) => pedal !== before[index] && JSON.stringify(pedal) !== JSON.stringify(before[index]));
 }
 
 function snapshotOf(pedals: PedalState[], presetTrimDb: number): Snapshot {
@@ -86,8 +97,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
 usePedalStore.subscribe((state, previous) => {
   if (restoring) return;
   const trimChanged = state.presetTrimDb !== previous.presetTrimDb;
-  const pedalsChanged =
-    state.pedals !== previous.pedals && JSON.stringify(state.pedals) !== JSON.stringify(previous.pedals);
+  const pedalsChanged = pedalListChanged(previous.pedals, state.pedals);
   if (!pedalsChanged && !trimChanged) return;
   // 노브 하나를 계속 돌리는 편집만 한 단계로 묶는다. 음량 보정이 함께 바뀐 편집(프리셋 불러오기, 음량 맞추기)은 항상 한 단계다.
   const key = trimChanged ? null : changedParameterKey(previous.pedals, state.pedals);

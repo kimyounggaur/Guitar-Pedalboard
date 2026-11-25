@@ -927,7 +927,7 @@ const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const appShell = await read('../src/components/AppShell.tsx');
 const advanced = await read('../src/components/MidiAdvancedControls.tsx');
 const banner = await read('../src/components/MidiReconnectBanner.tsx');
-const pedalCard = await read('../src/components/PedalCard.tsx');
+const pedalFooter = await read('../src/components/PedalFooter.tsx'); // S4.3: 발스위치 줄은 PedalCard 에서 PedalFooter 로 옮겨졌다
 const audioStoreSource = await read('../src/store/audioStore.ts');
 assert.ok(appShell.includes('void useAudioStore.getState().connectSavedMidi();'), '앱을 열 때의 연결은 사용자 동작이 아니다');
 assert.ok(appShell.includes('<MidiReconnectBanner />'));
@@ -935,7 +935,7 @@ assert.equal([...advanced.matchAll(/connectSavedMidi\(\{ force: true \}\)/g)].le
 assert.equal([...advanced.matchAll(/connectSavedMidi\(\{ force: true, userAction: true \}\)/g)].length, 2, '저장 버튼·MIDI 연결 버튼만 사용자 동작');
 assert.ok(banner.includes('connectSavedMidi({ force: true, userAction: true })'));
 assert.ok(banner.includes('MIDI 풋스위치 다시 연결'));
-assert.ok(pedalCard.includes('describeMidiConnection(midiLink, midiDeviceCount)'));
+assert.ok(pedalFooter.includes('describeMidiConnection(midiLink, midiDeviceCount)'));
 assert.ok(audioStoreSource.includes('await midiService.connect();'), '학습은 사용자 동작이다');
 assert.ok(audioStoreSource.includes('else await midiService.connectIfAllowed();'));
 

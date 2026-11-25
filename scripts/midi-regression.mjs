@@ -21,6 +21,11 @@ const pedalCardSource = await readFile(
   new URL('../src/components/PedalCard.tsx', import.meta.url),
   'utf8',
 );
+// S4.3: 발스위치 줄(켜기 스위치와 MIDI 메뉴)은 PedalCard 에서 PedalFooter 로 옮겨졌다.
+const pedalFooterSource = await readFile(
+  new URL('../src/components/PedalFooter.tsx', import.meta.url),
+  'utf8',
+);
 const toggleSource = await readFile(
   new URL('../src/components/ToggleSwitch.tsx', import.meta.url),
   'utf8',
@@ -72,14 +77,15 @@ assert.match(midiServiceSource, /this\.access\.onstatechange = null/);
 
 assert.match(toggleSource, /onContextMenu\?: MouseEventHandler<HTMLLabelElement>/);
 assert.match(toggleSource, /<label className="toggle-switch" onContextMenu=\{onContextMenu\}>/);
-assert.match(pedalCardSource, /role="menu"/);
-assert.match(pedalCardSource, /role="menuitem"/);
-assert.match(pedalCardSource, />\s*MIDI 학습\s*<\/button>/);
-assert.match(pedalCardSource, /className="midi-learn-button"/);
-assert.match(pedalCardSource, /aria-live="polite"/);
-assert.ok(pedalCardSource.includes('<StompToggleSwitch label="효과" checked={pedal.active} onChange={(checked) => setPedalActive(pedal.id, checked)} />'));
-assert.match(pedalCardSource, /aria-haspopup="menu"/);
+assert.match(pedalFooterSource, /role="menu"/);
+assert.match(pedalFooterSource, /role="menuitem"/);
+assert.match(pedalFooterSource, />\s*MIDI 학습\s*<\/button>/);
+assert.match(pedalFooterSource, /className="midi-learn-button"/);
+assert.match(pedalFooterSource, /aria-live="polite"/);
+assert.ok(pedalFooterSource.includes('<StompToggleSwitch label="효과" checked={active} onChange={(checked) => setPedalActive(pedalId, checked)} />'));
+assert.match(pedalFooterSource, /aria-haspopup="menu"/);
 assert.doesNotMatch(pedalCardSource, /label="Bypass"/);
+assert.doesNotMatch(pedalFooterSource, /label="Bypass"/);
 
 assert.match(appShellSource, /connectSavedMidi\(\)/);
 

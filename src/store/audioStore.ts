@@ -1001,10 +1001,13 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       activeDistortionAmounts.length >= 2 &&
       activeDistortionAmounts.every((amount) => amount > 60);
 
-    set({
-      chainGainWarning: isExcessive ? '왜곡 페달이 중첩되어 게인이 과도합니다' : null,
-      estimatedChainGainDb: audioEngine.estimateChainGain(),
-    });
+    const chainGainWarning = isExcessive ? '왜곡 페달이 중첩되어 게인이 과도합니다' : null;
+    // 추정 게인은 경고 문구에만 쓴다. 경고가 없을 때는 0 으로 두어, Drive 같은 노브를 돌릴 때마다 값이 바뀌어 모든 구독자를 깨우지 않게 한다(S4.3).
+    const estimatedChainGainDb = chainGainWarning ? audioEngine.estimateChainGain() : 0;
+    // 값이 같으면 쓰지 않는다(노브를 돌릴 때마다 모든 오디오 스토어 구독자를 깨우지 않는다, S4.3).
+    const current = get();
+    if (current.chainGainWarning === chainGainWarning && current.estimatedChainGainDb === estimatedChainGainDb) return;
+    set({ chainGainWarning, estimatedChainGainDb });
   },
 
   loadDevices: async () => {
