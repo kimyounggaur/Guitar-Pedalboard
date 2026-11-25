@@ -1113,7 +1113,8 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         inputChannelSelectable: audioEngine.getInputInfo()?.selectable ?? null,
       });
       if (fellBackToDefault) announceInputFallback();
-      await announceUnavailableDevices(devices, !fellBackToDefault);
+      // 사용자가 방금 고른 장치(또는 기본 장치)로 연결했으므로 '저장된 입력 장치를 찾지 못했다'고 따로 알릴 일이 없다. 출력만 확인한다.
+      await announceUnavailableDevices(devices, false);
     } catch (error) {
       set({
         error: connectErrorMessage(error),
