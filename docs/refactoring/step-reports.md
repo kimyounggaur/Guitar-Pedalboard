@@ -2068,3 +2068,50 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - 플래그 `idleDisconnect` 는 다음 릴리스에서 정리한다(설계서 7.2).
 
 ---
+
+## S4.3 노브 반응 속도
+
+- 브랜치·병합: `refactor/s4-3-knob-speed` → `phase/4`. 커밋: `4e55edf`(구현·시험 ①~④), `70c5c38`(변이 시험 보강 ⑤·스토어 단언), `ac5f273`(MIDI 소스 단언을 `PedalFooter.tsx` 로)
+- 해결 항목: R4-3(노브 한 칸마다 15개 다시 그리기·저장). 저장 지연은 S1.7 이 이미 했고 이 Step 은 시험으로 고정했다(L-282).
+- 변경 파일(`git diff --shortstat phase/4 HEAD`, 이 문서 커밋 전):  16 files changed, 682 insertions(+), 244 deletions(-). 제품 — `store/pedalStore.ts`·`store/historyStore.ts`·`store/audioStore.ts`·새 `store/pedalSelectors.ts`·새 `testing/renderCount.ts`·`components/{PedalCard,PedalBoard,SortablePedal,ChainText,PresetPanel}.tsx`·새 `components/PedalFooter.tsx`. 시험 — 새 `e2e/tests/s4-3-knob-speed.spec.ts`(5개)·`scripts/history-regression.mjs`(참조 유지 단언)·`scripts/midi-regression.mjs`·`scripts/midi-reconnect-regression.mjs`(읽는 파일을 `PedalFooter.tsx` 로).
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| CPU 4배 느림에서 노브 한 칸 처리 ≤ 4 ms ★ | **충족** | 12.3~14.1 → 1.4~3.3 ms, 레이아웃까지 3.1~6.0 ms(≤ 8). 마지막 전체 e2e 의 값: Drive 1.60·Delay 1.50·Compressor 1.40 ms(레이아웃까지 3.1~3.3 ms) (L-283) |
+| 노브를 끄는 동안 해당 카드만 다시 그려진다 | **충족** | Drive 12칸 → `PedalCard:drive` 12번, 그 밖 0(시험 ②) |
+| 끌기 한 번에 저장 한 번 | **충족** | 20번 움직여 끌고 놓으면 보드 키 쓰기 1회(시험 ③, S1.7 의 지연 저장) |
+| (추가) 켜고 끌 때·끌어 옮길 때도 필요한 카드만 | **충족** | 시험 ④·⑤ |
+
+**전후**
+
+| 항목 | 전(`phase/4` 시작) | 후 |
+|---|---|---|
+| 노브 한 칸 처리(CPU 4배 느림, 입력→화면) | 12.3~14.1 ms | 1.4~3.3 ms |
+| 노브 한 칸에 다시 그려지는 카드 | 15개 | 1개(Drive 12칸 → 12번) |
+| 노브 한 칸에 `historyStore` 가 JSON 으로 만드는 문자열 | 페달 목록 2개 전체 | 바뀐 페달만 |
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| `npm test` | 51개 통과(S4.2) | 51개 통과(513초) |
+| `npm run e2e` | 280개 통과(S4.2) | 285개 통과(12.3분 — 새 시험 5개) |
+| 프로브 | 30개, 값 2,468개 | 다시 돌리지 않았다 — `src/audio`·`src/config`·기준선을 건드리지 않았다(`git diff phase/4 -- src/audio src/config scripts/audio-render-probe.mjs docs/baseline` 이 비어 있다) |
+
+- 검증
+  - `npx tsc -b --noEmit`·`npx tsc -p tsconfig.e2e.json --noEmit`·`npx eslint e2e`·`npm run build` 오류 0, `npm run lint`(전체 e2e 뒤), 정규식 단언 목록 `regex-assertions.md` 갱신(MIDI 단언을 `PedalFooter.tsx` 로 돌렸다).
+  - **새 시험이 정말 잡는지**(L-285): 브라우저 변이 11개·스토어 변이 8개. 처음 2개가 살아남아 시험 ⑤ 와 스토어 단언을 더한 뒤 모두 잡는다. 동등 변이(성능만 다름) 1개(S11·N8)는 잡지 못한다.
+  - **이전 코드 비교**: 옛 빌드(S4.3 이전)에서 시험 ①(값만 출력)이 12.3~14.1 ms, 새 빌드가 1.4~3.3 ms. 옛 빌드에는 렌더 카운터가 없어 ②④⑤ 는 비교할 수 없다 — 변이 S2·S4 가 옛 동작(모든 카드가 다시 그려짐)을 재현한다.
+- 만난 문제
+  - `ChainText` 가 노브 한 칸마다 다시 그려졌다 — `audioStore` 의 추정 게인이 Drive 값을 따라 바뀌었기 때문 → 경고가 있을 때만 구독, 경고가 없으면 0(L-281).
+  - 시험 ① 이 실행마다 2.2~6.0 ms 로 흔들렸다 → 워밍업 40칸·3라운드 중 가장 조용한 라운드(L-284).
+  - 시험 ④ 가 처음에는 너무 엄격해 (켜짐이 바뀌면 `ChainText`·`PedalFooter` 가 다시 그려지는 것이 맞다) 허용 목록을 두었다(L-280).
+  - `npm test` 에서 `test:midi`·`test:midi-reconnect` 가 실패 — 소스 문자열을 읽던 파일(`PedalCard.tsx`)에서 코드가 옮겨졌다 → 읽는 파일을 바꿨다(ac5f273).
+  - 변이 시험에서 2개가 살아남았다 → 시험 ⑤ 와 `history-regression` 단언(L-285).
+  - `npm test` 첫 실행에서 `test:responsive-a11y` 가 한 번 `Inspected target navigated or closed`(Chrome 연결 끊김)로 실패했다. 단독 실행과 `npm test` 재실행(51개)에서는 통과했고 이 Step 의 변경과 이어지는 원인은 찾지 못했다 — 같은 실패가 되풀이되는지 관찰할 항목으로 남긴다.
+- 사람 확인 필요
+  - 실제 휴대폰에서 노브를 끌 때의 반응(시험은 이 기계에서 CPU 를 4배 늦춘 값이다).
+- 남은 위험
+  - 시험 ① 은 시간 기반이라 느린 기계에서는 상한(4 ms)을 넘을 수 있다. 여유는 최대 3.3 ms 대 4 ms 다(L-283).
+  - 남은 비용(React 렌더·커밋 약 2.7 ms, 레이아웃 약 3 ms)을 더 줄이려면 노브 컴포넌트를 memo 해야 하고 S4.4 가 다시 만든다.
+  - `test:midi` 계열이 소스 문자열을 읽는 방식은 그대로다 — 파일이 또 나뉘면 같은 일이 난다(S4.7 에서 동작 시험으로 바꾼다).
+
+---

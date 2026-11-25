@@ -89,7 +89,7 @@
 |---|---|---|---|
 | R4-1 로고 1.6 MB | 해결 | `public/logo-520.webp`(22 KB)·`logo-1040.webp`(46 KB), `index.html` preload(`imagesrcset`), `PedalBoard.tsx` srcSet, `vite.config.ts` includeAssets | S4.1 완료(E-19) |
 | R4-2 Phaser CPU | 해결 | Phaser가 워클릿으로 바뀜(S3.4), 꺼진 페달은 입력을 끊어 쉼(`BaseEffect.syncIdle`, 플래그 `idleDisconnect`), 노이즈 게이트 지수 캐시 | S4.2 완료(P-17 모두 꺼짐 0.629 → 0.229, P-30, E-24) |
-| R4-3 노브 한 칸마다 15개 다시 그림 | 부분 | `updatePedalParam`은 바뀐 페달만 복제(`pedalStore.ts:959-`) | `togglePedal`·`setPedalBypass`는 15개 전부 `clonePedal`(`:941-957`) → S4.3 |
+| R4-3 노브 한 칸마다 15개 다시 그림 | 해결 | 스토어 액션 4개가 바뀐 페달만 새 객체로 만들고(`pedalStore.ts`), 보드·정렬 항목·체인 패널이 페달 id·요약 키로 구독(`pedalSelectors.ts`), `PedalCard`·`PedalFooter`·`SortablePedal` memo | S4.3 완료(노브 한 칸 12.3~14.1 → 1.4~3.3 ms, `s4-3-knob-speed.spec.ts`) |
 | R4-4 노브 조작 방식 | 해결 | `useKnobDrag.ts`, `KnobNumberInput.tsx`(숫자 입력), 값 표시 `<output>`(`SliderControl.tsx:30-33`); 투명 range는 남아 있으나(`controls.css:102-110`) 드래그 핸들러가 붙음 | E-20 확인 → S4.4 축소 |
 | R4-5 글자 대비·크기 | 미해결 | 0.44~0.68rem 지정이 CSS에 **54곳**(0.68rem 14곳, 0.62rem 10곳, 0.44rem 3곳 …) | S4.5 |
 | R4-6 한국어·영어 혼용 | 부분 | 오류 문구는 한국어(`audioStore.ts:619`) | 조절기 라벨은 영어 다수(`Low Cut`, `Mid Hz`, `Pre Delay`, `Feedback` … — `components/effects/*.tsx`), `ko.ts` 없음 → S4.6 |
@@ -174,7 +174,7 @@
 |---|---|---|---|---|
 | S4.1 | `public/logo.png`, `index.html` 11행, `PedalBoard.tsx` 83~90행, `vite.config.ts` | `public/logo-520.webp`·`logo-1040.webp`, `index.html` preload, `PedalBoard.tsx` | 위치 다름 | 완료(L-263~L-265) |
 | S4.2 | `BaseEffect.ts`, `ChorusEffect.ts` 134~146행, `noise-gate-processor.ts` 76~110행, 워클릿 `idle` | `BaseEffect.ts`(쉬기 관리)·`DelayEffect.ts`·`ChorusEffect.ts`(`syncLfos`)·`noise-gate-processor.ts`(지수 캐시), 워클릿 5개의 입력 끊김 처리 | 확인됨 | 완료(L-266~L-276) — `idle` 메시지는 입력 끊기로 대체 |
-| S4.3 | `pedalStore.ts` 901~950행, `PedalCard.tsx`, `PedalBoard.tsx` | `pedalStore.ts:941-975`(`updatePedalParam`은 바뀐 것만 복제, 토글·바이패스는 전부 복제) | 위치 다름 | 부분 |
+| S4.3 | `pedalStore.ts` 901~950행, `PedalCard.tsx`, `PedalBoard.tsx` | `pedalStore.ts`(`setActive`·`movePedal`·`updatePedal`·`updatePedalParam` 참조 유지), `pedalSelectors.ts`, `PedalCard.tsx`(memo)·`PedalFooter.tsx`·`PedalBoard.tsx`·`SortablePedal.tsx`·`ChainText.tsx` | 확인됨 | 완료(L-277~L-286) — 렌더 카운터는 '개발 모드' 대신 런타임 훅 |
 | S4.4 | `SliderControl.tsx` 48~57행 → `KnobControl.tsx`, `controls.css` 102~110행 | `SliderControl.tsx:1-41`, `useKnobDrag.ts`, `KnobNumberInput.tsx`, `controls.css:102-110` | 위치 다름 | 이미 구현 |
 | S4.5 | `src/styles/*.css` 약 47곳, `PedalCard.tsx:162`, `ConnectGuitarPanel.tsx:89` | 54곳(0.44~0.68rem), `PedalCard.tsx:146` `role="group"`, `ConnectGuitarPanel.tsx:97` `<aside>` 중첩 | 위치 다름 | 미착수 |
 | S4.6 | `ko.ts`, 영어 문구, 내부 이름 노출, `PedalBoard.tsx:96` | `ko.ts` 없음. 영어 라벨 다수(2.4절) | 없음 | 부분 |
