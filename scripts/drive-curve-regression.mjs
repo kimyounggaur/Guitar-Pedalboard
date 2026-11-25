@@ -5,11 +5,14 @@
 // 3) Bias 한도 ±0.3: 한도 밖(±1, NaN)은 한도로 자르고, 어디서든 신호가 사라지지 않는다.
 // 4) Distortion 이득: 노브에 대해 로그 간격으로 오르고, 노브 30% 에서 같은 위치의 Overdrive 보다 더 왜곡한다(R3-5).
 // 5) 바이어스 0 에서 Overdrive·Crunch·Fuzz 모드는 이전 곡선과 같다(Distortion 만 이득이 바뀌었다).
+// 6) DriveEffect: 슬라이더 한 칸(0.01) 차이로도 곡선을 다시 만들고, 한도 밖 바이어스는 한도로 자른 곡선을 쓴다.
 // 시험이 결함을 실제로 잡는지(수정 전 곡선이 반드시 실패해야 함)도 함께 확인한다.
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
+import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
 async function load(entry) {
   const result = await build({ entryPoints: [entry], bundle: true, platform: 'node', format: 'esm', write: false });
@@ -17,6 +20,26 @@ async function load(entry) {
 }
 
 const curves = await load('src/audio/utils/curves.ts');
+const effects = await import(`data:text/javascript;base64,${Buffer.from(
+  (
+    await build({
+      plugins: [workerUrlStub],
+      stdin: {
+        contents: [
+          "export { DriveEffect } from './audio/nodes/DriveEffect.ts';",
+          "export { initialPedals } from './presets/initialPedals.ts';",
+        ].join('\n'),
+        resolveDir: fileURLToPath(new URL('../src', import.meta.url)),
+        sourcefile: 'drive-curve-harness.ts',
+      },
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      target: 'node20',
+      write: false,
+    })
+  ).outputFiles[0].text,
+).toString('base64')}`);
 const params = await load('src/audio/params/index.ts');
 const { createDriveCurve, withBias, distortionGain, DRIVE_BIAS_LIMIT, DISTORTION_GAIN_MIN, DISTORTION_GAIN_MAX } = curves;
 
@@ -305,4 +328,65 @@ for (const bias of [-0.3, 0, 0.3]) {
   assert.ok(distortion[10] > 35, `bias ${bias}: 노브 100% THD ${distortion[10].toFixed(1)}%`);
 }
 
-console.log(`Drive 왜곡 곡선 시험 통과: 곡선 ${curveCount}개의 0점 값 0·단조, 바이어스 한도 ±0.3, Distortion 이득·THD, 수정 전 곡선의 결함 재현`);
+// ---------------------------------------------------------------------------------------------
+// 8) DriveEffect — 곡선을 다시 만드는 때, 한도 밖 바이어스
+// ---------------------------------------------------------------------------------------------
+{
+  class Param {
+    value = 0;
+    cancelScheduledValues() {}
+    cancelAndHoldAtTime() {}
+    setValueAtTime(value) { this.value = value; }
+    linearRampToValueAtTime(value) { this.value = value; }
+    setTargetAtTime(value) { this.value = value; }
+  }
+  class FakeNode {
+    gain = new Param(); frequency = new Param(); Q = new Param(); detune = new Param();
+    connect() {} disconnect() {}
+  }
+  class FakeShaper extends FakeNode {
+    assignments = [];
+    oversample = 'none';
+    set curve(value) { this.assignments.push(value); }
+    get curve() { return this.assignments.at(-1) ?? null; }
+  }
+  globalThis.AudioWorkletNode = class extends FakeNode { parameters = new Map(); port = { postMessage() {}, onmessage: null }; };
+  const shapers = [];
+  const fakeContext = {
+    sampleRate: 48000, currentTime: 0,
+    createGain: () => new FakeNode(), createBiquadFilter: () => new FakeNode(), createConvolver: () => new FakeNode(),
+    createWaveShaper: () => { const shaper = new FakeShaper(); shapers.push(shaper); return shaper; },
+  };
+  const base = effects.initialPedals.find((candidate) => candidate.id === 'drive');
+  const state = (changes) => ({ ...JSON.parse(JSON.stringify(base)), active: true, params: { ...JSON.parse(JSON.stringify(base.params)), ...changes } });
+
+  const effect = new effects.DriveEffect(fakeContext, state({ mode: 'overdrive', drive: 40, bias: 0.08 }));
+  const shaper = shapers.at(-1);
+  assert.equal(shaper.oversample, '2x');
+  assert.equal(shaper.assignments.length, 1, '만들 때 곡선을 한 번 정한다');
+  assert.deepEqual(shaper.curve, createDriveCurve('overdrive', 40, 0.08));
+
+  effect.update(state({ mode: 'overdrive', drive: 40, bias: 0.084 }));
+  assert.equal(shaper.assignments.length, 1, '바이어스가 한 칸의 절반(0.005)보다 덜 달라지면 다시 만들지 않는다');
+  effect.update(state({ mode: 'overdrive', drive: 40, bias: 0.09 }));
+  assert.equal(shaper.assignments.length, 2, '슬라이더 한 칸(0.01)만 움직여도 곡선이 바뀐다');
+  assert.deepEqual(shaper.curve, createDriveCurve('overdrive', 40, 0.09));
+  effect.update(state({ mode: 'overdrive', drive: 40, bias: 0.08 }));
+  assert.equal(shaper.assignments.length, 3, '한 칸 되돌려도 바뀐다');
+  effect.update(state({ mode: 'overdrive', drive: 40.4, bias: 0.08 }));
+  assert.equal(shaper.assignments.length, 3, '드라이브 0.5 이하는 그대로');
+  effect.update(state({ mode: 'overdrive', drive: 41, bias: 0.08 }));
+  assert.equal(shaper.assignments.length, 4, '드라이브 1 은 바뀐다');
+  effect.update(state({ mode: 'distortion', drive: 41, bias: 0.08 }));
+  assert.equal(shaper.assignments.length, 5, '모드가 바뀌면 바뀐다');
+  assert.deepEqual(shaper.curve, createDriveCurve('distortion', 41, 0.08));
+
+  // 한도 밖(예전 ±1 저장값이 화면을 거치지 않고 들어와도) 한도로 자른 곡선을 쓴다
+  effect.update(state({ mode: 'distortion', drive: 41, bias: 1 }));
+  assert.deepEqual(shaper.curve, createDriveCurve('distortion', 41, 0.3));
+  effect.update(state({ mode: 'distortion', drive: 41, bias: -1 }));
+  assert.deepEqual(shaper.curve, createDriveCurve('distortion', 41, -0.3));
+  assert.equal(shaper.curve[MID], 0, '그래도 0점 값은 0');
+}
+
+console.log(`Drive 왜곡 곡선 시험 통과: 곡선 ${curveCount}개의 0점 값 0·단조, 바이어스 한도 ±0.3, Distortion 이득·THD, DriveEffect 곡선 재생성 조건, 수정 전 곡선의 결함 재현`);
