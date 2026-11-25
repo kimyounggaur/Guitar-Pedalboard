@@ -5,6 +5,8 @@
 //   ④ 값이 보이지 않는 조절기 0개(옛 16개)
 //   ⑤ 휴대폰: 노브 위를 세로로 쓸면 페이지가 스크롤되고 값은 그대로, 가로로 끌면 조절된다(오른쪽 = 증가), 더블탭은 기본값
 //   ⑥ 키보드(화살표·Home·End)와 더블클릭(기본값)은 그대로 된다 — 설계서 '키보드는 기존 range 유지'
+//   ⑧ 막힌 노브(Sync 를 켠 Delay 의 D.Time)는 끌어도 더블클릭해도 값이 그대로다
+//   ⑦ 끌기 껍데기 안의 모든 노브·페이더가 마우스 끌기로 값이 바뀐다(어느 페달 하나도 핸들러가 빠지지 않았다), 세로 페이더는 손가락으로도 끌린다
 // 터치는 CDP `Input.dispatchTouchEvent` 로 보낸다. 브라우저의 터치 동작 판정(touch-action)을 거치므로 CSS 가 잘못되면 여기서 드러난다.
 import type { Locator, Page } from '@playwright/test';
 import { openApp, PEDAL_COUNT } from '../helpers/app';
@@ -57,6 +59,9 @@ async function dragKnob(page: Page, knob: Locator, up: number, options: { shift?
   await page.mouse.up();
   if (options.shift) await page.keyboard.up('Shift');
 }
+
+/** 설계서: 200 px 를 끌면 전체 범위 */
+const KNOB_RANGE_PX = 200;
 
 function tolerance(spec: KnobSpec): number {
   return Math.max(spec.step, (spec.max - spec.min) * 0.01);
@@ -218,6 +223,50 @@ test.describe('E-20 노브 조작(마우스·키보드)', () => {
     await page.mouse.dblclick(x, y);
     expect(await valueOf(knob), '더블클릭하면 기본값으로 돌아온다').toBe(defaultValue);
   });
+
+  test('E-20 ⑧ 막힌 노브(Sync 를 켠 Delay 의 D.Time)는 끌어도 더블클릭해도 값이 그대로다', async ({ page }) => {
+    const delay = pedalGroup(page, 'Delay');
+    const knob = delay.locator('input[type="range"][aria-label="D.Time"]');
+    const sync = delay.locator('label.toggle-switch', { hasText: 'Sync' });
+    // Sync 중에는 D.Time 이 '박자에서 정해진 시간'을 보여 주므로, 막힌 노브가 저장된 값을 건드렸는지는 Sync 를 끄고 다시 읽어야 보인다.
+    // 기본값이 아닌 값으로 먼저 옮겨 둔다(더블클릭이 기본값으로 되돌렸다면 드러나도록).
+    await dragKnob(page, knob, 40);
+    const stored = await valueOf(knob);
+    expect(stored, '먼저 기본값에서 옮겨 둔다').toBeGreaterThan(280 + 50);
+    await sync.click();
+    await expect(knob, 'Sync 를 켜면 D.Time 이 막힌다').toBeDisabled();
+    await dragKnob(page, knob, 80);
+    await dragKnob(page, knob, -80, { shift: true });
+    const { x, y } = await centerOf(knob);
+    await page.mouse.dblclick(x, y);
+    await sync.click();
+    await expect(knob).toBeEnabled();
+    expect(await valueOf(knob), '막힌 동안 끌거나 더블클릭해도 저장된 시간이 바뀌지 않는다').toBe(stored);
+  });
+
+  test('E-20 ⑦ 끌기 껍데기 안의 모든 노브·페이더가 마우스 끌기로 값이 바뀐다(약 100개)', async ({ page }) => {
+    const knobs = page.locator('.pedal-board .pedal-card [data-knob-drag] input[type="range"]');
+    const count = await knobs.count();
+    expect(count, '끌기 껍데기 안의 조절기 수').toBeGreaterThan(40);
+    const stuck: string[] = [];
+    let skipped = 0;
+    for (let index = 0; index < count; index += 1) {
+      const knob = knobs.nth(index);
+      if (await knob.isDisabled()) { skipped += 1; continue; }
+      const info = await knob.evaluate((element: HTMLInputElement) => ({
+        min: Number(element.min), max: Number(element.max), step: Number(element.step) || 1, value: Number(element.value),
+        name: `${element.closest('.pedal-card')?.getAttribute('aria-label') ?? ''} ${element.getAttribute('aria-label') ?? ''}`,
+      }));
+      const range = info.max - info.min;
+      // 한 단계(step) 이상 움직이도록 충분히 끈다. 단계가 큰 조절기(Delay Mode 등)는 더 멀리 끈다.
+      const px = Math.min(150, Math.ceil((info.step / range) * KNOB_RANGE_PX) + 12);
+      const up = info.value <= info.min + range / 2 ? px : -px;
+      await dragKnob(page, knob, up);
+      if ((await valueOf(knob)) === info.value) stuck.push(`${info.name} (${info.value}, ${up} px)`);
+    }
+    test.info().annotations.push({ type: '시험한 조절기', description: `${count - skipped}개(막힌 ${skipped}개 제외)` });
+    expect(stuck, '끌어도 값이 바뀌지 않은 조절기').toEqual([]);
+  });
 });
 
 /** CDP 로 손가락 하나가 `from` 에서 `to` 까지 움직이게 한다(16 ms 마다 한 칸). */
@@ -311,9 +360,28 @@ test.describe('E-20 ⑤ 휴대폰(터치)', () => {
     await knob.focus();
     await page.keyboard.press('End');
     expect(await valueOf(knob)).not.toBe(defaultValue);
+    // 크롬은 두 번 누르면 `dblclick` 도 보내므로, 그 길을 막아야 포인터 이벤트로 만든 더블탭(iOS 사파리처럼 dblclick 이 안 오는 브라우저용)이 따로 시험된다.
+    await page.evaluate(() => document.addEventListener('dblclick', (event) => event.stopImmediatePropagation(), true));
     await page.touchscreen.tap(knobInfo.x, knobInfo.y);
     await page.touchscreen.tap(knobInfo.x, knobInfo.y);
     await expect.poll(() => valueOf(knob), { message: '더블탭하면 기본값으로 돌아온다' }).toBe(defaultValue);
+  });
+
+  test('E-20 ⑤-5 세로 페이더: 손가락을 위로 끌면 값이 늘고(위 = 증가) 페이지는 스크롤되지 않는다', async ({ page }) => {
+    const fader = page.locator('.pedal-board .pedal-card .vertical-fader-rail input[type="range"]').first();
+    await fader.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' }));
+    await page.waitForTimeout(500);
+    await fader.focus({ timeout: 2000 });
+    await page.keyboard.press('Home');
+    const start = await valueOf(fader);
+    const scrollBefore = await scrollTopOf(page);
+    const box = await fader.boundingBox();
+    if (!box) throw new Error('페이더의 위치를 알 수 없습니다');
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await swipe(page, { x, y: y + 20 }, { x: x + 2, y: y - 20 }, 8);
+    expect(await valueOf(fader), '손가락을 위로 40 px 끌었더니 값이 늘어야 한다').toBeGreaterThan(start);
+    expect(await scrollTopOf(page), '페이더를 끄는 동안 페이지가 스크롤되지 않는다').toBe(scrollBefore);
   });
 
   test('E-20 ⑤-4 포인터를 받는 곳은 끌기 껍데기: 노브는 pan-y, 세로 페이더는 none, 투명 range 는 포인터를 받지 않는다', async ({ page }) => {
