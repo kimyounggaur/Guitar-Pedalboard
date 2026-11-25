@@ -521,6 +521,32 @@ select,
   align-items: end;
 }
 
+.tuner-mode-switch {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.tuner-mode-switch button {
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  background: var(--panel-soft);
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.tuner-mode-switch button + button {
+  border-left: 1px solid var(--border);
+}
+
+.tuner-mode-switch button[aria-pressed='true'] {
+  background: #e8edf4;
+  color: #101418;
+}
+
 .tuner-preset-control {
   display: grid;
   flex: 1 1 100px;
@@ -539,6 +565,10 @@ select,
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 5px;
+}
+
+.tuner-targets[hidden] {
+  display: none;
 }
 
 .tuner-targets span {
@@ -572,12 +602,16 @@ select,
   min-width: 0;
 }
 
+.tuner-string {
+  color: #e8edf4;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
 .tuner-status-text {
-  overflow: hidden;
   color: var(--ink-muted);
   font-size: 0.76rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .tuner-reading.is-in-tune .tuner-status-text {

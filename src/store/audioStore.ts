@@ -169,7 +169,8 @@ function isSamePitch(left: PitchReading, right: PitchReading): boolean {
     left.cents === right.cents &&
     left.targetNote === right.targetNote &&
     left.stringNumber === right.stringNumber &&
-    left.octaveMismatch === right.octaveMismatch
+    left.octavesAbove === right.octavesAbove &&
+    left.checkString === right.checkString
   );
 }
 
