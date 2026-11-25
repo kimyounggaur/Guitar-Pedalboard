@@ -1959,3 +1959,21 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - P-16 의 ≤ 3.7 ms 는 이 구조(WaveShaper 오버샘플링 + 리미터 룩어헤드)로는 못 맞춘다. 더 줄이려면 직접 오버샘플러가 필요하다.
 
 ---
+
+## S3.8 음량 다시 맞추기와 청취 승인
+
+- 브랜치·병합: `refactor/s3-8-retrim` → `phase/3`. 커밋: 문서 커밋 하나(코드 변경 없음).
+- 해결 항목: R1-5 마무리(Phase 3 변화 반영), D6 확정. **다시 맞출 것이 없었고**(L-260) D6 확정과 청취 기록은 사람 몫이다(L-261·L-262).
+- 변경 파일: 새 `docs/listening/README.md`·`docs/listening/phase3-checklist.md`, 고침 `docs/REFACTOR_LOG.md`·`docs/refactoring/step-reports.md`·`docs/baseline/README.md`(P-05 행 한 줄). 코드·프로브·기준선·`factoryTrims.json` 은 바뀌지 않았다.
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| P-05: −20 ± 2 dBFS(또는 확정한 D6 값) | **충족** | 프리셋 40개가 각 목표에서 최대 0.54 / 0.97 dB(44.1 / 48 kHz) 안(`criteria` P-05.deviationDb.* ±2). 표준 목표 프리셋 −22.7(Acoustic Room, 피크 제한) ~ −19.0, 'Headphone Safe Start' −26 은 D6 예외. `npm run trims -- --check` 일치 |
+| 6.5 청취 기록 파일(`docs/listening/YYYY-MM-DD.md`) 작성 완료 | **✖ 사람 확인 필요** | 듣지 못했다. 빈 양식 `phase3-checklist.md`(설계서 6.5 표 + Phase 3 변화 + 음량 정렬 + 실기기)를 만들었다 |
+| D6 값 확정 | **✖ 사람 결정** | −20(Headphone Safe Start −26)을 그대로 두었다. 바꾸는 법은 `docs/listening/README.md` |
+
+- 검증(코드 변경이 없어 줄였다): `npm run trims -- --check` 종료 코드 0("factoryTrims.json 이 계산값과 같습니다"), `npx tsc -b --noEmit`·`npm run lint`·정규식 단언 목록 일치. 병합하는 트리의 코드·시험·기준선은 S3.7 의 전체 검증(npm test 50개·e2e 272개·전체 프로브 기준선 일치)을 받은 것과 같다.
+- 사람 확인 필요: `docs/listening/phase3-checklist.md` 전체. 특히 (1) Compressor 새 경로(`?ff=newCompressor`)의 승인과 수동 메이크업 필요 여부, (2) 하이 프렛에서 왜곡 페달 2배 vs 4배, (3) D6 −20 dBFS, (4) Drive 프리셋 Bias·Distortion 낮은 노브.
+- 남은 위험: 새 컴프레서를 기본으로 켜면 trim 을 다시 맞춰야 한다(L-260). 청취 기록이 없으면 설계서 7.3 의 v2.4.0 배포 조건('6.5 청취 전체')을 채우지 못한다.
+
+---
