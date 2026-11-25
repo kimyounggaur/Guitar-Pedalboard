@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { formatLatency } from '../audio/engine/latency';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { useAudioStore } from '../store/audioStore';
 import { DeviceSelector, InputChannelFields } from './DeviceSelector';
@@ -50,8 +51,8 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
   const deviceLabel = selectedDeviceId
     ? (devices.find((device) => device.deviceId === selectedDeviceId)?.label || '선택한 입력 장치')
     : '기본 입력 장치';
-  const latencyTotal = latency.base !== null && latency.output !== null ? latency.base + latency.output : null;
-  const latencyText = latency.sampleRate > 0 && latencyTotal !== null ? `${latencyTotal.toFixed(1)}ms` : '측정 대기';
+  const latencyDisplay = formatLatency(latency);
+  const latencyText = latencyDisplay.totalMs !== null ? `${latencyDisplay.totalMs.toFixed(1)}ms` : '측정 대기';
   useEffect(() => {
     void loadDevices();
     const mediaDevices = navigator.mediaDevices;
@@ -193,7 +194,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
           <div className="connect-status-channel">
             <InputChannelFields />
           </div>
-          <span className="connect-status-latency" title="출력 지연 추정(이펙터 처리 시간은 빠져 있습니다)">
+          <span className="connect-status-latency" title={latencyDisplay.items.map((item) => item.text).join(' · ') || '지연시간 측정 대기'}>
             <span className="connect-status-key">지연</span>
             <span className="connect-status-value">{latencyText}</span>
           </span>

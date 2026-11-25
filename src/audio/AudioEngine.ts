@@ -27,6 +27,15 @@ import type {
 } from './types';
 import type { ChannelDecision } from './engine/channelDecision';
 import { WorkletLoadError } from './engine/errors';
+import {
+  EMPTY_LATENCY,
+  limiterLatencyMs,
+  pedalsLatencyMs,
+  readInputLatency,
+  readOutputLatency,
+  readUnderrunEvents,
+  underrunsSince,
+} from './engine/latency';
 import type { GuardMode } from './engine/guardSpec';
 import { InputStage, type InputChannelMode } from './engine/InputStage';
 import { createLevelMeter, createOutputGuard, GUARD_ANALYSIS_INPUT } from './engine/monitorNodes';
@@ -114,6 +123,8 @@ export class AudioEngine {
   private tuningPreset: TuningPresetId = 'standard';
   private tuningReferenceHz = 440;
   private effects = new Map<string, EffectNode>();
+  /** 세션이 시작됐을 때 읽은 playbackStats.underrunEvents. 화면의 끊김 수는 이 값 이후의 증가분이다(설계서 4.12). */
+  private underrunBaseline: number | null = null;
   private cabImpulses = new Map<string, { name: string; buffer: AudioBuffer }>();
   private cabIrRequests = new Map<string, number>();
   private chainConnections = new Map<string, ChainConnection>();
@@ -331,6 +342,7 @@ export class AudioEngine {
       if (!stream.getAudioTracks().some((track) => track.readyState === 'live')) {
         throw new Error('입력 장치 연결이 끊어졌습니다. 장치를 다시 연결해 주세요.');
       }
+      this.markSessionStart(context);
     } catch (error) {
       if (stream && stream !== this.stream) {
         stream.getTracks().forEach((track) => track.stop());
@@ -376,6 +388,7 @@ export class AudioEngine {
       this.rebuildChain();
       await audioElement.play();
       this.assertCurrentSession(context, generation);
+      this.markSessionStart(context);
     } catch (error) {
       if (audioElement && audioElement !== this.audioElement) {
         audioElement.pause();
@@ -721,6 +734,7 @@ export class AudioEngine {
     this.inputEndedCleanup = null;
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
+    this.underrunBaseline = null;
 
     // 세션마다 새 <audio> 요소를 쓴다(createMediaElementSource 는 요소마다 한 번만 부를 수 있다). 옛 요소는 자원을 바로 놓는다.
     if (this.audioElement) {
@@ -806,27 +820,55 @@ export class AudioEngine {
     this.effects.get(pedal.id)?.update(pedal);
   }
 
-  readAudioGlitchCount(): number | null {
-    if (!this.context || this.context.state === 'closed') return null;
-    try {
-      const stats = (this.context as AudioContext & { playbackStats?: { underrunEvents?: unknown } }).playbackStats;
-      const count = stats?.underrunEvents;
-      return typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? count : null;
-    } catch { return null; }
+  /** 소리가 나오기 시작한 순간의 끊김 누적값을 기준선으로 적는다. 시작하는 동안 생긴 끊김(워클릿 로드 등)은 세지 않는다. */
+  private markSessionStart(context: AudioContext): void {
+    this.underrunBaseline = readUnderrunEvents(context);
   }
 
-  readLatency(): LatencyReading {
-    if (!this.context || this.context.state === 'closed') {
-      return { base: null, output: null, input: null, sampleRate: 0 };
-    }
-    const validMs = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value * 1000 : null;
-    let input: number | null = null;
-    try { input = validMs((this.stream?.getAudioTracks?.()[0]?.getSettings?.() as (MediaTrackSettings & { latency?: number }) | undefined)?.latency); } catch { /* device does not expose latency */ }
+  /**
+   * 세션이 시작된 뒤 출력 버퍼가 모자라 소리가 끊긴 횟수(설계서 4.12, D11). 브라우저의 context.playbackStats.underrunEvents 의
+   * 세션 시작 대비 증가분이다. 이 브라우저가 알려 주지 않으면 null('측정 불가'). 브라우저가 1초마다 갱신하므로 호출하는 쪽도 1초마다 읽는다.
+   */
+  readUnderrunCount(): number | null {
+    return underrunsSince(readUnderrunEvents(this.context), this.underrunBaseline);
+  }
+
+  /**
+   * 처리 지연의 재료(ms): 켜진 페달들의 고정 지연 합과 리미터 룩어헤드. 브라우저가 알려 주는 값이 아니라 페달을 켜고 끌 때마다 바뀌므로
+   * 호출하는 쪽이 매번 읽어도 된다(싸다). 컨텍스트가 없으면 sampleRate 0.
+   */
+  readProcessingLatency(): Pick<LatencyReading, 'sampleRate' | 'pedals' | 'limiter'> {
+    const context = this.context;
+    if (!context || context.state === 'closed') return { sampleRate: 0, pedals: 0, limiter: 0 };
     return {
-      base: validMs(this.context.baseLatency),
-      output: validMs(this.context.outputLatency),
-      input,
-      sampleRate: this.context.sampleRate,
+      sampleRate: context.sampleRate,
+      pedals: pedalsLatencyMs(this.effects.values()),
+      limiter: limiterLatencyMs(context.sampleRate),
+    };
+  }
+
+  /** 입력·처리·출력 지연의 재료(ms). 합계와 '미포함' 판정은 summarizeLatency 가 한다(설계서 4.6). */
+  readLatency(): LatencyReading {
+    const context = this.context;
+    if (!context || context.state === 'closed') return EMPTY_LATENCY;
+    const processing = this.readProcessingLatency();
+    const inputKind = this.audioElement ? 'file' : 'device';
+    let input = null;
+    if (inputKind === 'device') {
+      let track: MediaStreamTrack | undefined;
+      try { track = this.stream?.getAudioTracks?.()[0]; } catch { /* 장치가 빠졌다 */ }
+      input = readInputLatency(track);
+    }
+    const output = readOutputLatency(context);
+    return {
+      sampleRate: processing.sampleRate,
+      inputKind,
+      input: input?.ms ?? null,
+      inputSource: input?.source ?? null,
+      pedals: processing.pedals,
+      limiter: processing.limiter,
+      outputBase: output.base,
+      outputDevice: output.device,
     };
   }
 

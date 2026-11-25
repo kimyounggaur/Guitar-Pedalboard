@@ -1,3 +1,4 @@
+import { fixedLatencySeconds } from '../engine/latency';
 import { BaseEffect } from './BaseEffect';
 import type { CrunchParams, PedalState } from '../types';
 import { clamp } from '../utils/db';
@@ -45,6 +46,11 @@ export class CrunchEffect extends BaseEffect {
     this.volumeGain.connect(this.effectOutput);
 
     this.update(pedal);
+  }
+
+  /** WaveShaper 2배 오버샘플링 필터가 더하는 지연. P-16 이 잰 값이다(params/latency.json). */
+  protected override processingLatencySeconds(): number {
+    return fixedLatencySeconds('oversample2x', this.context.sampleRate);
   }
 
   override update(pedal: PedalState): void {

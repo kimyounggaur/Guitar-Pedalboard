@@ -5,14 +5,10 @@ import { smoothParam } from '../utils/smoothing';
 interface NoiseGateMessage {
   type?: unknown;
   state?: unknown;
-  glitchCount?: unknown;
-  missedFrames?: unknown;
 }
 
 export class NoiseGateEffect extends BaseEffect {
   private readonly gate: AudioWorkletNode;
-  private glitchCount = 0;
-  private missedFrames = 0;
 
   constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, pedal);
@@ -37,18 +33,6 @@ export class NoiseGateEffect extends BaseEffect {
       const message = event.data as NoiseGateMessage;
 
       if (
-        message.type === 'glitch-report' &&
-        typeof message.glitchCount === 'number' &&
-        Number.isFinite(message.glitchCount)
-      ) {
-        this.glitchCount = Math.max(0, Math.floor(message.glitchCount));
-        if (typeof message.missedFrames === 'number' && Number.isFinite(message.missedFrames)) {
-          this.missedFrames = Math.max(0, Math.floor(message.missedFrames));
-        }
-        return;
-      }
-
-      if (
         message.type !== 'gate-state' ||
         (message.state !== 'Open' && message.state !== 'Closing' && message.state !== 'Closed')
       ) {
@@ -68,10 +52,6 @@ export class NoiseGateEffect extends BaseEffect {
     this.effectInput.connect(this.gate);
     this.gate.connect(this.effectOutput);
     this.update(pedal);
-  }
-
-  readGlitchCount(): number {
-    return this.glitchCount;
   }
 
   override update(pedal: PedalState): void {

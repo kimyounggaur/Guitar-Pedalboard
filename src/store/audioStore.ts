@@ -9,6 +9,7 @@ import {
 } from '../audio/engine/AudioSession';
 import type { ChannelDecision } from '../audio/engine/channelDecision';
 import { audioErrorMessage, connectErrorMessage, shouldRetryWithDefaultInput } from '../audio/engine/errors';
+import { EMPTY_LATENCY } from '../audio/engine/latency';
 import {
   isChannelDecision,
   isInputChannelMode,
@@ -113,7 +114,10 @@ const silentLevel: LevelReading = {
   clipHoldUntil: 0,
 };
 const emptyPitch: PitchReading = { frequency: null, note: null, cents: 0 };
-const emptyLatency: LatencyReading = { base: null, output: null, input: null, sampleRate: 0 };
+const emptyLatency: LatencyReading = EMPTY_LATENCY;
+/** 지연·끊김 수를 다시 읽는 간격(ms). 브라우저가 playbackStats 를 1초마다 갱신한다. */
+const SLOW_READ_INTERVAL_MS = 1000;
+let lastSlowReadAt = Number.NEGATIVE_INFINITY;
 
 
 function clamp(value: number, min: number, max: number): number {
@@ -171,10 +175,14 @@ function isSamePitch(left: PitchReading, right: PitchReading): boolean {
 
 function isSameLatency(left: LatencyReading, right: LatencyReading): boolean {
   return (
-    left.base === right.base &&
-    left.output === right.output &&
+    left.sampleRate === right.sampleRate &&
+    left.inputKind === right.inputKind &&
     left.input === right.input &&
-    left.sampleRate === right.sampleRate
+    left.inputSource === right.inputSource &&
+    left.pedals === right.pedals &&
+    left.limiter === right.limiter &&
+    left.outputBase === right.outputBase &&
+    left.outputDevice === right.outputDevice
   );
 }
 
@@ -588,7 +596,8 @@ interface AudioStore {
   inputLevel: LevelReading;
   outputLevel: LevelReading;
   activeEffectCount: number;
-  audioGlitchCount: number | null;
+  /** 세션 시작 뒤 출력 버퍼 부족으로 끊긴 횟수. null 이면 이 브라우저가 알려 주지 않는다('측정 불가'). */
+  underrunCount: number | null;
   pitch: PitchReading;
   isTunerActive: boolean;
   tuningPreset: TuningPresetId;
@@ -670,7 +679,7 @@ function resetReadings() {
     inputLevel: silentLevel,
     outputLevel: silentLevel,
     activeEffectCount: 0,
-    audioGlitchCount: null,
+    underrunCount: null,
     pitch: emptyPitch,
     latency: emptyLatency,
     fileCurrentTime: 0,
@@ -806,7 +815,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   inputLevel: silentLevel,
   outputLevel: silentLevel,
   activeEffectCount: 0,
-  audioGlitchCount: null,
+  underrunCount: null,
   pitch: emptyPitch,
   isTunerActive: false,
   tuningPreset: 'standard',
@@ -1347,12 +1356,18 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     const engine = AudioEngine.getInstance();
     const state = get();
     const pitch = state.isTunerActive ? engine.readPitch() : emptyPitch;
-    const latency = engine.readLatency();
     const playback = engine.readFilePlayback();
     const activeEffectCount = usePedalStore
       .getState()
       .pedals.filter((pedal) => pedal.active).length;
-    const audioGlitchCount = engine.readAudioGlitchCount();
+    // 입력·출력 지연과 끊김 수는 브라우저가 1초마다 갱신하는 값이라 1초마다만 다시 읽는다(설계서 4.12). 세션이 막 시작돼 아직 못 읽었으면 바로 읽는다.
+    // 처리 지연(켜진 페달 + 리미터)은 페달을 켜고 끌 때, 그래프가 만들어질 때 바뀌므로 매번 읽는다(싸다).
+    const now = performance.now();
+    const processing = engine.readProcessingLatency();
+    const rereadSlow = state.latency.sampleRate === 0 || state.latency.sampleRate !== processing.sampleRate || now - lastSlowReadAt >= SLOW_READ_INTERVAL_MS;
+    if (rereadSlow) lastSlowReadAt = now;
+    const latency = rereadSlow ? engine.readLatency() : { ...state.latency, pedals: processing.pedals, limiter: processing.limiter };
+    const underrunCount = rereadSlow ? engine.readUnderrunCount() : state.underrunCount;
 
     set((current) => ({
       inputLevel,
@@ -1363,7 +1378,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       fileDuration: playback.duration,
       isFilePaused: playback.isPaused,
       activeEffectCount,
-      audioGlitchCount,
+      underrunCount,
     }));
   },
 }));
