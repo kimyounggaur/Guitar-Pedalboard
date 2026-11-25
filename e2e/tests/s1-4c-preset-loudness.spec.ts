@@ -55,8 +55,7 @@ test.describe('S1.4c 프리셋 음량 보정', () => {
     await expect(value).toContainText(label(trimOf(FUNK_COMP)));
     expect(trimOf(FUNK_COMP)).toBeGreaterThan(0);
 
-    // '기본 페달 설정' 은 window.confirm 으로 한 번 묻는다. 확인을 누른다.
-    page.once('dialog', (dialog) => void dialog.accept());
+    // '기본 페달 설정' 은 S2.8 부터 묻지 않고 바로 되돌린다(대신 '실행 취소' 알림이 뜬다).
     await page.locator('.preset-reset-button').click();
     await expect(value).toContainText('0.0 dB');
   });

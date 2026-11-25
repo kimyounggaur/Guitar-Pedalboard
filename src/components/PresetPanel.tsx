@@ -1,9 +1,18 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
+import type { PedalState } from '../audio/types';
 import { formatTrimDb } from '../audio/offline/loudnessSpec';
 import { safeStorage, STORAGE_KEYS, type StorageKey } from '../persistence';
-import { usePedalStore } from '../store/pedalStore';
+import { clonePedals, usePedalStore } from '../store/pedalStore';
 import { formatImportSummary, type ConflictResolution, type ImportPlan } from '../persistence/exportFormat';
+import { idsAfter, reinsertId } from '../persistence/presetUndo';
+import {
+  captureChainSnapshot,
+  isDefaultChain,
+  resetToDefaultChain,
+  restoreChainSnapshot,
+} from '../store/chainActions';
+import { showToast } from '../store/toastStore';
 import {
   applyPresetPedals,
   presetLibraries,
@@ -12,9 +21,12 @@ import {
   type PresetListItem,
 } from '../store/presetStore';
 import { ImportConflictDialog, PasteImportDialog } from './PresetImportDialogs';
+import { SameNamePresetDialog } from './PresetSaveDialog';
 
 const FAVORITES_KEY = STORAGE_KEYS.presetFavorites;
 const RECENTS_KEY = STORAGE_KEYS.presetRecents;
+/** 삭제·기본 설정 되돌리기 토스트가 떠 있는 시간(설계서 S2.8: 8초) */
+const UNDO_TOAST_MS = 8000;
 
 type LibraryFilter = {
   id: string;
@@ -50,6 +62,8 @@ export function PresetPanel() {
   const [pasteOpen, setPasteOpen] = useState(false);
   /** 충돌을 하나씩 묻는 중인 가져오기. `resolutions` 는 지금까지 고른 것(충돌 순서대로). */
   const [pendingImport, setPendingImport] = useState<{ plan: ImportPlan; resolutions: ConflictResolution[] } | null>(null);
+  /** 같은 이름이 있어 묻는 중인 저장. 누른 순간의 체인·음량 보정을 들고 있다(대화상자가 열린 사이에 바뀌어도 누른 때의 것을 저장한다). */
+  const [pendingSave, setPendingSave] = useState<{ name: string; pedals: PedalState[]; trimDb: number } | null>(null);
   const [activeLibraryId, setActiveLibraryId] = useState('all');
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -61,10 +75,10 @@ export function PresetPanel() {
   const pedals = usePedalStore((state) => state.pedals);
   const presetTrimDb = usePedalStore((state) => state.presetTrimDb);
   const setPresetTrimDb = usePedalStore((state) => state.setPresetTrimDb);
-  const resetPedalOrder = usePedalStore((state) => state.resetPedalOrder);
   const presets = usePresetStore((state) => state.presets);
   const savePreset = usePresetStore((state) => state.savePreset);
   const deletePreset = usePresetStore((state) => state.deletePreset);
+  const restoreDeletedPreset = usePresetStore((state) => state.restoreDeletedPreset);
   const exportPresets = usePresetStore((state) => state.exportPresets);
   const planImport = usePresetStore((state) => state.planImport);
   const commitImport = usePresetStore((state) => state.commitImport);
@@ -169,12 +183,41 @@ export function PresetPanel() {
     setMessage(`${slot} 슬롯을 활성화했습니다.`);
   }, [activateSlot]);
 
-  const saveCurrentPreset = () => {
-    if (!name.trim()) { setMessage('프리셋 이름을 입력해 주세요.'); return; }
-    if (presets.some((preset) => !preset.isFactory && preset.name === name.trim()) && !window.confirm('같은 이름의 프리셋이 있습니다. 덮어쓰시겠습니까?')) return;
-    savePreset(name, pedals);
+  const finishSave = () => {
     setActiveLibraryId('user');
     setMessage('프리셋을 저장했습니다.');
+  };
+
+  // 같은 이름이 있으면 스토어가 저장하지 않고 'exists' 를 돌려 준다(덮어쓰려면 `overwrite: true`). 그때 대화상자로 묻는다(S2.8).
+  const saveCurrentPreset = () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) { setMessage('프리셋 이름을 입력해 주세요.'); return; }
+    const trimDb = presetTrimDb;
+    const snapshot = clonePedals(pedals);
+    if (savePreset(trimmedName, snapshot, trimDb) === 'exists') {
+      setPendingSave({ name: trimmedName, pedals: snapshot, trimDb });
+      return;
+    }
+    finishSave();
+  };
+
+  const overwritePendingSave = () => {
+    if (!pendingSave) return;
+    savePreset(pendingSave.name, pendingSave.pedals, pendingSave.trimDb, { overwrite: true });
+    setPendingSave(null);
+    finishSave();
+  };
+
+  const savePendingAs = (newName: string) => {
+    if (!pendingSave) return;
+    const result = savePreset(newName, pendingSave.pedals, pendingSave.trimDb);
+    setPendingSave(null);
+    if (result !== 'saved') {
+      setMessage('같은 이름의 프리셋이 생겨 저장하지 못했습니다. 다시 저장해 주세요.');
+      return;
+    }
+    setName(newName);
+    finishSave();
   };
 
   // '음량 맞추기': 지금 체인에 기준 신호(REF-PC)를 4초 흘려 보내 평균 음량과 피크를 재고, 목표(−20 dBFS)에 맞는 보정값을 정한다.
@@ -205,29 +248,89 @@ export function PresetPanel() {
     }
   };
 
-  const removePreset = useCallback((presetId: string) => {
-    const preset = presets.find((item) => item.id === presetId);
-    if (!preset || !window.confirm(`'${preset.name}' 프리셋을 삭제하시겠습니까?`)) return;
-    deletePreset(presetId);
-    setFavoriteIds((currentIds) => {
-      const nextIds = currentIds.filter((id) => id !== presetId);
-      writeStringList(FAVORITES_KEY, nextIds);
-      return nextIds;
-    });
-    setRecentIds((currentIds) => {
-      const nextIds = currentIds.filter((id) => id !== presetId);
-      writeStringList(RECENTS_KEY, nextIds);
-      return nextIds;
-    });
-  }, [deletePreset, presets]);
+  /**
+   * 즐겨찾기·최근 목록에서 `presetId` 를 빼고, 되돌릴 때 같은 자리에 넣을 기록을 돌려 준다(목록에 없었으면 null).
+   * 저장소를 기준으로 읽고 쓴다 — 되돌리기는 토스트에서 불리므로 그때 이 패널이 사라져 있을 수 있다.
+   */
+  const takeOutOfList = useCallback((key: StorageKey, setIds: (ids: string[]) => void, presetId: string): string[] | null => {
+    const ids = readStringList(key);
+    if (!ids.includes(presetId)) return null;
+    const following = idsAfter(ids, presetId);
+    const next = ids.filter((id) => id !== presetId);
+    writeStringList(key, next);
+    setIds(next);
+    return following;
+  }, []);
 
+  const putBackInList = useCallback((key: StorageKey, setIds: (ids: string[]) => void, presetId: string, following: string[] | null) => {
+    if (following === null) return;
+    const next = reinsertId(readStringList(key), presetId, following);
+    writeStringList(key, next);
+    setIds(next);
+  }, []);
+
+  // 내 프리셋 삭제: 확인을 묻지 않고 바로 지우고, 8초 동안 '실행 취소' 를 둔다(S2.8). 지움은 저장소에 바로 반영돼
+  // 창을 닫아도 그대로이고, 되돌리기는 원래 자리에 다시 끼운다(즐겨찾기·최근 목록의 자리도 함께).
+  const removePreset = useCallback((presetId: string) => {
+    const deleted = deletePreset(presetId);
+    if (!deleted) return;
+    const favoriteFollowing = takeOutOfList(FAVORITES_KEY, setFavoriteIds, presetId);
+    const recentFollowing = takeOutOfList(RECENTS_KEY, setRecentIds, presetId);
+
+    showToast({
+      message: `프리셋을 삭제했습니다: ${deleted.preset.name}`,
+      kind: 'info',
+      key: `preset-deleted:${presetId}`,
+      durationMs: UNDO_TOAST_MS,
+      action: {
+        label: '실행 취소',
+        onAction: () => {
+          const result = restoreDeletedPreset(deleted);
+          if (!result.restored || !result.preset) {
+            showToast({ message: '되돌리지 못했습니다. 같은 프리셋이 이미 있습니다.', kind: 'warning', key: `preset-restore-failed:${presetId}` });
+            return;
+          }
+          putBackInList(FAVORITES_KEY, setFavoriteIds, presetId, favoriteFollowing);
+          putBackInList(RECENTS_KEY, setRecentIds, presetId, recentFollowing);
+          setMessage(
+            result.renamed
+              ? `같은 이름의 프리셋이 있어 '${result.preset.name}' 이름으로 되돌렸습니다.`
+              : `'${result.preset.name}' 프리셋을 되돌렸습니다.`,
+          );
+        },
+      },
+    });
+  }, [deletePreset, putBackInList, restoreDeletedPreset, takeOutOfList]);
+
+  // 기본 페달 설정: 확인을 묻지 않고 바로 되돌리고, 직전 상태(노브·켜짐·순서·음량 보정·불러 둔 IR)를 기억해 8초 동안 '실행 취소' 를 둔다(S2.8).
   const reset = () => {
-    if (!window.confirm('모든 페달 설정을 기본값으로 되돌리시겠습니까?')) return;
-    AudioEngine.getInstance().clearAllCabinetIrs();
-    resetPedalOrder();
-    AudioEngine.getInstance().rebuildChain();
+    const before = captureChainSnapshot();
+    if (isDefaultChain(before)) {
+      setMessage('이미 기본 페달 설정입니다.');
+      return;
+    }
+    const previousPresetId = activePresetId;
+    resetToDefaultChain();
     setActivePresetId(null);
     setMessage('기본 페달 설정으로 되돌렸습니다.');
+    showToast({
+      message: '모든 노브를 처음 값으로 되돌렸습니다',
+      kind: 'info',
+      key: 'chain-reset',
+      durationMs: UNDO_TOAST_MS,
+      action: {
+        label: '실행 취소',
+        onAction: () => {
+          const { cabinetIrsLost } = restoreChainSnapshot(before);
+          setActivePresetId(previousPresetId);
+          setMessage(
+            cabinetIrsLost > 0
+              ? `기본 페달 설정 전으로 되돌렸습니다. 불러 둔 IR 파일 ${cabinetIrsLost}개는 오디오를 다시 시작해서 사라졌으니 다시 불러와 주세요.`
+              : '기본 페달 설정 전으로 되돌렸습니다.',
+          );
+        },
+      },
+    });
   };
 
   const exportJson = () => {
@@ -410,6 +513,15 @@ export function PresetPanel() {
           </div>
           <button type="button" className="secondary-button" onClick={() => setPasteOpen(true)}>텍스트로 붙여넣기</button>
           {pasteOpen ? <PasteImportDialog onSubmit={submitPastedJson} onClose={() => setPasteOpen(false)} /> : null}
+          {pendingSave ? (
+            <SameNamePresetDialog
+              name={pendingSave.name}
+              takenNames={new Set(presets.filter((preset) => !preset.isFactory).map((preset) => preset.name))}
+              onOverwrite={overwritePendingSave}
+              onSaveAs={savePendingAs}
+              onCancel={() => setPendingSave(null)}
+            />
+          ) : null}
           {pendingImport ? (
             <ImportConflictDialog
               conflict={pendingImport.plan.conflicts[pendingImport.resolutions.length]}

@@ -69,6 +69,12 @@ const SILENCE_TIME_CONSTANT_SECONDS = 0.003;
 /** 램프가 끝나도록 컨텍스트를 닫기 전에 기다리는 시간(ms). */
 const SILENCE_SETTLE_MS = 24;
 
+/** 기억해 둔 캐비닛 IR(S2.8). 같은 세션(`generation`) 안에서만 되돌릴 수 있다. */
+export interface CabinetIrSnapshot {
+  generation: number;
+  entries: { pedalId: string; name: string; buffer: AudioBuffer }[];
+}
+
 export class AudioEngine {
   private static instance: AudioEngine | null = null;
 
@@ -540,6 +546,36 @@ export class AudioEngine {
     });
     this.cabImpulses.clear();
     window.dispatchEvent(new Event('cab-ir-change'));
+  }
+
+  /**
+   * 지금 불러 둔 캐비닛 IR 들을 기억해 둔다('기본 페달 설정' 을 되돌릴 수 있게, S2.8).
+   * IR 은 이 세션의 오디오 컨텍스트가 디코딩한 버퍼라 세션이 끝나면 쓸 수 없다 — 그래서 세션 번호를 함께 적는다.
+   */
+  snapshotCabinetIrs(): CabinetIrSnapshot {
+    return {
+      generation: this.sessionGeneration,
+      entries: [...this.cabImpulses].map(([pedalId, impulse]) => ({ pedalId, name: impulse.name, buffer: impulse.buffer })),
+    };
+  }
+
+  /**
+   * `snapshotCabinetIrs` 로 기억한 IR 들을 되돌린다. 그 사이 세션이 바뀌었으면(정지·다시 연결) 버퍼가 낡았으므로 하나도 되돌리지 않는다.
+   * 지금도 같은 페달에 다른 IR 이 불려 있으면 그것을 지키고 건드리지 않는다. 되돌린 개수를 돌려 준다.
+   * 소리에 닿으려면 부르는 쪽이 이어서 `rebuildChain()` 을 불러야 한다(새로 만드는 캐비닛이 이 IR 을 읽는다).
+   */
+  restoreCabinetIrs(snapshot: CabinetIrSnapshot): number {
+    if (snapshot.generation !== this.sessionGeneration) return 0;
+    const context = this.context;
+    if (!context || context.state === 'closed') return 0;
+    let restored = 0;
+    for (const entry of snapshot.entries) {
+      if (this.cabImpulses.has(entry.pedalId)) continue;
+      this.cabImpulses.set(entry.pedalId, { name: entry.name, buffer: entry.buffer });
+      restored += 1;
+    }
+    if (restored > 0) window.dispatchEvent(new Event('cab-ir-change'));
+    return restored;
   }
 
   /**

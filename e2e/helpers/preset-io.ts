@@ -19,7 +19,7 @@ export async function libraryCount(page: Page, name: '전체 프리셋' | '내 �
   return Number(await row.locator('em').innerText());
 }
 
-/** 지금 보드를 이 이름으로 저장한다(같은 이름을 두 번 저장하면 확인 창이 뜨므로 서로 다른 이름만 쓴다). */
+/** 지금 보드를 이 이름으로 저장한다(같은 이름을 두 번 저장하면 '같은 이름' 대화상자가 뜨므로 서로 다른 이름만 쓴다). */
 export async function saveUserPreset(page: Page, name: string): Promise<void> {
   await page.getByLabel('프리셋 이름', { exact: true }).fill(name);
   await page.getByRole('button', { name: '저장', exact: true }).click();

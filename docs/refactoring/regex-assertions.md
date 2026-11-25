@@ -201,29 +201,29 @@
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
 |---:|---|---|---|
-| 17 | match | `presetStoreSource` | `/slotA: PedalState\[\] \\| null/` |
-| 18 | match | `presetStoreSource` | `/slotB: PedalState\[\] \\| null/` |
-| 19 | match | `presetStoreSource` | `/activeSlot: PresetComparisonSlot/` |
-| 20 | match | `presetStoreSource` | `/captureCurrentToSlot: \(slot: PresetComparisonSlot\) => void/` |
-| 21 | match | `presetStoreSource` | `/activateSlot: \(slot: PresetComparisonSlot\) => boolean/` |
-| 22 | match | `presetStoreSource` | `/const capturedPedals = clonePedals\(usePedalStore\.getState\(\)\.peda` |
-| 27 | match | `activateSource` | `/applyPresetPedals\(storedPedals, storedTrimDb\)/, '슬롯을 켜면 슬롯에 담긴 음량 보` |
-| 28 | match | `presetStoreSource` | `/clearAllCabinetIrs\(\` |
-| 29 | match | `panelSource` | `/applyPresetPedals\(preset\.pedals, preset\.trimDb\)/` |
-| 30 | match | `panelSource` | `/clearAllCabinetIrs\(\` |
-| 32 | match | `midiSource` | `/applyPresetPedals\(preset\.pedals, preset\.trimDb\)/` |
-| 35 | match | `panelSource` | `/className="preset-ab-buttons"/` |
-| 43 | match | `abButtonsSource` | `/disabled=\{!slotA\}/` |
-| 44 | match | `abButtonsSource` | `/disabled=\{!slotB\}/` |
-| 46 | match | `panelSource` | `/<p role="status" aria-live="polite">/` |
-| 48 | match | `shortcutRoutingSource` | `/key === 't'/` |
-| 49 | match | `shortcutRoutingSource` | `/key === 'a' \\|\\| key === 'b'/` |
-| 50 | match | `shortcutRoutingSource` | `/slot: key === 'a' \? 'A' : 'B'/` |
-| 51 | match | `shortcutRoutingSource` | `/event\.repeat/` |
-| 52 | match | `shortcutRoutingSource` | `/event\.isComposing/` |
-| 53 | match | `shortcutRoutingSource` | `/event\.(?:ctrlKey\|metaKey\|altKey\|shiftKey)/` |
-| 54 | match | `keyboardSource` | `/input'[\s\S]*select'[\s\S]*textarea'[\s\S]*contenteditable/` |
-| 55 | match | `keyboardSource` | `/activateSlot\(command\.slot\)/` |
+| 18 | match | `presetStoreSource` | `/slotA: PedalState\[\] \\| null/` |
+| 19 | match | `presetStoreSource` | `/slotB: PedalState\[\] \\| null/` |
+| 20 | match | `presetStoreSource` | `/activeSlot: PresetComparisonSlot/` |
+| 21 | match | `presetStoreSource` | `/captureCurrentToSlot: \(slot: PresetComparisonSlot\) => void/` |
+| 22 | match | `presetStoreSource` | `/activateSlot: \(slot: PresetComparisonSlot\) => boolean/` |
+| 23 | match | `presetStoreSource` | `/const capturedPedals = clonePedals\(usePedalStore\.getState\(\)\.peda` |
+| 28 | match | `activateSource` | `/applyPresetPedals\(storedPedals, storedTrimDb\)/, '슬롯을 켜면 슬롯에 담긴 음량 보` |
+| 29 | match | `presetStoreSource` | `/clearAllCabinetIrs\(\` |
+| 30 | match | `panelSource` | `/applyPresetPedals\(preset\.pedals, preset\.trimDb\)/` |
+| 32 | match | `chainActionsSource` | `/clearAllCabinetIrs\(\` |
+| 35 | match | `midiSource` | `/applyPresetPedals\(preset\.pedals, preset\.trimDb\)/` |
+| 38 | match | `panelSource` | `/className="preset-ab-buttons"/` |
+| 46 | match | `abButtonsSource` | `/disabled=\{!slotA\}/` |
+| 47 | match | `abButtonsSource` | `/disabled=\{!slotB\}/` |
+| 49 | match | `panelSource` | `/<p role="status" aria-live="polite">/` |
+| 51 | match | `shortcutRoutingSource` | `/key === 't'/` |
+| 52 | match | `shortcutRoutingSource` | `/key === 'a' \\|\\| key === 'b'/` |
+| 53 | match | `shortcutRoutingSource` | `/slot: key === 'a' \? 'A' : 'B'/` |
+| 54 | match | `shortcutRoutingSource` | `/event\.repeat/` |
+| 55 | match | `shortcutRoutingSource` | `/event\.isComposing/` |
+| 56 | match | `shortcutRoutingSource` | `/event\.(?:ctrlKey\|metaKey\|altKey\|shiftKey)/` |
+| 57 | match | `keyboardSource` | `/input'[\s\S]*select'[\s\S]*textarea'[\s\S]*contenteditable/` |
+| 58 | match | `keyboardSource` | `/activateSlot\(command\.slot\)/` |
 
 ### pwa-regression.mjs
 

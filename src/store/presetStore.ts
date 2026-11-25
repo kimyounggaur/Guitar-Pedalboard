@@ -14,6 +14,7 @@ import {
   type ImportResult,
 } from '../persistence/exportFormat';
 import { normalizeTrimField } from '../persistence/legacy/presetsV1';
+import { keysAfter, reinsertByKey, uniqueRestoredName } from '../persistence/presetUndo';
 import { findFactoryCopies } from '../persistence/schema';
 import { createId } from '../presets/createId';
 import type { PedalParamValue, PedalState, Preset } from '../audio/types';
@@ -32,6 +33,26 @@ export type PresetListItem = Preset & {
 };
 
 export type PresetComparisonSlot = 'A' | 'B';
+
+/** 지운 내 프리셋과 지우기 전의 자리. `restoreDeletedPreset` 가 이것으로 되돌린다(S2.8). */
+export interface DeletedPreset {
+  preset: Preset;
+  /** 지우기 전에 이 프리셋 뒤에 있던 내 프리셋의 id 들(앞에서부터) */
+  followingIds: string[];
+}
+
+export interface RestorePresetResult {
+  restored: boolean;
+  /** 되돌린 프리셋(이름이 바뀌었을 수 있다). 되돌리지 못했으면 없다. */
+  preset?: Preset;
+  /** 그 사이 같은 이름이 쓰여서 '(복원)' 이름으로 되돌렸다 */
+  renamed: boolean;
+  /** 되돌리지 못한 이유: 같은 id 의 프리셋이 이미 있다 */
+  reason?: 'exists';
+}
+
+/** 'saved' 저장함, 'exists' 같은 이름이 있어 저장하지 않음(덮어쓰려면 `overwrite: true`), 'invalid' 이름이 비어 있음 */
+export type SavePresetResult = 'saved' | 'exists' | 'invalid';
 
 type PedalOverrides = Parameters<typeof withPedalOverrides>[1];
 type PresetOverrides = Record<string, PedalOverrides>;
@@ -392,9 +413,16 @@ interface PresetStore {
   slotATrimDb: number;
   slotBTrimDb: number;
   activeSlot: PresetComparisonSlot;
-  /** `trimDb` 를 주지 않으면 지금 쓰는 음량 보정을 함께 저장한다. */
-  savePreset: (name: string, pedals: PedalState[], trimDb?: number) => void;
-  deletePreset: (id: string) => void;
+  /**
+   * `trimDb` 를 주지 않으면 지금 쓰는 음량 보정을 함께 저장한다.
+   * 같은 이름의 내 프리셋이 이미 있으면 `options.overwrite === true` 일 때만 덮어쓰고, 아니면 아무것도 바꾸지 않고 'exists' 를 돌려 준다 —
+   * 묻지 않고 덮어쓰는 길이 없게 하려는 것이다(S2.8).
+   */
+  savePreset: (name: string, pedals: PedalState[], trimDb?: number, options?: { overwrite?: boolean }) => SavePresetResult;
+  /** 내 프리셋을 지우고, 되돌릴 수 있게 지운 것과 자리를 돌려 준다. 없는 id 이거나 팩토리 프리셋이면 아무것도 하지 않고 null. */
+  deletePreset: (id: string) => DeletedPreset | null;
+  /** `deletePreset` 이 돌려 준 기록으로 지운 프리셋을 원래 자리에 되돌린다(S2.8). */
+  restoreDeletedPreset: (deleted: DeletedPreset) => RestorePresetResult;
   reloadPresets: () => void;
   /** 내 프리셋을 v2 파일 문자열로 만든다(S2.7). 내 프리셋이 하나도 없으면 빈 파일을 만들지 않고 null 을 돌려 준다. */
   exportPresets: () => string | null;
@@ -427,12 +455,13 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
   slotBTrimDb: 0,
   activeSlot: 'A',
 
-  savePreset: (name, pedals, trimDb = usePedalStore.getState().presetTrimDb) => {
+  savePreset: (name, pedals, trimDb = usePedalStore.getState().presetTrimDb, options) => {
     const trimmedName = name.trim();
-    if (!trimmedName) return;
+    if (!trimmedName) return 'invalid';
 
     const userPresets = get().presets.filter((preset) => !preset.isFactory);
     const existing = userPresets.find((preset) => preset.name === trimmedName);
+    if (existing && options?.overwrite !== true) return 'exists';
     const nextPreset: Preset = {
       id: existing?.id ?? createId(),
       name: trimmedName,
@@ -451,15 +480,36 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
 
     writeUserPresets(nextUserPresets);
     set({ presets: toPresetList(nextUserPresets) });
+    return 'saved';
   },
 
   deletePreset: (id) => {
-    const preset = get().presets.find((item) => item.id === id);
-    if (preset?.isFactory) return;
+    const target = get().presets.find((item) => item.id === id);
+    if (!target || target.isFactory) return null;
 
-    const userPresets = get().presets.filter((item) => !item.isFactory && item.id !== id);
+    const before = get().presets.filter((item) => !item.isFactory);
+    const followingIds = keysAfter(before, id, (item) => item.id);
+    const userPresets = before.filter((item) => item.id !== id);
     writeUserPresets(userPresets);
     set({ presets: toPresetList(userPresets) });
+
+    const { isFactory: _isFactory, ...preset } = target;
+    return { preset, followingIds };
+  },
+
+  restoreDeletedPreset: (deleted) => {
+    const current = get().presets.filter((item) => !item.isFactory).map(({ isFactory: _isFactory, ...preset }) => preset);
+    if (current.some((item) => item.id === deleted.preset.id)) return { restored: false, renamed: false, reason: 'exists' };
+
+    const takenNames = new Set(current.map((item) => item.name));
+    const renamed = takenNames.has(deleted.preset.name);
+    const preset: Preset = renamed
+      ? { ...deleted.preset, name: uniqueRestoredName(deleted.preset.name, takenNames) }
+      : deleted.preset;
+    const next = reinsertByKey(current, preset, deleted.followingIds, (item) => item.id);
+    writeUserPresets(next);
+    set({ presets: toPresetList(next) });
+    return { restored: true, preset, renamed };
   },
 
   reloadPresets: () => set({ presets: toPresetList(readUserPresets()) }),

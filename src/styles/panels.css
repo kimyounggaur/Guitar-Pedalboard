@@ -1449,3 +1449,30 @@ select,
 .modal-actions-wrap {
   flex-wrap: wrap;
 }
+
+/* 되돌릴 수 없는 선택(덮어쓰기 등)은 붉은 테두리로 표시한다. 강조 버튼(primary)은 아무것도 잃지 않는 쪽이다. */
+.modal-actions .secondary-button.is-danger {
+  border-color: rgba(255, 107, 95, 0.62);
+  color: #ffb4ad;
+}
+
+.modal-actions .secondary-button.is-danger:hover:not(:disabled) {
+  background: rgba(255, 107, 95, 0.14);
+}
+
+.modal-input {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 8px;
+  background: #0b111b;
+  color: #e8edf4;
+  font-size: 0.9rem;
+}
+
+.modal-input:focus-visible {
+  outline: 2px solid #8ec5ff;
+  outline-offset: 1px;
+}
