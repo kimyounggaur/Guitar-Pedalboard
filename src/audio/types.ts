@@ -204,6 +204,8 @@ export interface EffectNodeWrapper {
   readonly type: PedalType;
   readonly input: AudioNode;
   readonly output: AudioNode;
+  /** 켜져 있을 때 신호에 더하는 고정 지연(초). 꺼져 있으면 0(설계서 4.6) */
+  readonly latencySeconds: number;
   connect(destination: AudioNode): void;
   disconnect(): void;
   update(pedal: PedalState): void;
@@ -219,11 +221,28 @@ export interface LevelReading {
   clipHoldUntil: number;
 }
 
+/** 입력 지연을 어디서 읽었는가. 트랙 통계(Chromium 125+)가 먼저고, 없으면 트랙 설정이다. */
+export type InputLatencySource = 'track-stats' | 'track-settings';
+
+/**
+ * 화면에 보이는 지연의 재료(설계서 4.6). 모두 ms 다. 합계·'미포함' 판정은 engine/latency.ts 의 summarizeLatency 가 한다.
+ * sampleRate 가 0 이면 아직 오디오 컨텍스트가 없어 아무것도 읽지 못한 상태다.
+ */
 export interface LatencyReading {
-  base: number | null;
-  output: number | null;
-  input: number | null;
   sampleRate: number;
+  /** 입력 방식. 'device' 면 입력 지연을 읽고, 'file'(음원 파일)이면 입력 지연이 없다. */
+  inputKind: 'device' | 'file';
+  /** 입력 지연(ms). 장치 모드에서 브라우저가 알려 주지 않으면 null('입력 지연 미포함'). */
+  input: number | null;
+  inputSource: InputLatencySource | null;
+  /** 켜진 페달들이 신호에 더하는 고정 지연(ms) */
+  pedals: number;
+  /** 마스터 리미터 룩어헤드(ms) */
+  limiter: number;
+  /** AudioContext.baseLatency(ms). 브라우저가 알려 주지 않으면 null. */
+  outputBase: number | null;
+  /** AudioContext.outputLatency(ms). 브라우저가 알려 주지 않으면 null. */
+  outputDevice: number | null;
 }
 
 export interface PitchReading {

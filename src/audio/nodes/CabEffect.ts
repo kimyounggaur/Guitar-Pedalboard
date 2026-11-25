@@ -1,3 +1,4 @@
+import { fixedLatencySeconds } from '../engine/latency';
 import { BaseEffect } from './BaseEffect';
 import type { CabParams, PedalState } from '../types';
 import { createCabinet } from '../utils/cabinet';
@@ -54,6 +55,12 @@ export class CabEffect extends BaseEffect {
     this.presence.connect(this.effectOutput);
 
     this.update(pedal);
+  }
+
+  /** ConvolverNode 가 더하는 지연. P-16 이 잰 값이다(params/latency.json). 캐비닛이 꺼져 있으면(IR 없음) 컨볼버를 거치지 않는다. */
+  protected override processingLatencySeconds(): number {
+    const bypassed = this.customImpulse === null && (this.currentPedal.params as CabParams).model === 'off';
+    return bypassed ? 0 : fixedLatencySeconds('convolver', this.context.sampleRate);
   }
 
   override update(pedal: PedalState): void {

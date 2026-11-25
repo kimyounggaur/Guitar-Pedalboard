@@ -64,6 +64,18 @@ export class BaseEffect {
     this.updateCommon(pedal.params, pedal.active, this.hasTrails(pedal), true);
   }
 
+  /**
+   * 이 페달이 켜져 있을 때 신호에 더하는 고정 지연(초, 설계서 4.6). 꺼져 있으면 0 이다. 화면의 '처리 지연'은 켜진 페달들의 이 값을 더한다.
+   * 지연이 있는 페달은 processingLatencySeconds 를 덮어쓴다(기본 0). 모양을 만드는 지연(딜레이·코러스의 지연선 등)은 소리의 일부라 넣지 않는다.
+   */
+  get latencySeconds(): number {
+    return this.active ? this.processingLatencySeconds() : 0;
+  }
+
+  protected processingLatencySeconds(): number {
+    return 0;
+  }
+
   connect(destination: AudioNode): void {
     this.output.connect(destination);
   }

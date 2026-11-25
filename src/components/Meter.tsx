@@ -7,6 +7,7 @@ import {
   type CSSProperties,
 } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
+import { formatLatency, UNDERRUN_UNAVAILABLE_REASON } from '../audio/engine/latency';
 import { createRecordingFilename } from '../audio/recording';
 import type { LevelReading, TuningPresetId } from '../audio/types';
 import { TUNING_PRESETS, TUNING_PRESET_OPTIONS } from '../audio/utils/tunings';
@@ -43,7 +44,7 @@ export function Meter({ active = true }: MeterProps) {
   const tuningPreset = useAudioStore((state) => state.tuningPreset);
   const tuningReferenceHz = useAudioStore((state) => state.tuningReferenceHz);
   const latency = useAudioStore((state) => state.latency);
-  const audioGlitchCount = useAudioStore((state) => state.audioGlitchCount);
+  const underrunCount = useAudioStore((state) => state.underrunCount);
   const masterVolume = useAudioStore((state) => state.masterVolume);
   const setMasterVolume = useAudioStore((state) => state.setMasterVolume);
   const setTunerActive = useAudioStore((state) => state.setTunerActive);
@@ -66,8 +67,7 @@ export function Meter({ active = true }: MeterProps) {
   const waveformRef = useRef<WaveformCanvasHandle>(null);
   const clipIndicatorRef = useRef<HTMLDivElement>(null);
   const outputWarningRef = useRef<HTMLParagraphElement>(null);
-  const latencyTotal = latency.base !== null && latency.output !== null ? latency.base + latency.output : null;
-  const hasLatencyReading = latency.sampleRate > 0 && latencyTotal !== null;
+  const latencyDisplay = formatLatency(latency);
   const hasPitch = isTunerActive && pitch.frequency !== null && pitch.note !== null;
   const absoluteCents = Math.abs(pitch.cents);
   const tunerStatus = !hasPitch
@@ -284,18 +284,20 @@ export function Meter({ active = true }: MeterProps) {
       </div>
 
       <div className="latency-status" aria-live="polite">
-        <span>
-          {hasLatencyReading
-            ? `출력 지연 추정 ${(latencyTotal ?? 0).toFixed(1)}ms @ ${(latency.sampleRate / 1000).toFixed(1)}kHz`
-            : '지연시간 측정 대기'}
-        </span>
-        <p>입력 장치 설정 지연: {latency.input === null ? '확인 불가' : `${latency.input.toFixed(1)}ms`} · 활성 이펙터 처리 지연: 추정 미지원</p>
-        <p>입력 값은 장치 설정상의 목표치이며 실제 왕복 지연 측정값이 아닙니다. 출력 추정에는 이펙터 처리가 포함되지 않습니다.</p>
-        {latencyTotal !== null && latencyTotal > 20 ? (
-          <p>
-            지연이 큽니다. 유선 헤드폰과 오디오 인터페이스를 사용하고 다른 작업을 줄여 보세요.
-          </p>
+        <span>{latencyDisplay.headline}</span>
+        {latencyDisplay.items.length > 0 ? (
+          <>
+            <p className="latency-items">
+              {latencyDisplay.items.map((item) => (
+                <span key={item.key} className={`latency-item latency-item-${item.key}`}>
+                  {item.text}
+                </span>
+              ))}
+            </p>
+            <p>입력·출력은 브라우저가 알려 주는 값이고 실제 왕복 지연을 잰 값이 아닙니다. 처리는 켜진 페달과 리미터가 더하는 고정 지연입니다.</p>
+          </>
         ) : null}
+        {latencyDisplay.advice ? <p className="latency-advice">지연이 큽니다. {latencyDisplay.advice}</p> : null}
       </div>
 
       <div className="performance-status" aria-live="polite">
@@ -304,11 +306,12 @@ export function Meter({ active = true }: MeterProps) {
         </span>
         <i aria-hidden="true">·</i>
         <span>
-          출력 지연 추정 <output>{hasLatencyReading ? `${(latencyTotal ?? 0).toFixed(1)}ms` : '--'}</output>
+          지연 <output>{latencyDisplay.totalMs === null ? '--' : `${latencyDisplay.totalMs.toFixed(1)}ms`}</output>
         </span>
         <i aria-hidden="true">·</i>
-        <span>
-          출력 버퍼 부족 <output>{audioGlitchCount === null ? '측정 미지원' : `${audioGlitchCount}회`}</output>
+        <span title={isRunning && underrunCount === null ? UNDERRUN_UNAVAILABLE_REASON : '세션을 시작한 뒤 출력 버퍼가 모자라 소리가 끊긴 횟수'}>
+          끊김{' '}
+          <output className="underrun-count">{!isRunning ? '--' : underrunCount === null ? '측정 불가' : `${underrunCount}회`}</output>
         </span>
       </div>
 

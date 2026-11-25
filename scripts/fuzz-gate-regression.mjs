@@ -193,10 +193,12 @@ function fingerprint(float32Arrays, messages) {
 // 1. 옵션 없이 만든 워클릿 = Noise Gate 페달: 이 Step 이전과 비트 단위로 같다
 //    아래 지문은 워클릿을 고치기 전에 같은 입력·같은 값으로 찍은 것이다. 이 값이 바뀌면 Noise Gate 의 소리가 바뀐 것이다.
 // ---------------------------------------------------------------------------------------------
+// S2.10: 지문에 들어가던 글리치 메시지(glitch-report)를 없앴다. 새 지문은 출력 샘플과 gate-state 메시지만 담고, 이 값은
+// S2.10 이전 워클릿(phase/2 @ c27785a)과 이후 워클릿에서 똑같이 나왔다(소리와 게이트 상태 보고가 바뀌지 않았다는 증거).
 const LEGACY_GOLDEN = {
-  mono48000: 'cf2b7eeae6495842',
-  stereo44100: '30ca4f9c75ae372c',
-  lateParamChange48000: '68ca96e77ec54391',
+  mono48000: '2f03d501340e3c99',
+  stereo44100: '3a4819060f5ecbfe',
+  lateParamChange48000: '06742a8a676e7598',
 };
 
 function legacyScenario(sampleRate, channelCount, seed, paramPlan) {
@@ -220,7 +222,8 @@ function legacyScenario(sampleRate, channelCount, seed, paramPlan) {
   });
   const gate = createGate(sampleRate);
   const output = run(gate, channels, paramPlan);
-  return fingerprint(output, gate.posted);
+  // 글리치 집계(glitch-report)는 S2.10 에서 없앴다. 출력 샘플과 게이트 상태 메시지만 지문에 넣는다(둘 다 S2.10 이전과 같다).
+  return fingerprint(output, gate.posted.filter((message) => message.type === 'gate-state'));
 }
 
 const legacyPrint = {
@@ -254,9 +257,9 @@ const FUZZ_OPTIONS = { processorOptions: { startOpen: true, silent: true } };
 
   const noisePedal = createGate(sampleRate);
   const noiseOut = run(noisePedal, [loud], { reductionDb: -80 });
-  ok(noisePedal.posted.length > 0, '대조: 옵션이 없으면 상태·글리치 메시지를 보낸다');
+  ok(noisePedal.posted.length > 0, '대조: 옵션이 없으면 상태 메시지를 보낸다');
   ok(noisePedal.posted.some((message) => message.type === 'gate-state'), '대조: gate-state 메시지');
-  ok(noisePedal.posted.some((message) => message.type === 'glitch-report'), '대조: glitch-report 메시지');
+  ok(noisePedal.posted.every((message) => message.type === 'gate-state'), 'S2.10: 보내는 메시지는 gate-state 뿐이다(글리치 집계·glitch-report 를 없앴다)');
   ok(mismatches(noiseOut[0].subarray(0, QUANTUM), loud.subarray(0, QUANTUM)) > 0, '대조: 옵션이 없으면 닫힌 채로 시작해 첫 블록이 줄어 있다');
   equal(noisePedal.processor.silent, false, '옵션이 없으면 silent 는 거짓');
 
