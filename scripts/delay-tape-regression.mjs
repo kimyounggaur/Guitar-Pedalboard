@@ -1,7 +1,8 @@
 // S3.3 Delay Tape 음정 흔들림 — 느린 와우 0.8 Hz + 빠른 플러터 6.5 Hz 두 LFO (설계서 S3.3, 보고서 R3-3, 프로브 P-10·P-26) 시험.
 //   1. 상수: 지연 깊이(초) = 목표 주파수 편차 / (2π × LFO 주파수). 와우 ±0.3%, 플러터 ±0.1%, 둘이 겹쳐도 ±0.4% 로 수용 기준(±0.6%) 안이다.
-//   2. 실제 DelayEffect(가짜 오디오 컨텍스트): 사인 오실레이터가 정확히 둘(0.8·6.5 Hz)이고 각자 게인을 거쳐 주 딜레이의 delayTime 에만 들어간다.
-//      Tape 에서는 두 게인이 위 깊이로, 다른 모든 방식(Digital·Analog·Slapback·Pingpong)에서는 0 이다.
+//   2. 실제 DelayEffect(가짜 오디오 컨텍스트): 사인 오실레이터가 정확히 둘(0.8·6.5 Hz)이고 각자 깊이 게인을 거쳐 합산 게인 하나로 모인 뒤 주 딜레이의 delayTime 에만 들어간다
+//      (delayTime 에 들어가는 변조 입력은 정확히 하나 — 둘을 따로 꽂으면 더하는 순서가 실행마다 달라 오프라인 렌더가 비결정적이 된다, L-232).
+//      Tape 에서는 두 깊이 게인이 위 깊이로, 다른 모든 방식(Digital·Analog·Slapback·Pingpong)에서는 0 이다.
 //   3. 방식을 오가도 오실레이터 주파수는 건드리지 않는다(주파수를 바꾸면 위상이 튄다) — 깊이만 따라간다. 끝낼 때(dispose) 둘 다 멈추고 끊는다.
 //   4. 핑퐁 배선: 주 딜레이 T/2, 되먹임 루프의 두 딜레이 T → 첫 반복음 T/2, 그 뒤 T 간격 좌우 번갈아(10월 계획서 M-7). 같은 값을 프로브 P-26 이 소리로 잰다.
 //   5. 소스 단언: 옛 상수(깊이 0.0002 s·4.2 Hz·4.6 Hz)가 남아 있지 않다.
@@ -162,10 +163,17 @@ const make = (params, active = true) => {
   equal(wowGain.kind, 'Gain', '와우는 게인으로 간다');
   equal(flutterGain.kind, 'Gain', '플러터는 게인으로 간다');
   ok(wowGain !== flutterGain, '두 LFO 는 각자 깊이 게인을 가진다');
-  equal(wowGain.connections.length, 1, '와우 게인의 출력은 하나');
-  equal(flutterGain.connections.length, 1, '플러터 게인의 출력은 하나');
-  ok(wowGain.connections[0] === mainDelay.delayTime, '와우 → 주 딜레이 delayTime');
-  ok(flutterGain.connections[0] === mainDelay.delayTime, '플러터 → 주 딜레이 delayTime');
+  equal(wowGain.connections.length, 1, '와우 깊이 게인의 출력은 하나');
+  equal(flutterGain.connections.length, 1, '플러터 깊이 게인의 출력은 하나');
+  // 두 LFO 는 합산 게인 하나에 먼저 모이고, 그 게인 하나만 주 딜레이의 delayTime 에 꽂힌다
+  const sum = wowGain.connections[0];
+  equal(sum.kind, 'Gain', '와우 깊이 → 합산 게인');
+  ok(flutterGain.connections[0] === sum, '플러터 깊이도 같은 합산 게인으로');
+  equal(sum.gain.value, 1, '합산 게인은 1(소리를 바꾸지 않고 더하기만 한다)');
+  equal(sum.connections.length, 1, '합산 게인의 출력은 하나');
+  ok(sum.connections[0] === mainDelay.delayTime, '합산 게인 → 주 딜레이 delayTime');
+  const feeders = context.nodes.filter((node) => node.connections.includes(mainDelay.delayTime));
+  equal(feeders.length, 1, '주 딜레이 delayTime 에 들어가는 변조 입력은 정확히 하나(세 수를 더하는 순서가 실행마다 달라지지 않는다)');
   // 되먹임 루프의 딜레이 시간은 흔들지 않는다 — 흔들면 반복마다 누적되어 음정이 크게 틀어진다
   const modulated = context.nodes.filter((node) => node.connections.includes(leftLoop.delayTime) || node.connections.includes(rightLoop.delayTime));
   equal(modulated.length, 0, '핑퐁 되먹임 딜레이의 delayTime 에는 LFO 가 들어가지 않는다');
@@ -225,6 +233,7 @@ for (const mode of ['digital', 'analog', 'slapback', 'pingpong']) {
     ok(oscillator.stopped, 'dispose: 오실레이터 정지');
     ok(oscillator.disconnected, 'dispose: 오실레이터 연결 해제');
     ok(oscillator.connections[0].disconnected, 'dispose: 깊이 게인 연결 해제');
+    ok(oscillator.connections[0].connections[0].disconnected, 'dispose: 합산 게인 연결 해제');
   }
 }
 
@@ -256,8 +265,9 @@ for (const mode of ['digital', 'analog', 'slapback', 'pingpong']) {
   for (const old of ['0.0002', '? 4.2 :', 'frequency.value = 4.6', ': 0.1,']) {
     ok(!source.includes(old), `옛 플러터 상수 ${old} 가 남아 있지 않다`);
   }
-  ok(/this\.wowDepth\.connect\(this\.delay\.delayTime\)/.test(source), '와우 깊이는 주 딜레이 delayTime 으로');
-  ok(/this\.flutterDepth\.connect\(this\.delay\.delayTime\)/.test(source), '플러터 깊이는 주 딜레이 delayTime 으로');
+  ok(/this\.wowDepth\.connect\(this\.lfoSum\)/.test(source) && /this\.flutterDepth\.connect\(this\.lfoSum\)/.test(source), '두 깊이는 합산 게인으로');
+  ok(/this\.lfoSum\.connect\(this\.delay\.delayTime\)/.test(source), '합산 게인은 주 딜레이 delayTime 으로');
+  ok(!/this\.(?:wowDepth|flutterDepth)\.connect\(this\.delay\.delayTime\)/.test(source), '깊이 게인을 delayTime 에 직접 꽂지 않는다(L-232)');
   ok(/smoothParam\(this\.wowDepth\.gain,/.test(source) && /smoothParam\(this\.flutterDepth\.gain,/.test(source), '깊이는 smoothParam 으로 바꾼다(클릭 없이)');
   ok(!/this\.(wow|flutter)\.frequency\.(?:setTargetAtTime|linearRamp)|smoothParam\(this\.(wow|flutter)\.frequency/.test(source), 'LFO 주파수는 갱신 때 건드리지 않는다');
 }

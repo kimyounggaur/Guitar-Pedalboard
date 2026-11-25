@@ -22,6 +22,7 @@ export class DelayEffect extends BaseEffect {
   private readonly tone: BiquadFilterNode;
   private readonly wow: OscillatorNode;
   private readonly wowDepth: GainNode;
+  private readonly lfoSum: GainNode;
   private readonly flutter: OscillatorNode;
   private readonly flutterDepth: GainNode;
   private readonly monoPathGain: GainNode;
@@ -42,6 +43,7 @@ export class DelayEffect extends BaseEffect {
     this.tone = context.createBiquadFilter();
     this.wow = context.createOscillator();
     this.wowDepth = context.createGain();
+    this.lfoSum = context.createGain();
     this.flutter = context.createOscillator();
     this.flutterDepth = context.createGain();
     this.monoPathGain = context.createGain();
@@ -62,6 +64,7 @@ export class DelayEffect extends BaseEffect {
     this.wow.type = 'sine';
     this.wow.frequency.value = TAPE_WOW_HZ;
     this.wowDepth.gain.value = 0;
+    this.lfoSum.gain.value = 1;
     this.flutter.type = 'sine';
     this.flutter.frequency.value = TAPE_FLUTTER_HZ;
     this.flutterDepth.gain.value = 0;
@@ -100,10 +103,14 @@ export class DelayEffect extends BaseEffect {
     this.pingPongRightPanner.connect(this.pingPongPathGain);
     this.pingPongPathGain.connect(this.effectOutput);
 
+    // 두 LFO 를 delayTime 에 따로 꽂지 않고 게인 하나에 먼저 더해 한 줄로 꽂는다. 파라미터에 입력 둘이 따로 들어가면
+    // (자체 값 + 와우 + 플러터) 세 수를 더하는 순서를 브라우저가 정하는데, 그 순서가 실행마다 달라 소수 끝자리가 흔들린다
+    // (오프라인 렌더의 널 시험이 −200 dB 와 −124 dB 사이를 오갔다, REFACTOR_LOG L-232). 둘을 먼저 더하면 항이 둘뿐이라 순서와 상관없다.
     this.wow.connect(this.wowDepth);
-    this.wowDepth.connect(this.delay.delayTime);
+    this.wowDepth.connect(this.lfoSum);
     this.flutter.connect(this.flutterDepth);
-    this.flutterDepth.connect(this.delay.delayTime);
+    this.flutterDepth.connect(this.lfoSum);
+    this.lfoSum.connect(this.delay.delayTime);
     this.wow.start();
     this.flutter.start();
     this.update(pedal);
@@ -144,6 +151,7 @@ export class DelayEffect extends BaseEffect {
     this.tone.disconnect();
     this.wow.disconnect();
     this.wowDepth.disconnect();
+    this.lfoSum.disconnect();
     this.flutter.disconnect();
     this.flutterDepth.disconnect();
     this.monoPathGain.disconnect();
