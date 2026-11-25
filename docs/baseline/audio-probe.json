@@ -969,6 +969,20 @@
           "onset.gate50Db": -14.298,
           "onset.lossDb": -0.075
         }
+      },
+      "P-25": {
+        "title": "Cab 노브·모델을 바꿀 때 클릭",
+        "metrics": {
+          "clickRatioDb.220.mic": 3.662,
+          "clickRatioDb.220.model": 2.827,
+          "clickRatioDb.220.micDrag": 0.459,
+          "clickRatioDb.220.distanceDrag": 2.571,
+          "clickRatioDb.660.mic": 0.574,
+          "clickRatioDb.660.model": 0,
+          "clickRatioDb.660.micDrag": 0.204,
+          "clickRatioDb.660.distanceDrag": 0.695,
+          "maxClickRatioDb": 3.662
+        }
       }
     },
     "48000": {
@@ -1938,6 +1952,20 @@
           "onset.gate0Db": -14.106,
           "onset.gate50Db": -14.18,
           "onset.lossDb": -0.074
+        }
+      },
+      "P-25": {
+        "title": "Cab 노브·모델을 바꿀 때 클릭",
+        "metrics": {
+          "clickRatioDb.220.mic": 2.283,
+          "clickRatioDb.220.model": 0.748,
+          "clickRatioDb.220.micDrag": 0.632,
+          "clickRatioDb.220.distanceDrag": 1.499,
+          "clickRatioDb.660.mic": 0.023,
+          "clickRatioDb.660.model": 0,
+          "clickRatioDb.660.micDrag": 0.021,
+          "clickRatioDb.660.distanceDrag": 1.172,
+          "maxClickRatioDb": 2.283
         }
       }
     }
