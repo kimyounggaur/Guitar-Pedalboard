@@ -1571,3 +1571,53 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - 이름으로 찾기는 이름이 같은 다른 장치를 같은 장치로 볼 수 있다(같은 모델 두 대).
 
 ---
+
+## S2.14 앱 아이콘과 파비콘
+
+- 브랜치·병합: `refactor/s2-14-icons` → `phase/2`. 커밋 `4cd5710`(C1 — maskable 아이콘·`favicon.svg`·manifest `lang`/`id`·`index.html` 아이콘 링크 정리·아이콘 만드는 도구) · `812a52e`(C2 — PWA 시험을 `dist/` 의 실제 파일·PNG 크기·maskable 안전 영역 검사로, e2e E-18 6개) · 이 보고서를 담은 문서 커밋(`docs(S2.14): …`). **main 에는 병합하지 않는다**(병합하면 Pages 가 자동 배포된다). 소리 처리 경로는 바뀌지 않는다(정적 파일·manifest·`index.html` 링크뿐).
+- 해결 항목: R2-11(앱 설치 아이콘·파비콘 없음). **설계서 '현재' 는 기준선과 달랐다**(L-206): 192·512·apple-touch·`favicon.ico` 는 이미 있었고 설치 오류도 0건이었다. 실제 틈은 maskable·`favicon.svg`·manifest `lang`/`id`·중복 아이콘 링크·경로 문자열만 보던 PWA 시험이었다.
+- 변경 파일(`git diff --shortstat 1890f7a HEAD`, 이 문서 커밋 전): 7 files changed, 411 insertions(+), 8 deletions(-). 제품 — 신규 `public/favicon.svg`·`public/pwa-512x512-maskable.png`, 고침 `vite.config.ts`(manifest `lang`·`id`·maskable 항목, `includeAssets`)·`index.html`(아이콘 링크 세 개). 도구 — 신규 `docs/refactoring/tools/make-maskable-icon.mjs`. 시험 — 고침 `scripts/pwa-regression.mjs`, 신규 `e2e/tests/e18-pwa-icons.spec.ts`. 기존 `pwa-192x192.png`·`pwa-512x512.png`·`apple-touch-icon.png`·`favicon.ico` 는 그대로다.
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| 배포 사이트에서 아이콘 6종이 모두 200(현재 192·512가 404) | 부분 충족 | e2e ①: 같은 `dist/` 를 배포와 같은 base 경로로 내보내는 `vite preview` 에서 6종 모두 200 이고 content-type 이 맞다. ②: 브라우저가 모두 그림으로 읽고 PNG 선언 크기 = 실제 크기. **공개 사이트(GitHub Pages)에서의 200 은 이 환경의 네트워크 제한으로 확인하지 못했다**(L-206, L-212). 기준선에서도 192·512 는 있었다 |
+| CDP `Page.getInstallabilityErrors` 결과 0건 | 충족 | e2e ⑤: 폴링 끝에 0건이고 `Page.getAppManifest` 오류도 0건. 옛 빌드에서도 0건이었다(L-206) — 이 시험은 앞으로의 회귀를 막는다 |
+| PWA 테스트가 경로 문자열이 아니라 `dist/` 의 실제 파일 존재·PNG 크기를 검사 | 충족 | `pwa-regression.mjs`: 아이콘마다 `dist/` 에서 실제 파일을 읽어 PNG 헤더·선언 크기 = 실제 크기·그림 유무를 본다. maskable 은 불투명·안전 영역(반지름 0.4×폭), apple-touch 180, `favicon.ico` [16, 32], `favicon.svg` 정사각 viewBox, `index.html` 링크 정확히 3개와 파일 존재(L-211) |
+| (설계서에 있는 설명) maskable 은 가운데 80% 안전 영역 안에 그림 | 충족 | Node: 그림의 가장 먼 점이 반지름 0.4×폭 이하. e2e ⑥: 캔버스 픽셀로 같은 검사 + 모서리까지 불투명. 실제 값은 187.7 px ≤ 204.8 px(L-208) |
+
+**전후**
+
+| 상황 | 전(`1890f7a`) | 후 |
+|---|---|---|
+| manifest 아이콘 | 2개(192·512, `any`) | 3개(192·512 `any`, 512 `maskable` 별도 항목) |
+| manifest `lang`·`id` | 없음 | `lang: 'ko'`, `id` = `start_url`(기존 설치의 정체성 유지, L-209) |
+| 파비콘 | `favicon.ico` 뿐(+ 중복 링크) | `favicon.svg` + `favicon.ico`(32 px), 링크 정확히 3개(L-210) |
+| PWA 시험이 보는 것 | 경로 문자열 | `dist/` 의 실제 파일·PNG 크기·안전 영역·링크(L-211) |
+| Android 설치 아이콘 | 마스크용 아이콘이 없어 플랫폼이 `any` 아이콘을 알아서 맞춘다 | 마스크용 아이콘이 있어 안전 영역 안에서 보인다(실제 기기 확인 필요) |
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| `npm test` | 44개 통과(443.4초) | 44개 통과(478.1초) |
+| `npm run e2e` | 266개 통과(11.7분) | 272개 통과(12.5분 — 새 시험 6개) |
+| 프로브 | 24개, 값 1,696개 | 24개, 값 1,696개(불변) |
+
+- 검증
+  - `npm run typecheck`·`npm run lint`·`npx tsc -p tsconfig.e2e.json --noEmit`·`npx eslint e2e` 오류 0(`npm run lint` 는 전체 e2e 를 돌려 `test-results/` 를 비운 뒤에 돌렸다). 정규식 단언 목록은 `pwa-regression.mjs` 의 줄 번호가 바뀌어 `list-regex-assertions.mjs` 의 출력으로 다시 만들었고, 새 정규식 단언은 없다. `pwa-regression`·`app-notices`·`safe-storage`·`responsive-a11y` 는 따로 돌려 통과를 확인했고 `npm test` 전체도 통과했다.
+  - **새 시험이 정말 잡는지**: (1) **옛 코드에 돌려 보았다**. E-18 을 옛 코드(`phase/2` 의 `1890f7a`) 빌드에 돌리면 **6개 모두 실패한다**(L-212). 옛 빌드에서도 설치 오류는 0건이어서 ⑤ 는 아이콘 3개 단언에서만 실패한다. (2) **변이 시험**: 24가지 결함을 하나씩 넣고 빌드한 뒤 돌렸다. Node 시험이 **24개 모두**, E-18 이 **22개**를 잡고 2개(16 px 없는 `favicon.ico`·viewBox 없는 `favicon.svg`)는 E-18 이 파일 안쪽을 보지 않아 놓친다 — Node 시험의 몫이다(L-213).
+- 만난 문제
+  - **설계서 '현재' 가 기준선과 달랐다**(L-206). 404 를 고치는 일이 아니라 빠진 것을 채우는 일이 되었다.
+  - **TypeScript 오류**: E-18 에서 CDP 가 돌려주는 설치 오류 목록의 타입이 맞지 않아 `unknown[]` 로 받았다.
+  - **ESLint**: `scripts/*.mjs` 에서 `Buffer` 를 전역으로 쓰면 `no-undef` 라 `node:buffer` 에서 가져왔다.
+  - **단언 오타**: 처음 `pwa-regression` 에 쓸모없는 문자열 치환(`'image/maskable'.replace(…)`)이 들어가 있어 `'image/png'` 로 고쳤다.
+- 사람 확인 필요
+  - **공개 사이트**: 배포 뒤 `…/Guitar-Pedalboard/` 아래 `pwa-192x192.png`·`pwa-512x512.png`·`pwa-512x512-maskable.png`·`apple-touch-icon.png`·`favicon.svg`·`favicon.ico` 6개가 200 인지.
+  - **실제 설치**: Android·데스크톱 Chrome 에서 '설치' 가 되고 홈 화면·작업 표시줄 아이콘이 마스크(원·둥근 사각 등)에 잘리지 않고 보기 좋은지, 이미 설치한 앱이 중복 설치 없이 그대로 업데이트되는지(`id` 를 `start_url` 과 같게 한 이유, L-209).
+  - **아이폰**: 홈 화면에 추가했을 때 180 px 아이콘이 보기 좋은지.
+  - **파비콘**: 탭의 16 px 에서 페달 그림이 알아볼 만한지.
+  - **디자인**: 기존 아이콘의 그림을 SVG 로 옮겼다(L-207). 새 그림을 원하면 디자이너가 `favicon.svg` 의 페달 그룹을 바꾸고 도구로 maskable 을 다시 만든다.
+- 남은 위험
+  - 공개 사이트가 지금 404 를 준다면 그 원인은 이 저장소의 파일이 아니라 배포(base 경로·Pages 설정)일 수 있다. 그 경우 이 Step 으로는 고쳐지지 않는다.
+  - `id` 를 `start_url` 과 같게 두었으므로 나중에 `base`(배포 주소)를 바꾸면 설치된 앱의 정체성도 바뀐다.
+  - 안전 영역은 '지름 80% 원' 으로 읽었다. 플랫폼마다 마스크가 달라(원·둥근 사각·네모) 실제 기기에서 보지 않으면 모른다.
+
+---
