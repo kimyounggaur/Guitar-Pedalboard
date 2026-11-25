@@ -29,3 +29,13 @@
 ) {
   font-size: var(--fs-value);
 }
+
+/* Graphic EQ 대역 이름('1.6k Hz')은 12px 로 키우면 8열 칸보다 넓어져 이웃과 겹친다 — 숫자와 단위를 두 줄로 접는다. */
+.pedal-card-graphic-eq .vertical-fader-label {
+  overflow: visible;
+  max-width: 100%;
+  text-align: center;
+  text-overflow: clip;
+  white-space: normal;
+  line-height: 1.15;
+}
