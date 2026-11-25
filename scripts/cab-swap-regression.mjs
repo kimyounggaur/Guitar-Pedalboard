@@ -354,8 +354,11 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   world.timers.advance(10); // 되살리는 중
   // 되살리는 도중(교체 후 10 ms)에 노브가 또 움직인다: 지금은 건드리지 않고, 끝난 뒤 새 디바운스로 처리
   const gainBefore = gainAt(effect, world.clock);
+  equal(effect.phase, 'fadingIn', '교체 직후에는 되살리는 중');
   effect.update(pedalWith({ model: 'greenback-4x12', micPosition: 20 }));
   near(gainAt(effect, world.clock), gainBefore, 1e-9, '되살리는 중 노브 변경이 게인을 건드리지 않는다');
+  equal(effect.phase, 'fadingIn', '되살리는 중에는 단계가 그대로');
+  equal(effect.debounceTimer, null, '되살리는 중에는 디바운스 타이머도 걸지 않는다(끝난 뒤에 건다)');
   world.timers.advance(CAB_IR_SWAP_FADE_SECONDS * 1000 + 10);
   equal(effect.phase, 'idle', '되살리기가 끝나면 idle 로 돌아가고');
   equal(effect.debounceTimer !== null, true, '그 사이 움직인 노브는 새 디바운스를 건다');
@@ -365,6 +368,27 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   ok(sameIr(world.swaps[1].buffer, expectedIr(world, 'greenback-4x12', 20, 30)), '두 번째 교체는 마이크 20 의 IR');
   world.timers.advance(100);
   near(gainAt(effect, world.clock), makeupOf('greenback-4x12', 20, 30), 1e-6, '마지막 보정값으로 끝난다');
+  assertNoHold(effect);
+  effect.dispose();
+}
+
+// 되살리는 중에 모델을 바꾸면 바로 새 페이드를 걸지 않고 끝난 뒤에 시작한다
+{
+  const { world, effect } = createEffect();
+  world.timers.advance(500);
+  effect.update(pedalWith({ model: 'blue-1x12' }));
+  world.timers.advance(CAB_IR_SWAP_FADE_SECONDS * 1000 + 1); // 교체 직후
+  equal(effect.phase, 'fadingIn', '교체 직후 되살리는 중');
+  const ramps = effect.convolvedGain.gain.calls.filter((call) => call === 'linearRamp').length;
+  effect.update(pedalWith({ model: 'jensen-1x12' }));
+  equal(effect.convolvedGain.gain.calls.filter((call) => call === 'linearRamp').length, ramps, '되살리는 중에는 모델을 바꿔도 램프를 새로 걸지 않는다');
+  equal(effect.phase, 'fadingIn', '되살리는 중에는 단계가 그대로');
+  world.timers.advance(CAB_IR_SWAP_FADE_SECONDS * 1000 + 15);
+  equal(effect.phase, 'fadingOut', '되살리기가 끝나면 바로(디바운스 없이) 다음 페이드가 시작된다');
+  world.timers.advance(CAB_IR_SWAP_FADE_SECONDS * 1000 + 5);
+  equal(world.swaps.length, 2, '모델 두 번 바꾼 것이 교체 두 번');
+  near(world.swaps[1].gain, 0, 1e-9, '두 번째 교체 순간도 게인 0');
+  ok(sameIr(world.swaps[1].buffer, expectedIr(world, 'jensen-1x12', 55, 30)), '두 번째 교체는 Jensen IR');
   assertNoHold(effect);
   effect.dispose();
 }
@@ -426,12 +450,44 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   effect.update(pedalWith({ micPosition: 10, distance: 90 }));
   equal(world.timers.pending, 0, '사용자 IR 에서 노브를 돌려도 타이머가 없다');
   equal(world.swaps.length, 1, '사용자 IR 에서 노브를 돌려도 IR 을 버리지 않는다');
+  // 다른 사용자 IR 로 바꾸면 바뀌고, 같은 IR 을 다시 주면 아무 일도 없다
+  const other = { numberOfChannels: 1, length: 3, duration: 0.1, getChannelData: () => new Float32Array([0, 0.3, -0.2]) };
+  world.timers.advance(100);
+  effect.setCustomImpulse(other);
+  world.timers.advance(CAB_IR_SWAP_FADE_SECONDS * 1000 + 1);
+  equal(world.swaps.length, 2, '다른 사용자 IR 은 교체한다');
+  ok(world.swaps[1].buffer === other, '새 사용자 IR 이 컨볼버에 들어간다');
+  world.timers.advance(100);
+  effect.setCustomImpulse(other);
+  equal(world.timers.pending, 0, '같은 사용자 IR 을 다시 주면 타이머가 없다');
+  equal(world.swaps.length, 2, '같은 사용자 IR 을 다시 주면 버퍼를 바꾸지 않는다');
   effect.setCustomImpulse(null);
   world.timers.advance(CAB_IR_SWAP_FADE_SECONDS * 1000 + 1);
+  world.swaps.splice(1, 1); // 아래 확인은 해제 교체를 두 번째 기록으로 본다
   equal(world.swaps.length, 2, '사용자 IR 해제도 페이드 교체');
   equal(world.swaps[1].normalize, false, '해제하면 만든 IR 의 비정규화로 돌아온다');
   near(world.swaps[1].gain, 0, 1e-9, '해제 교체 순간 게인 0');
   ok(sameIr(world.swaps[1].buffer, expectedIr(world, 'v30-4x12', 10, 90)), '해제하면 그 사이 움직인 노브 값의 IR 로 돌아온다');
+  assertNoHold(effect);
+  effect.dispose();
+}
+
+// 캐비닛 모델이 꺼져 있어도 사용자 IR 이 있으면 사용자 IR 이 이긴다. 사용자 IR 을 해제하면 다시 꺼진 상태(우회)로 돌아온다.
+{
+  const { world, effect } = createEffect(pedalWith({ model: 'off' }));
+  world.timers.advance(500);
+  near(effect.bypassGain.gain.valueAt(world.clock.now), 1, 1e-3, '꺼진 캐비닛: 우회 가지 1');
+  const custom = { numberOfChannels: 1, length: 3, duration: 0.1, getChannelData: () => new Float32Array([0, 0.2, -0.1]) };
+  effect.setCustomImpulse(custom);
+  world.timers.advance(300);
+  ok(effect.convolver.buffer === custom, '모델이 꺼져 있어도 사용자 IR 이 들어간다');
+  near(gainAt(effect, world.clock), 1, 1e-6, '사용자 IR: 컨볼버 가지 1');
+  near(effect.bypassGain.gain.valueAt(world.clock.now), 0, 1e-3, '사용자 IR: 우회 가지 0');
+  effect.setCustomImpulse(null);
+  world.timers.advance(300);
+  equal(world.timers.pending, 0, '해제 뒤 남은 타이머 없음');
+  near(gainAt(effect, world.clock), 0, 1e-6, '해제하면 모델이 꺼져 있으니 컨볼버 가지 0');
+  near(effect.bypassGain.gain.valueAt(world.clock.now), 1, 1e-3, '해제하면 우회 가지 1');
   assertNoHold(effect);
   effect.dispose();
 }
