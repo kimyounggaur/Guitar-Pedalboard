@@ -146,20 +146,6 @@ export function shouldAnnounceMissing(
   return resolveRememberedDevice(list, remembered).kind === 'missing';
 }
 
-export type OutputResolution =
-  | { kind: 'default' }
-  | { kind: 'unknown'; id: string }
-  | { kind: 'found'; id: string; label: string; by: 'id' | 'label' }
-  | { kind: 'missing' };
-
-/** 기억해 둔 출력 장치를 지금 목록에서 찾는다. 규칙은 입력과 같다(id → label → 기본 출력) */
-export function resolveRememberedOutput(list: readonly DeviceLike[], remembered: RememberedDevice | null): OutputResolution {
-  const resolved = resolveRememberedDevice(list, remembered);
-  if (resolved.kind === 'none') return { kind: 'default' };
-  if (resolved.kind === 'unknown') return { kind: 'unknown', id: (remembered as RememberedDevice).id };
-  return resolved;
-}
-
 /** `devicechange` 를 받는 쪽(`navigator.mediaDevices`) 중 여기서 쓰는 부분 */
 export interface DeviceChangeTarget {
   addEventListener(type: 'devicechange', listener: () => void): void;

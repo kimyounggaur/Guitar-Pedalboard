@@ -49,7 +49,6 @@ const {
   reconcileInputSelection,
   rememberedPresence,
   resolveRememberedDevice,
-  resolveRememberedOutput,
   shouldAnnounceMissing,
   watchDeviceChanges,
 } = await toModule(pure.outputFiles[0].text);
@@ -168,14 +167,7 @@ equal(shouldAnnounceMissing([MIC1, MIC2], REM2, '', null), false, '기억한 장
 equal(shouldAnnounceMissing([dev('', '')], REM2, '', null), false, '권한 전에는 안내하지 않는다');
 equal(shouldAnnounceMissing([MIC1], null, '', null), false, '기억한 장치가 없으면 안내하지 않는다');
 
-// 1-5. 출력 장치
-deepEqual(resolveRememberedOutput([MIC1], null), { kind: 'default' }, '출력: 기억 없음 → 시스템 기본');
-deepEqual(resolveRememberedOutput([dev('', '')], REM2), { kind: 'unknown', id: 'id-2' }, '출력: 권한 전 → 보류(기억한 id 를 그대로 쓴다)');
-deepEqual(resolveRememberedOutput([MIC2], REM2).kind, 'found', '출력: id 로 찾음');
-deepEqual(resolveRememberedOutput([dev('x', 'Audio Interface')], REM2), { kind: 'found', id: 'x', label: 'Audio Interface', by: 'label' }, '출력: 이름으로 찾음');
-deepEqual(resolveRememberedOutput([MIC1], REM2), { kind: 'missing' }, '출력: 없음');
-
-// 1-6. 옛 키와의 호환
+// 1-5. 옛 키와의 호환
 const LABELED = { id: 'out-2', label: 'Speakers' };
 equal(chooseRememberedOutput(null, null), null, '저장된 것이 없다');
 deepEqual(chooseRememberedOutput(LABELED, null), LABELED, '옛 키가 없으면 새 저장값');
@@ -185,7 +177,7 @@ equal(chooseRememberedOutput(LABELED, ''), null, '옛 키가 빈 문자열(시�
 deepEqual(chooseRememberedOutput(null, 'out-1'), { id: 'out-1', label: '' }, '새 저장값이 없고 옛 키만 있으면 옛 키(이름은 모른다)');
 equal(chooseRememberedOutput(null, ''), null, '옛 키가 빈 문자열이면 기본');
 
-// 1-7. 저장값 해석
+// 1-6. 저장값 해석
 deepEqual(parseRememberedDevice({ id: 'a', label: 'B' }), { id: 'a', label: 'B' }, '정상');
 deepEqual(parseRememberedDevice({ id: 'a' }), { id: 'a', label: '' }, '이름이 없으면 빈 이름');
 deepEqual(parseRememberedDevice({ id: 'a', label: 3 }), { id: 'a', label: '' }, '이름이 문자열이 아니면 빈 이름');
@@ -194,7 +186,7 @@ for (const bad of [null, undefined, 'a', 3, [], [{ id: 'a' }], {}, { id: '' }, {
   equal(parseRememberedDevice(bad), null, `저장값 ${JSON.stringify(bad)} 는 버린다`);
 }
 
-// 1-8. devicechange 묶기
+// 1-7. devicechange 묶기
 function fakeTimers() {
   const pending = new Map();
   let next = 1;
