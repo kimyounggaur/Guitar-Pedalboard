@@ -711,6 +711,13 @@ function serviceHarness() {
   first.onmidimessage = null;
   record.access.fire();
   assert.ok(first.onmidimessage, '떨어진 리스너를 다시 붙인다');
+
+  // 같은 id 의 새 입력 객체가 옛 객체를 대신하면(장치를 다시 꽂을 때 브라우저가 새로 만든 경우) 옛 객체에서는 리스너를 뗀다
+  const replacement = new MockInput('in-1', 'Foot Controller');
+  record.access.inputs.set(replacement.id, replacement);
+  record.access.fire();
+  assert.equal(first.onmidimessage, null, '대신 들어온 입력이 있으면 옛 입력의 리스너는 뗀다');
+  assert.ok(replacement.onmidimessage, '새 입력에 붙는다');
   service.dispose();
 }
 
