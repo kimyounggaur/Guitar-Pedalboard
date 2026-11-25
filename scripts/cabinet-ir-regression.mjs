@@ -53,16 +53,27 @@ const context = {
 };
 const pedal = { id: 'cab', type: 'cab', active: true,
   params: { mix: 100, level: 100, model: 'v30-4x12', micPosition: 55, distance: 30, lowCut: 85, highCut: 5400, presence: 1.5 } };
-const effect = new CabEffect(context, pedal);
+// S3.2: IR 교체는 페이드 뒤 타이머로 일어난다. 이 시험은 시계를 흉내 내지 않고 걸린 타이머를 차례로 모두 실행해 최종 상태만 본다
+// (타이밍 자체는 scripts/cab-swap-regression.mjs 가 본다).
+const queue = [];
+const timers = {
+  setTimeout: (callback) => { queue.push(callback); return queue.length; },
+  clearTimeout: () => {},
+};
+const flush = () => { while (queue.length) queue.shift()(); };
+const effect = new CabEffect(context, pedal, timers);
 const builtIn = convolver.buffer;
 assert.equal(convolver.normalize, false, 'generated IR uses calibrated unnormalized convolution');
 const custom = decoded([0, .2, -.1]);
 effect.setCustomImpulse(custom);
+flush();
 assert.equal(convolver.buffer, custom);
 assert.equal(convolver.normalize, true, 'custom IR retains Web Audio normalization');
 effect.update({ ...pedal, params: { ...pedal.params, micPosition: 25 } });
+flush();
 assert.equal(convolver.buffer, custom, 'parameter changes do not silently discard the IR');
 effect.setCustomImpulse(null);
+flush();
 assert.notEqual(convolver.buffer, custom);
 assert.equal(convolver.normalize, false, 'generated normalization restored after custom IR removal');
 assert.ok(convolver.buffer && builtIn, 'restoring the selected built-in IR works');

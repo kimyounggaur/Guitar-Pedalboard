@@ -17,11 +17,14 @@ import { ReverbEffect } from '../nodes/ReverbEffect';
 import { TremoloEffect } from '../nodes/TremoloEffect';
 import type { EffectNodeWrapper, PedalState } from '../types';
 import type { ImpulseCache } from '../utils/impulseCache';
+import type { Timers } from '../utils/timers';
 
 export function createOfflineEffect(
   context: BaseAudioContext,
   pedal: PedalState,
   impulseCache: ImpulseCache,
+  /** 렌더 시각으로 재는 타이머(renderChain 이 넘긴다). 타이머로 IR 을 바꾸는 이펙트(Cab)만 쓴다. */
+  timers?: Timers,
 ): EffectNodeWrapper {
   switch (pedal.type) {
     case 'noiseGate':
@@ -41,7 +44,7 @@ export function createOfflineEffect(
     case 'eq':
       return new EQEffect(context, pedal);
     case 'cab':
-      return new CabEffect(context, pedal);
+      return new CabEffect(context, pedal, timers);
     case 'chorus':
       return new ChorusEffect(context, pedal);
     case 'flanger':

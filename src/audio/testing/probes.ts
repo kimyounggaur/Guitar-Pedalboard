@@ -1599,8 +1599,62 @@ const p24: ProbeDefinition = {
   },
 };
 
+// ---------------------------------------------------------------------------------------------
+// P-25 — Cab 노브·모델을 바꿀 때 클릭(S3.2)
+// ---------------------------------------------------------------------------------------------
+const p25: ProbeDefinition = {
+  id: 'P-25',
+  title: 'Cab 노브·모델을 바꿀 때 클릭',
+  describe:
+    '기본 Cab 한 개에 일정한 사인파(−12 dBFS, 220 Hz 와 660 Hz)를 7초 넣고 ① 마이크 위치를 한 번 크게 바꾸고(0.8초, 55→85) ② 모델을 바꾸고(2.0초, V30→Blue) ' +
+    '③ 마이크 위치를 20 ms 마다 1씩 0.6초 동안 끌고(3.2초부터, 85→55) ④ 거리를 같은 식으로 끈다(5.2초부터, 30→60). 각 동작 앞뒤의 고른 구간(0.3~0.5초)과 동작 구간 전체(1초 안팎)의 출력 1차 차분 최대값을 비교해, ' +
+    '동작 구간이 고른 구간(앞·뒤 중 큰 쪽)보다 몇 dB 큰지 clickRatioDb 로 적는다. 소리가 부드럽게 바뀌면 0 dB 근처, IR 이 갑자기 바뀌면 크게 올라간다. 설계서 S3.2 수용 기준은 +6 dB 이하(★).',
+  steps: 'S3.2',
+  async run(ctx) {
+    const rate = ctx.sampleRate;
+    const events: ChainEvent[] = [];
+    const patch = (at: number, params: Record<string, PedalParamValue>) => {
+      events.push({ atSeconds: at, run: (handle) => handle.patchPedal('cab', { params }) });
+    };
+    patch(0.8, { micPosition: 85 });
+    patch(2.0, { model: 'blue-1x12' });
+    for (let step = 0; step <= 30; step += 1) patch(3.2 + step * 0.02, { micPosition: 85 - step });
+    for (let step = 0; step <= 30; step += 1) patch(5.2 + step * 0.02, { distance: 30 + step });
+
+    // [동작 구간 시작, 끝], [앞 고른 구간], [뒤 고른 구간] (입력이 시작한 뒤 몇 초)
+    const actions = [
+      { name: 'mic', window: [0.75, 1.5], before: [0.3, 0.7], after: [1.6, 2.0] },
+      { name: 'model', window: [1.95, 2.5], before: [1.5, 1.9], after: [2.6, 3.0] },
+      { name: 'micDrag', window: [3.15, 4.3], before: [2.6, 3.1], after: [4.4, 4.9] },
+      { name: 'distanceDrag', window: [5.15, 6.3], before: [4.4, 5.1], after: [6.4, 6.9] },
+    ] as const;
+
+    const values: Record<string, MetricValue> = {};
+    let worst = Number.NEGATIVE_INFINITY;
+    for (const frequency of [220, 660]) {
+      const render = await ctx.render({
+        input: [signals.refSine(rate, 7, frequency, -12)],
+        pedals: [pedal('cab', { mix: 100 })],
+        events,
+      });
+      const channel = render.output[0];
+      const at = (value: number) => seconds(render, value);
+      for (const action of actions) {
+        const moving = m.maxStep(channel, at(action.window[0]), at(action.window[1]));
+        const before = m.maxStep(channel, at(action.before[0]), at(action.before[1]));
+        const after = m.maxStep(channel, at(action.after[0]), at(action.after[1]));
+        const ratio = m.dbOf(moving) - m.dbOf(Math.max(before, after));
+        values[`clickRatioDb.${frequency}.${action.name}`] = ratio;
+        worst = Math.max(worst, ratio);
+      }
+    }
+    values.maxClickRatioDb = worst;
+    return { metrics: metrics(values) };
+  },
+};
+
 export const probes: ProbeDefinition[] = [
-  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24,
+  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25,
 ];
 
 // ---------------------------------------------------------------------------------------------

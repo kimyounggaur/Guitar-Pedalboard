@@ -12,6 +12,7 @@ import { limiterLookaheadFrames, OutputStage } from '../engine/OutputStage';
 import { dbToGain } from '../utils/db';
 import { ImpulseCache } from '../utils/impulseCache';
 import { clampTrimDb } from './loudnessSpec';
+import { createContextTimers } from './contextTimers';
 import { createOfflineEffect } from './effectFactory';
 import { registerWorklets } from './workletModules';
 
@@ -214,6 +215,20 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
   const livePedals = pedals.map((pedal) => ({ ...pedal, params: { ...pedal.params } }) as PedalState);
   const effects = new Map<string, EffectNodeWrapper>();
 
+  // suspend 는 렌더 퀀텀(128샘플) 경계에서만 되고, 같은 시각에 두 번 걸 수 없다.
+  const usedFrames = new Set<number>();
+  const scheduleSuspend = (requestedFrame: number, run: (frame: number) => void): void => {
+    let frame = Math.max(RENDER_QUANTUM, Math.round(requestedFrame / RENDER_QUANTUM) * RENDER_QUANTUM);
+    while (usedFrames.has(frame)) frame += RENDER_QUANTUM;
+    usedFrames.add(frame);
+    context.suspend(frame / sampleRate).then(() => {
+      run(frame);
+      return context.resume();
+    }, () => undefined);
+  };
+  // 이펙트가 거는 타이머(Cab 의 IR 교체 디바운스·페이드)는 창 시계가 아니라 렌더 시각으로 잰다.
+  const timers = createContextTimers(context, (frame, run) => scheduleSuspend(frame, () => run()));
+
   try {
     // 리버브 임펄스를 미리 만들어 두면 생성 직후 짧은 대기만으로 적용된다.
     await Promise.all(
@@ -227,7 +242,7 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
 
     let previous: AudioNode = chainInput;
     for (const pedal of livePedals) {
-      const effect = createOfflineEffect(context, pedal, impulseCache);
+      const effect = createOfflineEffect(context, pedal, impulseCache, timers);
       effects.set(pedal.id, effect);
       previous.connect(effect.input);
       previous = effect.output;
@@ -271,17 +286,6 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
 
     options.onBuilt?.(handle);
 
-    // suspend 는 렌더 퀀텀(128샘플) 경계에서만 되고, 같은 시각에 두 번 걸 수 없다.
-    const usedFrames = new Set<number>();
-    const scheduleSuspend = (requestedFrame: number, run: (frame: number) => void): void => {
-      let frame = Math.max(RENDER_QUANTUM, Math.round(requestedFrame / RENDER_QUANTUM) * RENDER_QUANTUM);
-      while (usedFrames.has(frame)) frame += RENDER_QUANTUM;
-      usedFrames.add(frame);
-      context.suspend(frame / sampleRate).then(() => {
-        run(frame);
-        return context.resume();
-      }, () => undefined);
-    };
     for (const event of [...events].sort((a, b) => a.atSeconds - b.atSeconds)) {
       scheduleSuspend(leadFrames + event.atSeconds * sampleRate, () => event.run(handle));
     }
