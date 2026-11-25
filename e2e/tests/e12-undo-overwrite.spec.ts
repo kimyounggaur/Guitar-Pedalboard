@@ -27,6 +27,7 @@ import {
 
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } as const;
 const FAVORITES_KEY = 'guitar-pedalboard:preset-favorites';
+const RECENTS_KEY = 'guitar-pedalboard:preset-recents';
 const SAME_NAME_TITLE = '같은 이름의 프리셋이 있습니다';
 
 interface StoredPreset {
@@ -65,10 +66,12 @@ const favoriteButton = (page: Page, name: string): Locator => page.getByRole('bu
 const resetButton = (page: Page): Locator => page.locator('.preset-reset-button');
 const sameNameDialog = (page: Page): Locator => page.getByRole('dialog', { name: SAME_NAME_TITLE });
 
-async function storedFavorites(page: Page): Promise<string[]> {
-  const raw = await readLocal(page, FAVORITES_KEY);
+async function storedIdList(page: Page, key: string): Promise<string[]> {
+  const raw = await readLocal(page, key);
   return raw === null ? [] : (JSON.parse(raw) as string[]);
 }
+const storedFavorites = (page: Page): Promise<string[]> => storedIdList(page, FAVORITES_KEY);
+const storedRecents = (page: Page): Promise<string[]> => storedIdList(page, RECENTS_KEY);
 
 /** 같은 이름으로 저장 버튼을 눌러 대화상자를 띄운다. */
 async function attemptSave(page: Page, name: string): Promise<void> {
@@ -111,6 +114,21 @@ test.describe('E-12 되돌리기·덮어쓰기 안전장치', () => {
     await expect(favoriteButton(page, 'P2')).toHaveText('★');
     await expect(presetMessage(page)).toHaveText("'P2' 프리셋을 되돌렸습니다.");
     expect(dialogs, '브라우저 기본 대화상자가 뜨지 않았다').toEqual([]);
+  });
+
+  test("지운 프리셋이 '최근 사용' 목록에 있었다면 되돌릴 때 같은 자리에 다시 들어간다", async ({ page }) => {
+    await openApp(page);
+    for (const name of ['R1', 'R2', 'R3']) await saveUserPreset(page, name);
+    const ids = new Map((await storedPresetList(page)).map((preset) => [preset.name, preset.id]));
+    // 불러온 순서대로 쌓인다(가장 최근이 맨 앞).
+    for (const name of ['R1', 'R2', 'R3']) await page.locator('.preset-load-button', { hasText: name }).click();
+    const order = [ids.get('R3')!, ids.get('R2')!, ids.get('R1')!];
+    expect(await storedRecents(page), '시험 준비: 최근 사용 순서').toEqual(order);
+
+    await deleteButton(page, 'R2').click();
+    expect(await storedRecents(page), '지우면 최근 사용에서도 빠진다').toEqual([ids.get('R3')!, ids.get('R1')!]);
+    await undoButton(deletedToasts(page)).click();
+    expect(await storedRecents(page), '되돌리면 같은 자리로 돌아온다').toEqual(order);
   });
 
   test('연달아 둘을 지워도 토스트가 따로 남고, 어느 순서로 되돌려도 원래 순서다', async ({ page }) => {
@@ -274,6 +292,12 @@ test.describe('E-12 되돌리기·덮어쓰기 안전장치', () => {
     const newName = dialog.getByLabel('새 이름', { exact: true });
     await expect(newName).toBeFocused();
     await expect(newName).toHaveValue('Lead (2)');
+    // 제안한 이름이 모두 선택돼 있어 바로 덮어 쓸 수 있다.
+    const selection = await newName.evaluate((element) => {
+      const input = element as HTMLInputElement;
+      return [input.selectionStart, input.selectionEnd, input.value.length];
+    });
+    expect(selection, '제안한 이름 전체가 선택돼 있다').toEqual([0, 8, 8]);
     expect(await readLocal(page, PRESETS_KEY), '대화상자가 떠 있는 동안 저장소는 그대로').toBe(stored);
 
     await page.keyboard.press('Escape');
@@ -338,6 +362,8 @@ test.describe('E-12 되돌리기·덮어쓰기 안전장치', () => {
     await newName.press('Enter');
     await expect(dialog.getByRole('alert')).toContainText('새 이름을 입력해 주세요');
     await expect(dialog, '대화상자는 열려 있다').toBeVisible();
+    await newName.fill('Lead B');
+    await expect(dialog.getByRole('alert'), '이름을 고치면 오류 안내가 사라진다').toHaveCount(0);
     expect(await readLocal(page, PRESETS_KEY), '아무것도 저장하지 않았다').toBe(stored);
 
     await newName.fill('Lead B');

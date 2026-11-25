@@ -50,6 +50,7 @@ const bundle = await build({
       "export { STORAGE_KEYS } from './persistence/index.ts';",
       "export { AudioEngine } from './audio/AudioEngine.ts';",
       "export { initialPedals, usePedalStore } from './store/pedalStore.ts';",
+      "export { useAudioStore } from './store/audioStore.ts';",
       "export { defaultPresets, usePresetStore } from './store/presetStore.ts';",
       "export { captureChainSnapshot, isDefaultChain, resetToDefaultChain, restoreChainSnapshot } from './store/chainActions.ts';",
     ].join('\n'),
@@ -79,6 +80,7 @@ const {
   uniqueNumberedName,
   uniqueRestoredName,
   usePedalStore,
+  useAudioStore,
   usePresetStore,
 } = app;
 
@@ -317,6 +319,8 @@ const board = () => clone(usePedalStore.getState().pedals);
   usePedalStore.getState().reorderPedals(0, 3);
   const changed = captureChainSnapshot();
   ok(changed.pedals[0].id !== initialPedals[0].id, '순서를 바꿨다(시험 준비)');
+  ok(changed.pedals !== usePedalStore.getState().pedals, '기억한 페달 목록은 스토어의 것과 다른 배열(복사본)이다');
+  ok(changed.pedals.every((pedal, index) => pedal !== usePedalStore.getState().pedals[index]), '기억한 페달은 스토어의 객체와 다른 객체(복사본)다');
   ok(!isDefaultChain(changed), '바꾼 뒤에는 기본이 아니다');
   equal(changed.presetTrimDb, -2.5, '기억: 음량 보정');
   const savedPedals = JSON.stringify(changed.pedals);
@@ -345,6 +349,16 @@ const board = () => clone(usePedalStore.getState().pedals);
   equal(storedAfterRestore.pedals.delay.active, !active.active, '되돌리기: 저장소에도 반영');
   equal(storedAfterRestore.trimDb, -2.5, '되돌리기: 음량 보정도 저장소에 반영');
   deepEqual(storedAfterRestore.chain, changed.pedals.map((pedal) => pedal.id), '되돌리기: 순서도 저장소에 반영');
+
+  // 템포: 되돌린 체인의 Delay 가 템포 동기이면 탭 템포도 그 값을 따라간다(프리셋을 불러올 때와 같은 규칙).
+  usePedalStore.getState().setPedals(clone(initialPedals), 0);
+  usePedalStore.getState().updatePedalParam('delay', 'sync', true);
+  usePedalStore.getState().updatePedalParam('delay', 'bpm', 90);
+  const synced = captureChainSnapshot();
+  resetToDefaultChain();
+  useAudioStore.setState({ tapTempo: { taps: [], bpm: 120 } });
+  restoreChainSnapshot(synced);
+  equal(useAudioStore.getState().tapTempo.bpm, 90, '되돌리면 동기된 Delay 의 BPM 을 탭 템포가 따라간다');
 
   // 되돌리기가 기억한 값을 다시 바꾸지 않는다(두 번 되돌려도 같다)
   usePedalStore.getState().setPedals(clone(initialPedals), 0);
