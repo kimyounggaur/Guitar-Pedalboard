@@ -18,7 +18,7 @@ const fixture = JSON.parse(readFileSync(join(fixturesDir, 'storage-v1', '04-disa
 /** 기본 Mix(%). `src/store/pedalStore.ts` 의 기본 페달 값이다. */
 const DEFAULT_MIX = { Delay: 30, Reverb: 25, Chorus: 35 } as const;
 
-const pedalGroup = (page: Page, name: string): Locator => page.getByRole('group', { name: `${name} 이펙터`, exact: true });
+const pedalGroup = (page: Page, name: string): Locator => page.getByRole('region', { name: `${name} 이펙터`, exact: true });
 const stompOf = (page: Page, name: string): Locator => pedalGroup(page, name).locator('.stomp-toggle-switch');
 /** Mix 노브의 화면 이름. Delay 는 'E.Level'(에코 레벨)이 Mix 값이다. */
 const MIX_LABEL: Record<string, string> = { Delay: 'E.Level' };

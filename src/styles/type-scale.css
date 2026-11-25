@@ -1,0 +1,31 @@
+/* ============================================================================
+   S4.5 글자 크기 단계(설계서 4.10절 토큰): 최소 11px(--fs-min) · 라벨 12px(--fs-label) · 값 13px(--fs-value)
+   - 본문·보조 글자는 11px 아래로 내려가지 않는다(각 규칙의 font-size 는 --fs-min 이상).
+   - 라벨(매개변수 이름·판 제목·스위치 이름)은 12px, 값(숫자 입력·값 표시)은 13px.
+   - `.app-shell` 접두사로 특이도를 한 칸 올려, 페달마다 따로 둔 작은 지정을 이 파일 한 곳에서 정리한다.
+   ============================================================================ */
+
+.app-shell :is(
+  .knob-control-head > span, .compressor-knob > span, .tube-knob-label, .fuzz-knob > strong, .reverb-knob > span,
+  .graphic-eq-fader > span, .vertical-fader-label, .stomp-toggle-label, .stomp-toggle-label output,
+  .midi-mapping-status, .midi-learn-button, .compressor-check-row > span, .fuzz-check-row > span, .fuzz-io-row > span,
+  legend, .select-control > span, .toggle-switch > span, .tap-tempo-button kbd, .tap-tempo-status,
+  .tube-brand-plate > span, .chorus-brand-plate > span, .flanger-brand-plate > span, .phaser-brand-plate > span,
+  .tremolo-brand-plate > span, .auto-wah-brand-plate > span, .graphic-eq7-brand-plate > span,
+  .auto-wah-sweep-panel > strong, .chorus-wave-panel > strong, .flanger-jet-panel > strong,
+  .phaser-orbit-panel > strong, .tremolo-pulse-panel > strong, .graphic-eq7-meter span, .graphic-eq7-meter strong,
+  .cab-grille em, .cab-custom-ir small, .cab-mic-legend span,
+  .preset-tabs em, .preset-tool-title, .preset-load-button span, .preset-library-list small, .preset-library-list em,
+  .preset-search span
+) {
+  font-size: var(--fs-label);
+}
+
+/* 값: 노브 머리의 값, 칸 안의 값 표시, 숫자 입력 */
+.app-shell :is(
+  .knob-control-head output, .noise-gate-knob output, .tube-knob output, .crunch-knob output, .fuzz-knob output,
+  .delay-knob output, .compressor-knob output, .reverb-knob output, .graphic-eq-fader output, .vertical-fader output,
+  .graphic-eq7-utility-controls output, .cab-range-control output, .knob-number-input, .tremolo-division-control select
+) {
+  font-size: var(--fs-value);
+}

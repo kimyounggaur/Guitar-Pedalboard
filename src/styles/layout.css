@@ -372,7 +372,7 @@ h2 {
 
 .preset-library-list small {
   color: var(--ink-muted);
-  font-size: 0.66rem;
+  font-size: var(--fs-min);
   line-height: 1.2;
 }
 
@@ -384,7 +384,7 @@ h2 {
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.14);
   color: #aebbd0;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-style: normal;
   font-weight: 900;
 }
@@ -417,7 +417,7 @@ h2 {
 
 .preset-search span {
   color: var(--ink-muted);
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -505,7 +505,7 @@ h2 {
 
 .section-heading .preset-load-button small {
   color: var(--ink-muted);
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   line-height: 1.25;
 }
 

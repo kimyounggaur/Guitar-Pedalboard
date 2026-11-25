@@ -50,8 +50,8 @@ export function inBoardOrder(names: readonly string[]): string[] {
   return PEDALS.map((pedal) => pedal.name as string).filter((name) => names.includes(name));
 }
 
-/** 페달 카드(`role="group"`, 이름은 '<이름> 이펙터') */
-export const pedalGroup = (page: Page, name: string): Locator => page.getByRole('group', { name: `${name} 이펙터`, exact: true });
+/** 페달 카드(`<section aria-label>` = region, 이름은 '<이름> 이펙터') */
+export const pedalGroup = (page: Page, name: string): Locator => page.getByRole('region', { name: `${name} 이펙터`, exact: true });
 /** 카드 안의 켜고 끄는 발스위치 */
 export const stompOf = (page: Page, name: string): Locator => pedalGroup(page, name).locator('.stomp-toggle-switch');
 /** 알림(토스트) — 같은 key 는 한 장만 뜬다 */

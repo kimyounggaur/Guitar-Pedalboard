@@ -929,7 +929,7 @@ select,
 .preset-tabs em {
   padding-right: 10px;
   color: #55e7ff;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-style: normal;
   font-weight: 900;
 }
@@ -992,7 +992,7 @@ select,
 .preset-tool-title,
 .preset-output strong {
   color: #55e7ff;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 950;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -1076,7 +1076,7 @@ select,
   align-items: center;
   gap: 8px;
   color: #99aec1;
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -1219,7 +1219,7 @@ select,
 .sidebar .preset-load-button span {
   overflow: hidden;
   color: #9ca7b9;
-  font-size: 0.66rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   letter-spacing: 0.02em;
   text-overflow: ellipsis;

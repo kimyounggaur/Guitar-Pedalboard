@@ -81,8 +81,7 @@ export const PedalCard = memo(function PedalCard({ pedal, dragHandleProps, isDra
   };
 
   return (
-    <article
-      role="group"
+    <section
       aria-label={`${pedal.name} 이펙터`}
       className={`pedal-card${pedal.type === 'compressor' ? ' pedal-card-compressor' : ''}${
         pedal.type === 'drive' ? ' pedal-card-drive' : ''
@@ -243,6 +242,6 @@ export const PedalCard = memo(function PedalCard({ pedal, dragHandleProps, isDra
       </div>
 
       <PedalFooter pedalId={pedal.id} pedalName={pedal.name} active={pedal.active} />
-    </article>
+    </section>
   );
 });

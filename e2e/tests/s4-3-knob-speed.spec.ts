@@ -87,7 +87,7 @@ interface StepTime {
 async function measureKnobSteps(page: Page, pedalName: string, steps: number): Promise<StepTime[]> {
   return page.evaluate(
     async ({ name, count }) => {
-      const card = document.querySelector(`.pedal-board [role="group"][aria-label="${name} 이펙터"]`);
+      const card = document.querySelector(`.pedal-board section.pedal-card[aria-label="${name} 이펙터"]`);
       const input = card?.querySelector('input[type="range"]') as HTMLInputElement | null;
       if (!input) throw new Error(`노브를 찾지 못했습니다: ${name}`);
       const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;

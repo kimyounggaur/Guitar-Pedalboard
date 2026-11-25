@@ -36,7 +36,7 @@ const corruptFixture = JSON.parse(readFileSync(join(fixturesDir, 'storage-v1', '
 const toastOf = (page: Page, key: string): Locator => page.locator(`.toast[data-toast-key="${key}"]`);
 const appErrorScreen = (page: Page): Locator => page.locator('main[data-app-error]');
 const staticFallback = (page: Page): Locator => page.locator('main[data-static-fallback]');
-const pedalGroup = (page: Page, name: string): Locator => page.getByRole('group', { name: `${name} 이펙터`, exact: true });
+const pedalGroup = (page: Page, name: string): Locator => page.getByRole('region', { name: `${name} 이펙터`, exact: true });
 const stompOf = (page: Page, name: string): Locator => pedalGroup(page, name).locator('.stomp-toggle-switch');
 const chorusRate = (page: Page): Locator => pedalGroup(page, 'Chorus').getByRole('slider', { name: 'Rate', exact: true });
 

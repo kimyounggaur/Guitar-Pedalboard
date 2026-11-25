@@ -178,7 +178,7 @@
   gap: 5px;
   min-height: 10px;
   color: #ff302d;
-  font-size: 0.52rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   line-height: 1;
 }
@@ -204,7 +204,7 @@
   gap: 3px;
   min-width: 0;
   color: #ffffff;
-  font-size: 0.48rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -258,7 +258,7 @@
   overflow: hidden;
   max-width: 52px;
   color: rgba(255, 255, 255, 0.82);
-  font-size: 0.44rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   line-height: 1;
   text-overflow: ellipsis;
@@ -270,7 +270,7 @@
   grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 1px;
   color: rgba(255, 255, 255, 0.72);
-  font-size: 0.42rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
@@ -732,7 +732,7 @@
   min-height: 12px;
   color: rgba(2, 6, 4, 0.72);
   font-family: system-ui, sans-serif;
-  font-size: 0.49rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   line-height: 1;
   text-align: center;
@@ -811,7 +811,7 @@
   gap: 5px;
   min-width: 0;
   color: #142a18;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -1304,7 +1304,7 @@
   justify-items: center;
   gap: 2px;
   color: #d60f0f;
-  font-size: 0.44rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   line-height: 1;
   transform: translateX(-50%);
@@ -1332,7 +1332,7 @@
   gap: 4px;
   min-width: 0;
   color: #111719;
-  font-size: 0.52rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -1684,7 +1684,7 @@
   border-radius: 4px;
   color: rgba(255, 255, 255, 0.78);
   font: inherit;
-  font-size: 0.58rem;
+  font-size: var(--fs-min);
   letter-spacing: 0;
 }
 
@@ -1705,7 +1705,7 @@
 
 .tap-tempo-status {
   color: rgba(15, 24, 32, 0.72);
-  font-size: 0.58rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -1824,7 +1824,7 @@
   gap: 5px;
   min-width: 0;
   color: #ffffff;
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   text-transform: uppercase;
   text-shadow: 0 1px 1px rgba(0, 81, 84, 0.54);
@@ -1876,7 +1876,7 @@
 
 .reverb-knob output {
   color: rgba(255, 255, 255, 0.82);
-  font-size: 0.58rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   line-height: 1;
 }
@@ -2011,7 +2011,7 @@
 .cab-grille em {
   margin-top: 4px;
   color: #d4c0a0;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-style: normal;
   letter-spacing: 0.08em;
 }
@@ -2101,7 +2101,7 @@
   gap: 12px;
   margin: -5px 0 0;
   color: rgba(255, 244, 226, 0.68);
-  font-size: 0.66rem;
+  font-size: var(--fs-min);
 }
 
 .pedal-card-cab .pedal-switches {
@@ -2188,7 +2188,7 @@
   z-index: 1;
   margin-top: 43px;
   color: #ecfbff;
-  font-size: 0.65rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.24em;
   text-shadow: 0 0 10px rgba(126, 224, 248, 0.72);
 }
@@ -2206,7 +2206,7 @@
 
 .chorus-ui .knob-control-head {
   color: #effbfe;
-  font-size: 0.67rem;
+  font-size: var(--fs-min);
 }
 
 .chorus-ui .knob-control-head output {
@@ -2236,7 +2236,7 @@
 .chorus-voice-selector legend {
   padding: 0 5px;
   color: #e7f9fd;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -2300,7 +2300,7 @@
 
 .chorus-brand-plate span {
   color: rgba(223, 247, 253, 0.7);
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.08em;
 }
 
@@ -2386,7 +2386,7 @@
   z-index: 1;
   margin-top: 42px;
   color: #f3f7ff;
-  font-size: 0.64rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.22em;
   text-shadow: 0 0 11px rgba(164, 200, 255, 0.78);
 }
@@ -2404,7 +2404,7 @@
 
 .flanger-ui .knob-control-head {
   color: #f2f5ff;
-  font-size: 0.67rem;
+  font-size: var(--fs-min);
 }
 
 .flanger-ui .knob-control-head output {
@@ -2440,7 +2440,7 @@
 
 .flanger-brand-plate span {
   color: rgba(231, 238, 255, 0.72);
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.08em;
 }
 
@@ -2540,7 +2540,7 @@
   right: 10px;
   bottom: 7px;
   color: #f7ebff;
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.18em;
   text-shadow: 0 0 10px rgba(221, 170, 255, 0.74);
 }
@@ -2558,7 +2558,7 @@
 
 .phaser-ui .knob-control-head {
   color: #fbf4ff;
-  font-size: 0.67rem;
+  font-size: var(--fs-min);
 }
 
 .phaser-ui .knob-control-head output {
@@ -2588,7 +2588,7 @@
 .phaser-stage-selector legend {
   padding: 0 5px;
   color: #f8eeff;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -2653,7 +2653,7 @@
 
 .phaser-brand-plate span {
   color: rgba(241, 225, 251, 0.74);
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.08em;
 }
 
@@ -2745,7 +2745,7 @@
   right: 10px;
   bottom: 7px;
   color: #ffedc8;
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.18em;
   text-shadow: 0 0 10px rgba(255, 189, 82, 0.7);
 }
@@ -2765,7 +2765,7 @@
 .pedal-card-tremolo .select-control,
 .pedal-card-tremolo .toggle-switch {
   color: #3a210b;
-  font-size: 0.67rem;
+  font-size: var(--fs-min);
 }
 
 .tremolo-ui .knob-control-head output {
@@ -2795,7 +2795,7 @@
 .tremolo-shape-selector legend {
   padding: 0 5px;
   color: #3d220b;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -2885,7 +2885,7 @@
 
 .tremolo-brand-plate span {
   color: rgba(54, 30, 8, 0.7);
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.07em;
 }
 
@@ -2991,7 +2991,7 @@
   right: 10px;
   bottom: 7px;
   color: #dbffc1;
-  font-size: 0.61rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.15em;
   text-shadow: 0 0 10px rgba(143, 235, 78, 0.68);
 }
@@ -3009,7 +3009,7 @@
 .auto-wah-mode-selector legend {
   padding: 0 5px;
   color: #1d3b0d;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -3072,7 +3072,7 @@
 
 .auto-wah-ui .knob-control-head {
   color: #1a350c;
-  font-size: 0.67rem;
+  font-size: var(--fs-min);
 }
 
 .auto-wah-ui .knob-control-head output {
@@ -3118,7 +3118,7 @@
 
 .auto-wah-brand-plate span {
   color: rgba(21, 47, 9, 0.72);
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.07em;
 }
 
@@ -3173,7 +3173,7 @@
   border-radius: 8px;
   background: rgba(13, 21, 38, 0.74);
   color: #cbd7e9;
-  font-size: 0.59rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   letter-spacing: 0.08em;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.34);
@@ -3211,7 +3211,7 @@
 .vertical-fader-label {
   min-height: 14px;
   overflow: hidden;
-  font-size: 0.58rem;
+  font-size: var(--fs-min);
   font-weight: 850;
   letter-spacing: -0.02em;
   text-overflow: ellipsis;
@@ -3317,7 +3317,7 @@
 .vertical-fader output {
   min-height: 13px;
   color: #d9e3f3;
-  font-size: 0.54rem;
+  font-size: var(--fs-min);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -3337,7 +3337,7 @@
   border-radius: 9px;
   background: rgba(219, 228, 243, 0.08);
   color: #eef3fb;
-  font-size: 0.65rem;
+  font-size: var(--fs-min);
   font-weight: 800;
 }
 
@@ -3381,7 +3381,7 @@
 
 .graphic-eq7-brand-plate span {
   color: #d7e1f0;
-  font-size: 0.58rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.12em;
 }
 
@@ -3495,7 +3495,7 @@
   display: grid;
   gap: 1px;
   color: currentColor;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   letter-spacing: 0;
   line-height: 1.1;
@@ -3547,7 +3547,7 @@
 }
 
 .compressor-knob {
-  font-size: 0.44rem;
+  font-size: var(--fs-min);
 }
 
 .compressor-knob-shell {
@@ -3704,19 +3704,19 @@
 
 .pedal-card-eq .graphic-eq-fader > span:first-child {
   overflow: visible;
-  font-size: 11px;
+  font-size: var(--fs-label);
   white-space: normal;
   text-align: center;
 }
 
 .pedal-card-eq .graphic-eq-fader output {
   max-width: 100%;
-  font-size: 11px;
+  font-size: var(--fs-value);
 }
 
 .graphic-eq-fader {
   gap: 5px;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
 }
 
 .graphic-eq-slot {
@@ -3792,7 +3792,7 @@
 }
 
 .tube-brand-plate span {
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
 }
 
 .tube-footswitch-pad {
@@ -3916,7 +3916,7 @@
 
 .fuzz-io-row {
   top: 82px;
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
 }
 
 .fuzz-logo {
@@ -4303,7 +4303,7 @@
 
 .cab-custom-ir input[type='file'] { max-width: 100%; min-width: 0; }
 .cab-custom-ir p { margin: 0; overflow-wrap: anywhere; }
-.cab-custom-ir small { line-height: 1.5; }
+.cab-custom-ir small { font-size: var(--fs-min); line-height: 1.5; }
 .cab-custom-ir [role='alert'] { color: #ffd0bf; }
 
 /* ============================================================================
@@ -4465,7 +4465,7 @@
   right: auto;
   left: auto;
   align-items: center;
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   line-height: 1.2;
 }
 
