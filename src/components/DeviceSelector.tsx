@@ -1,5 +1,6 @@
 import { describeDecision } from '../audio/engine/channelDecision';
 import { isInputChannelMode } from '../audio/engine/InputStage';
+import { ko } from '../i18n/ko';
 import { useAudioStore } from '../store/audioStore';
 
 /**
@@ -52,6 +53,8 @@ export function DeviceSelector({ hideChannelMenu = false }: DeviceSelectorProps)
   const setOutputDevice = useAudioStore((state) => state.setOutputDevice);
   const devices = useAudioStore((state) => state.devices);
   const selectedDeviceId = useAudioStore((state) => state.selectedDeviceId);
+  const rememberedInput = useAudioStore((state) => state.rememberedInput);
+  const rememberedOutput = useAudioStore((state) => state.rememberedOutput);
   const inputMode = useAudioStore((state) => state.inputMode);
   const setSelectedDevice = useAudioStore((state) => state.setSelectedDevice);
   const loadDevices = useAudioStore((state) => state.loadDevices);
@@ -83,7 +86,12 @@ export function DeviceSelector({ hideChannelMenu = false }: DeviceSelectorProps)
           onChange={(event) => void setSelectedDevice(event.currentTarget.value)}
         >
           <option value="">기본 입력 장치</option>
-          {devices.map((device, index) => (
+          {/* 저장해 둔 장치가 목록에 아직 없을 때(마이크 권한 전이라 목록이 비어 있거나 장치를 아직 꽂지 않았다)에도 고른 장치가 무엇인지 보인다. */}
+          {selectedDeviceId && !devices.some((device) => device.deviceId === selectedDeviceId) ? (
+            <option value={selectedDeviceId}>{rememberedInput?.label || ko.devices.savedInput}</option>
+          ) : null}
+          {/* 마이크 권한 전에는 브라우저가 장치마다 id 를 비워서 준다. 고를 수 없는 항목은 보이지 않는다. */}
+          {devices.filter((device) => device.deviceId).map((device, index) => (
             <option key={device.deviceId} value={device.deviceId}>
               {device.label || `Audio input ${index + 1}`}
             </option>
@@ -105,13 +113,13 @@ export function DeviceSelector({ hideChannelMenu = false }: DeviceSelectorProps)
           onChange={(event) => void setOutputDevice(event.currentTarget.value)}>
           <option value="">시스템 기본 출력</option>
           {selectedOutputDeviceId && !outputDevices.some((device) => device.deviceId === selectedOutputDeviceId) ? (
-            <option value={selectedOutputDeviceId}>저장된 출력 장치</option>
+            <option value={selectedOutputDeviceId}>{rememberedOutput?.label || ko.devices.savedOutput}</option>
           ) : null}
           {outputDevices.filter((device) => device.deviceId).map((device, index) => (
             <option key={device.deviceId} value={device.deviceId}>{device.label || `출력 장치 ${index + 1}`}</option>
           ))}
         </select>
-      ) : <p>이 브라우저는 출력 장치 선택을 지원하지 않습니다. 시스템 기본 출력을 사용합니다.</p>}
+      ) : <p className="device-note">{ko.devices.outputUnsupported}</p>}
       {outputSelectionSupported && mediaDevices?.selectAudioOutput ? (
         <button type="button" className="secondary-button" disabled={isLoading} onClick={() => void chooseOutput()}>
           출력 장치 권한 및 선택

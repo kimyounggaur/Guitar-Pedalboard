@@ -53,13 +53,9 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
     : '기본 입력 장치';
   const latencyDisplay = formatLatency(latency);
   const latencyText = latencyDisplay.totalMs !== null ? `${latencyDisplay.totalMs.toFixed(1)}ms` : '측정 대기';
+  // 장치가 꽂히고 빠지는 것(`devicechange`)은 스토어가 지켜본다(audioStore.ts). 여기서는 패널이 나타날 때 목록을 한 번 읽을 뿐이다.
   useEffect(() => {
     void loadDevices();
-    const mediaDevices = navigator.mediaDevices;
-    if (!mediaDevices?.addEventListener) return;
-    const handleDeviceChange = () => { void loadDevices(); };
-    mediaDevices.addEventListener('devicechange', handleDeviceChange);
-    return () => mediaDevices.removeEventListener('devicechange', handleDeviceChange);
   }, [loadDevices]);
 
   // 연결 실패 안내는 '기타 연결하기' 바로 아래에 둔다. 그래도 스크롤되는 좁은 패널(휴대폰 도크)에서는 버튼이 아래쪽에 있으면 안내가 밖으로 밀리므로,

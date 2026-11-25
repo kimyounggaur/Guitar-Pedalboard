@@ -89,6 +89,7 @@ export class AudioEngine {
 
   private context: AudioContext | null = null;
   private outputDeviceId = '';
+  private outputFellBack = false;
   private stream: MediaStream | null = null;
   private inputEndedHandler: (() => void) | null = null;
   private inputEndedCleanup: (() => void) | null = null;
@@ -283,12 +284,27 @@ export class AudioEngine {
     this.outputDeviceId = deviceId;
   }
 
+  /**
+   * 저장해 둔 출력 장치로 새 컨텍스트의 소리를 보낸다. 그 장치를 쓸 수 없으면(뽑혔거나 권한이 없음) 연결을 막지 않고 시스템 기본 출력으로 두며,
+   * 그랬다는 사실을 `consumeOutputFallback` 으로 한 번 알려 준다(S2.13, 설계서 4.4). 기본 출력은 새 컨텍스트가 처음부터 쓰던 것이라 따로 바꿀 것이 없다.
+   */
   private async applyOutputDevice(context: AudioContext): Promise<void> {
     if (!this.outputDeviceId) return;
     const sinkContext = context as AudioContext & { setSinkId?: (id: string) => Promise<void> };
-    if (!sinkContext.setSinkId) throw new Error('이 브라우저는 출력 장치 선택을 지원하지 않습니다.');
-    try { await sinkContext.setSinkId(this.outputDeviceId); }
-    catch { throw new Error('선택한 출력 장치에 연결할 수 없습니다. 출력 장치를 다시 선택해 주세요.'); }
+    try {
+      if (!sinkContext.setSinkId) throw new Error('setSinkId 없음');
+      await sinkContext.setSinkId(this.outputDeviceId);
+    } catch {
+      this.outputDeviceId = '';
+      this.outputFellBack = true;
+    }
+  }
+
+  /** 마지막 연결에서 저장된 출력 장치를 쓰지 못해 기본 출력으로 두었는지. 한 번 읽으면 지워진다. */
+  consumeOutputFallback(): boolean {
+    const fellBack = this.outputFellBack;
+    this.outputFellBack = false;
+    return fellBack;
   }
 
   async listInputDevices(): Promise<MediaDeviceInfo[]> {

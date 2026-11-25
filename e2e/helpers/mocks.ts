@@ -816,3 +816,173 @@ export async function markTriggers(page: Page): Promise<void> {
     for (const type of ['keydown', 'pointerdown', 'click']) window.addEventListener(type, stamp, { capture: true });
   });
 }
+
+// ---------------------------------------------------------------------------------------------
+// 입출력 장치 모의(E-17)
+// ---------------------------------------------------------------------------------------------
+export interface MockedDevice {
+  kind: 'audioinput' | 'audiooutput';
+  deviceId: string;
+  label: string;
+}
+
+/** 장치 모의의 상태. 새로고침해도 이어지게 sessionStorage 에 둔다(앱의 localStorage 와 겹치지 않는다). */
+export interface DeviceMockState {
+  /** 목록에서 숨기는 장치의 고정 id(`audioinput:Fake Audio Input 2` 처럼 종류:이름, 옵션의 value 와 같다). 숨긴 장치를 지정한 getUserMedia·setSinkId 는 거부한다. */
+  hidden: string[];
+  /** 진짜 가짜 장치 목록 뒤에 덧붙이는 장치(열 수는 없는 장치다) */
+  added: MockedDevice[];
+  /** 장치 id 를 바꿔서 보이게 한다(같은 장치가 사이트 데이터 삭제 뒤 새 id 를 받은 상황). 키는 고정 id, 값은 보여 줄 id */
+  renamed: Record<string, string>;
+  /** true 면 마이크 권한을 받기 전 브라우저처럼 장치마다 id·이름을 비워서 준다 */
+  blank: boolean;
+}
+
+export interface DeviceMockOptions {
+  /** false 면 `AudioContext.prototype.setSinkId` 를 없앤다(Firefox·Safari 처럼). 기본은 그대로 둔다. */
+  sinkId?: boolean;
+}
+
+export interface DeviceMock {
+  /** 상태를 고치고 `devicechange` 를 보낸다 */
+  change(patch: Partial<DeviceMockState>): Promise<void>;
+  /** `devicechange` 를 `times` 번 연달아 보낸다(상태는 그대로) */
+  burst(times: number): Promise<void>;
+  /** 상태만 고친다(이벤트 없음). 새로고침 직전에 '그 사이 장치가 바뀌었다'를 만들 때 쓴다. */
+  set(patch: Partial<DeviceMockState>): Promise<void>;
+  /** 앱이 `setSinkId` 에 넘긴 id 들(새로고침하면 비워진다) */
+  sinkCalls(): Promise<string[]>;
+  /** 앱이 낸 getUserMedia 요청: 장치를 지정했으면 `exact:<id>`, 아니면 `default`(새로고침하면 비워진다) */
+  userMediaRequests(): Promise<string[]>;
+  /** `enumerateDevices` 호출 횟수(새로고침하면 0부터) */
+  enumerateCalls(): Promise<number>;
+}
+
+const DEVICE_MOCK_KEY = 'e17-device-mock';
+
+/**
+ * `navigator.mediaDevices.enumerateDevices`·`getUserMedia` 와 `AudioContext.setSinkId` 를 감싸 장치가 꽂히고 빠지는 상황을 만든다.
+ * 진짜 목록은 Chromium 의 가짜 장치(입력 3개: default·Fake Audio Input 1·2, 출력 3개)다. 이 가짜 장치의 id 는 문서를 새로 열 때마다 바뀌므로
+ * (실제 브라우저에서는 사이트 데이터를 지우면 바뀌는 것과 같다) 모의가 종류·이름으로 만든 고정 id(`audioinput:Fake Audio Input 2`)로 바꿔 보여 준다.
+ * 그 위에 숨기기·덧붙이기·id 바꾸기를 얹는다. 바꿔 보인 id 는 getUserMedia·setSinkId 에서 진짜 id 로 되돌려 열므로 연결은 실제로 된다.
+ */
+export async function mockDevices(page: Page, options: DeviceMockOptions = {}): Promise<DeviceMock> {
+  await page.addInitScript(
+    ({ key, keepSinkId }) => {
+      interface State {
+        hidden: string[];
+        added: Array<{ kind: string; deviceId: string; label: string }>;
+        renamed: Record<string, string>;
+        blank: boolean;
+      }
+      const read = (): State => {
+        try {
+          const parsed = JSON.parse(sessionStorage.getItem(key) ?? '') as Partial<State>;
+          return { hidden: parsed.hidden ?? [], added: parsed.added ?? [], renamed: parsed.renamed ?? {}, blank: parsed.blank ?? false };
+        } catch {
+          return { hidden: [], added: [], renamed: {}, blank: false };
+        }
+      };
+      const log = { sink: [] as string[], gum: [] as string[], enumerate: 0 };
+      const devices = navigator.mediaDevices;
+      const nativeEnumerate = devices.enumerateDevices.bind(devices);
+      const stableId = (device: { kind: string; label: string }): string => `${device.kind}:${device.label}`;
+
+      /** 앱이 본 id → 진짜 id. 숨겼거나 덧붙인(열 수 없는) 장치면 null */
+      const toRealId = async (shownId: string): Promise<string | null> => {
+        const state = read();
+        const stable = Object.keys(state.renamed).find((original) => state.renamed[original] === shownId) ?? shownId;
+        if (state.hidden.includes(stable)) return null;
+        const real = (await nativeEnumerate()).find((device) => stableId(device) === stable);
+        return real ? real.deviceId : null;
+      };
+
+      Object.defineProperty(devices, 'enumerateDevices', {
+        configurable: true,
+        value: async () => {
+          log.enumerate += 1;
+          const state = read();
+          const real = await nativeEnumerate();
+          if (state.blank) {
+            return real.map((device) => ({ kind: device.kind, label: '', groupId: '', deviceId: '', toJSON: () => ({}) }));
+          }
+          const shown = real
+            .filter((device) => !state.hidden.includes(stableId(device)))
+            .map((device) => ({
+              kind: device.kind,
+              label: device.label,
+              groupId: device.groupId,
+              deviceId: state.renamed[stableId(device)] ?? stableId(device),
+              toJSON: () => ({}),
+            }));
+          return [...shown, ...state.added.map((device) => ({ ...device, groupId: '', toJSON: () => ({}) }))];
+        },
+      });
+
+      const nativeGetUserMedia = devices.getUserMedia.bind(devices);
+      Object.defineProperty(devices, 'getUserMedia', {
+        configurable: true,
+        value: async (constraints?: MediaStreamConstraints) => {
+          const audio = constraints?.audio;
+          const wanted = typeof audio === 'object' && audio !== null ? (audio.deviceId as ConstrainDOMStringParameters | string | undefined) : undefined;
+          const exact = typeof wanted === 'string' ? wanted : (wanted?.exact as string | undefined);
+          log.gum.push(exact ? `exact:${exact}` : 'default');
+          if (!exact) return nativeGetUserMedia(constraints);
+          const real = await toRealId(exact);
+          if (real === null) {
+            const error = new DOMException('Requested device not found', 'OverconstrainedError');
+            Object.defineProperty(error, 'constraint', { value: 'deviceId' });
+            throw error;
+          }
+          return nativeGetUserMedia({ ...constraints, audio: { ...(audio as MediaTrackConstraints), deviceId: { exact: real } } });
+        },
+      });
+
+      const proto = AudioContext.prototype as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+      if (!keepSinkId) {
+        delete proto.setSinkId;
+      } else if (typeof proto.setSinkId === 'function') {
+        const nativeSetSinkId = proto.setSinkId;
+        proto.setSinkId = async function setSinkId(this: AudioContext, id: string) {
+          log.sink.push(String(id));
+          const real = id === '' ? '' : await toRealId(String(id));
+          if (real === null) throw new DOMException('Device not found', 'NotFoundError');
+          return nativeSetSinkId.call(this, real);
+        };
+      }
+
+      Object.defineProperty(window, '__deviceMock', {
+        configurable: true,
+        value: {
+          log,
+          read,
+          write: (state: State) => sessionStorage.setItem(key, JSON.stringify(state)),
+        },
+      });
+    },
+    { key: DEVICE_MOCK_KEY, keepSinkId: options.sinkId !== false },
+  );
+
+  type Hook = { log: { sink: string[]; gum: string[]; enumerate: number }; read: () => DeviceMockState; write: (state: DeviceMockState) => void };
+  const merge = (patch: Partial<DeviceMockState>, notify: boolean) =>
+    page.evaluate(
+      ({ patch: next, notify: shouldNotify }) => {
+        const hook = (window as unknown as { __deviceMock: Hook }).__deviceMock;
+        hook.write({ ...hook.read(), ...next });
+        if (shouldNotify) navigator.mediaDevices.dispatchEvent(new Event('devicechange'));
+      },
+      { patch, notify },
+    );
+
+  return {
+    change: (patch) => merge(patch, true),
+    set: (patch) => merge(patch, false),
+    burst: (times) =>
+      page.evaluate((count) => {
+        for (let index = 0; index < count; index += 1) navigator.mediaDevices.dispatchEvent(new Event('devicechange'));
+      }, times),
+    sinkCalls: () => page.evaluate(() => [...(window as unknown as { __deviceMock: Hook }).__deviceMock.log.sink]),
+    userMediaRequests: () => page.evaluate(() => [...(window as unknown as { __deviceMock: Hook }).__deviceMock.log.gum]),
+    enumerateCalls: () => page.evaluate(() => (window as unknown as { __deviceMock: Hook }).__deviceMock.log.enumerate),
+  };
+}

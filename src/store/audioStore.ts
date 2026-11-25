@@ -1,6 +1,16 @@
 import { create } from 'zustand';
 import { AudioEngine } from '../audio/AudioEngine';
 import {
+  chooseRememberedOutput,
+  makeRemembered,
+  parseRememberedDevice,
+  reconcileInputSelection,
+  rememberedPresence,
+  shouldAnnounceMissing,
+  watchDeviceChanges,
+  type RememberedDevice,
+} from '../audio/devices/DeviceManager';
+import {
   AudioSession,
   type StartOutcome,
   type StopDetail,
@@ -52,11 +62,13 @@ import { setPedalActive } from './pedalActions';
 import { usePedalStore } from './pedalStore';
 import { showToast } from './toastStore';
 
-/** 마지막으로 고른 출력 장치 id. JSON 이 아니라 문자열 그대로 저장된다(S1.7 에서도 형식은 그대로). */
-function readOutputDevice(): string {
-  return safeStorage.getRaw(STORAGE_KEYS.outputDevice) ?? '';
+/**
+ * 마지막으로 고른 출력 장치 id. JSON 이 아니라 문자열 그대로 저장된다(S1.7 에서도 형식은 그대로).
+ * S2.13 부터 id·이름은 입출력 설정(`io`)에도 함께 저장하고, 이 키도 같은 값으로 계속 쓴다(옛 빌드로 되돌아가도 읽을 수 있게). 읽을 때는 아래 `chooseRememberedOutput`.
+ */
+function readLegacyOutputDevice(): string | null {
+  return safeStorage.getRaw(STORAGE_KEYS.outputDevice);
 }
-const initialOutputDevice = readOutputDevice();
 const RECORDING_TIMER_INTERVAL_MS = 250;
 const RECORDING_STOP_FALLBACK_MS = 1000;
 
@@ -74,6 +86,8 @@ interface IoSettings {
   tuningReferenceHz: number;
   /** S1.3 에서 추가한 필드. 기존 저장값에는 없고, 없으면 빈 객체로 읽는다. */
   inputChannels: Record<string, StoredInputChannel>;
+  /** S2.13 에서 추가한 필드: 사용자가 마지막으로 고른 입력·출력 장치(id 와 이름). 기존 저장값에는 없고, 없으면 둘 다 null(기본 장치)로 읽는다. */
+  devices: { input: RememberedDevice | null; output: RememberedDevice | null };
 }
 
 const defaultIoSettings: IoSettings = {
@@ -82,6 +96,7 @@ const defaultIoSettings: IoSettings = {
   howlProtectionEnabled: true,
   tuningReferenceHz: 440,
   inputChannels: {},
+  devices: { input: null, output: null },
 };
 
 /** 기억해 두는 장치 수의 상한. 넘으면 가장 오래 전에 쓴 것부터 잊는다. */
@@ -151,7 +166,14 @@ function parseIoSettings(raw: string): IoSettings {
         ? Math.round(clamp(stored.tuningReferenceHz, 400, 480))
         : defaultIoSettings.tuningReferenceHz,
     inputChannels: readInputChannels(stored.inputChannels),
+    devices: readRememberedDevices(stored.devices),
   };
+}
+
+function readRememberedDevices(value: unknown): IoSettings['devices'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { input: null, output: null };
+  const { input, output } = value as Record<string, unknown>;
+  return { input: parseRememberedDevice(input), output: parseRememberedDevice(output) };
 }
 
 function readIoSettings(): IoSettings {
@@ -160,6 +182,33 @@ function readIoSettings(): IoSettings {
 
 function persistIoSettings(settings: IoSettings): void {
   safeStorage.set(STORAGE_KEYS.io, settings);
+}
+
+/** 화면 상태에서 저장할 입출력 설정을 만든다. 저장 호출마다 필드를 나열하다 새 필드를 빠뜨리지 않게 한 곳에 모았다. */
+function ioSettingsOf(state: IoSettingsSource, overrides: Partial<IoSettings> = {}): IoSettings {
+  return {
+    inputGainDb: state.inputGainDb,
+    masterVolume: state.masterVolume,
+    howlProtectionEnabled: state.howlProtectionEnabled,
+    tuningReferenceHz: state.tuningReferenceHz,
+    inputChannels: state.inputChannels,
+    devices: { input: state.rememberedInput, output: state.rememberedOutput },
+    ...overrides,
+  };
+}
+
+function sameRemembered(left: RememberedDevice | null, right: RememberedDevice | null): boolean {
+  return left === right || (left !== null && right !== null && left.id === right.id && left.label === right.label);
+}
+
+interface IoSettingsSource {
+  inputGainDb: number;
+  masterVolume: number;
+  howlProtectionEnabled: boolean;
+  tuningReferenceHz: number;
+  inputChannels: Record<string, StoredInputChannel>;
+  rememberedInput: RememberedDevice | null;
+  rememberedOutput: RememberedDevice | null;
 }
 
 function isSamePitch(left: PitchReading, right: PitchReading): boolean {
@@ -188,6 +237,9 @@ function isSameLatency(left: LatencyReading, right: LatencyReading): boolean {
 }
 
 const initialIoSettings = readIoSettings();
+const initialRememberedInput = initialIoSettings.devices.input;
+const initialRememberedOutput = chooseRememberedOutput(initialIoSettings.devices.output, readLegacyOutputDevice());
+const initialOutputDevice = initialRememberedOutput?.id ?? '';
 const audioEngine = AudioEngine.getInstance();
 audioEngine.setInputGain(initialIoSettings.inputGainDb);
 audioEngine.setMasterVolume(initialIoSettings.masterVolume);
@@ -575,6 +627,12 @@ function applyTempoSyncToPedal(pedalId: string, sync: boolean, bpm: number): voi
 interface AudioStore {
   devices: MediaDeviceInfo[];
   selectedDeviceId: string;
+  /**
+   * 사용자가 마지막으로 직접 고른 입력·출력 장치(id 와 이름, S2.13). 기본 장치를 골랐으면 null.
+   * 장치가 잠시 목록에서 사라져 선택이 기본 장치로 돌아가도 지우지 않는다 — 다시 꽂으면 그 장치를 다시 고르고, 다음 방문에도 이 장치를 찾는다.
+   */
+  rememberedInput: RememberedDevice | null;
+  rememberedOutput: RememberedDevice | null;
   outputDevices: MediaDeviceInfo[];
   selectedOutputDeviceId: string;
   outputSelectionSupported: boolean;
@@ -727,9 +785,49 @@ async function startDeviceSession(deviceId: string): Promise<{ outcome: StartOut
   }
 }
 
+/** 장치 목록을 읽은 차례. 늦게 끝난 옛 읽기가 더 새 읽기의 결과를 덮어쓰지 않게 한다(S2.13). */
+let deviceLoadTicket = 0;
+/** 기억해 둔 입력·출력 장치가 직전 목록에 있었는지(null 이면 아직 모른다). 'false → true' 가 '다시 나타났다'다. */
+let lastInputPresence: boolean | null = null;
+let lastOutputPresence: boolean | null = null;
+/** '기본으로 연결했습니다' 안내를 이미 띄운 기억 장치의 id. 같은 장치에 대해 연결할 때마다 되풀이하지 않는다. */
+let announcedMissingInputId: string | null = null;
+let announcedMissingOutputId: string | null = null;
+
 /** 기본 장치로 대신 연결했음을 알린다. 소리가 나오는 입력이 달라졌으므로 경고로 띄운다(내장 마이크가 스피커 소리를 다시 잡을 수 있다). */
 function announceInputFallback(): void {
+  announcedMissingInputId = useAudioStore.getState().rememberedInput?.id ?? null;
   showToast({ kind: 'warning', key: 'input-fallback', message: ko.connect.fellBackToDefault });
+}
+
+/**
+ * 연결한 뒤 저장된 장치를 쓰지 못했다면 알린다(S2.13, 설계서 4.4).
+ *  - 입력: 연결 단계에서 고른 장치가 없어 기본 장치로 다시 연결한 경우는 호출한 쪽이 이미 알렸다(`announceInputFallback`). 여기서는 목록에서 이미
+ *    없다고 판단해 처음부터 기본 장치로 연결한 경우를 알린다(기억해 둔 장치가 있는데 선택이 비어 있고, 같은 장치에 대해 알린 적이 없을 때).
+ *  - 출력: 저장된 출력 장치로 보내지 못해 엔진이 시스템 기본 출력으로 두었거나(`consumeOutputFallback`), 목록에 없다고 판단해 기본 출력을 쓰는 경우.
+ */
+async function announceUnavailableDevices(inputs: readonly MediaDeviceInfo[], announceInput: boolean): Promise<void> {
+  try {
+    await announceUnavailableDevicesUnsafe(inputs, announceInput);
+  } catch {
+    // 안내를 못 띄워도 이미 연결된 세션을 흐트러뜨리지 않는다.
+  }
+}
+
+async function announceUnavailableDevicesUnsafe(inputs: readonly MediaDeviceInfo[], announceInput: boolean): Promise<void> {
+  const before = useAudioStore.getState();
+  if (announceInput && shouldAnnounceMissing(inputs, before.rememberedInput, before.selectedDeviceId, announcedMissingInputId)) {
+    announceInputFallback();
+  }
+  const engineFellBack = audioEngine.consumeOutputFallback();
+  const outputs = audioEngine.supportsOutputSelection ? await audioEngine.listOutputDevices().catch(() => before.outputDevices) : before.outputDevices;
+  const state = useAudioStore.getState();
+  if (engineFellBack) useAudioStore.setState({ selectedOutputDeviceId: '', outputDevices: outputs });
+  const missing = shouldAnnounceMissing(outputs, state.rememberedOutput, engineFellBack ? '' : state.selectedOutputDeviceId, announcedMissingOutputId);
+  if (engineFellBack || missing) {
+    announcedMissingOutputId = state.rememberedOutput?.id ?? null;
+    showToast({ kind: 'warning', key: 'output-fallback', message: ko.devices.outputFellBack });
+  }
 }
 
 /** 지금 선택한 장치의 채널 모드와 자동 판정을 `guitar-pedalboard:io` 의 `inputChannels` 에 남긴다. */
@@ -751,13 +849,7 @@ function rememberInputChannels(): void {
   for (const stale of keys.slice(0, Math.max(0, keys.length - MAX_REMEMBERED_INPUT_DEVICES))) delete next[stale];
 
   useAudioStore.setState({ inputChannels: next });
-  persistIoSettings({
-    inputGainDb: state.inputGainDb,
-    masterVolume: state.masterVolume,
-    howlProtectionEnabled: state.howlProtectionEnabled,
-    tuningReferenceHz: state.tuningReferenceHz,
-    inputChannels: next,
-  });
+  persistIoSettings(ioSettingsOf(state, { inputChannels: next }));
 }
 
 /**
@@ -799,7 +891,9 @@ export function stopSessionForError(): Promise<void> {
 
 export const useAudioStore = create<AudioStore>((set, get) => ({
   devices: [],
-  selectedDeviceId: '',
+  selectedDeviceId: initialRememberedInput?.id ?? '',
+  rememberedInput: initialRememberedInput,
+  rememberedOutput: initialRememberedOutput,
   outputDevices: [],
   selectedOutputDeviceId: initialOutputDevice,
   outputSelectionSupported: audioEngine.supportsOutputSelection,
@@ -825,8 +919,8 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   inputGainDb: initialIoSettings.inputGainDb,
   masterVolume: initialIoSettings.masterVolume,
   howlProtectionEnabled: initialIoSettings.howlProtectionEnabled,
-  inputChannelMode: initialIoSettings.inputChannels[DEFAULT_INPUT_CHANNEL_KEY]?.mode ?? 'auto',
-  inputChannelDecision: initialIoSettings.inputChannels[DEFAULT_INPUT_CHANNEL_KEY]?.decision ?? 'pending',
+  inputChannelMode: initialIoSettings.inputChannels[inputChannelKey(initialRememberedInput?.id ?? '')]?.mode ?? 'auto',
+  inputChannelDecision: initialIoSettings.inputChannels[inputChannelKey(initialRememberedInput?.id ?? '')]?.decision ?? 'pending',
   inputChannelSelectable: null,
   inputChannels: initialIoSettings.inputChannels,
   setInputChannelMode: (mode) => {
@@ -856,38 +950,20 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     const inputGainDb = clamp(value, -24, 24);
     audioEngine.setInputGain(inputGainDb);
     set({ inputGainDb });
-    persistIoSettings({
-      inputGainDb,
-      masterVolume: get().masterVolume,
-      howlProtectionEnabled: get().howlProtectionEnabled,
-      tuningReferenceHz: get().tuningReferenceHz,
-      inputChannels: get().inputChannels,
-    });
+    persistIoSettings(ioSettingsOf(get(), { inputGainDb }));
   },
 
   setMasterVolume: (value) => {
     const masterVolume = clamp(value, 0, 1);
     audioEngine.setMasterVolume(masterVolume);
     set({ masterVolume });
-    persistIoSettings({
-      inputGainDb: get().inputGainDb,
-      masterVolume,
-      howlProtectionEnabled: get().howlProtectionEnabled,
-      tuningReferenceHz: get().tuningReferenceHz,
-      inputChannels: get().inputChannels,
-    });
+    persistIoSettings(ioSettingsOf(get(), { masterVolume }));
   },
 
   setHowlProtectionEnabled: (enabled) => {
     audioEngine.setHowlProtection(enabled);
     set({ howlProtectionEnabled: enabled });
-    persistIoSettings({
-      inputGainDb: get().inputGainDb,
-      masterVolume: get().masterVolume,
-      howlProtectionEnabled: enabled,
-      tuningReferenceHz: get().tuningReferenceHz,
-      inputChannels: get().inputChannels,
-    });
+    persistIoSettings(ioSettingsOf(get(), { howlProtectionEnabled: enabled }));
   },
 
   setTunerActive: (active) => {
@@ -905,13 +981,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     const value = Math.round(clamp(referenceHz, 400, 480));
     audioEngine.setTuningReferenceHz(value);
     set({ tuningReferenceHz: value, pitch: emptyPitch });
-    persistIoSettings({
-      inputGainDb: get().inputGainDb,
-      masterVolume: get().masterVolume,
-      howlProtectionEnabled: get().howlProtectionEnabled,
-      tuningReferenceHz: value,
-      inputChannels: get().inputChannels,
-    });
+    persistIoSettings(ioSettingsOf(get(), { tuningReferenceHz: value }));
   },
 
   refreshChainGainWarning: () => {
@@ -938,17 +1008,58 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   },
 
   loadDevices: async () => {
+    const ticket = ++deviceLoadTicket;
     try {
       const [devices, outputDevices] = await Promise.all([audioEngine.listInputDevices(), audioEngine.listOutputDevices()]);
-      set({ outputDevices });
+      // 더 새 읽기가 시작되었다. 그쪽 결과가 화면에 올라간다.
+      if (ticket !== deviceLoadTicket) return;
       const state = get();
-      const missing = Boolean(state.selectedDeviceId) && !devices.some((device) => device.deviceId === state.selectedDeviceId);
-      if (missing && state.isRunning && state.inputMode === 'device') {
-        await stopSession('device-lost');
-        set({ devices, selectedDeviceId: '' });
-      } else {
-        set({ devices, ...(missing ? { selectedDeviceId: '' } : {}) });
+      const running = state.isRunning && state.inputMode === 'device';
+
+      // 입력: 고른 장치가 사라졌는지·돌아왔는지·id 만 바뀌었는지를 DeviceManager 가 판단한다. 권한 전(id 가 빈 목록)에는 아무것도 바꾸지 않는다.
+      const inputPresence = rememberedPresence(devices, state.rememberedInput);
+      const input = reconcileInputSelection({
+        list: devices,
+        selectedDeviceId: state.selectedDeviceId,
+        remembered: state.rememberedInput,
+        running,
+        reappeared: lastInputPresence === false && inputPresence === true,
+      });
+      if (inputPresence !== null) lastInputPresence = inputPresence;
+      if (inputPresence === true) announcedMissingInputId = null;
+
+      // 출력: 연주 중에는 건드리지 않는다(브라우저가 알아서 기본 출력으로 돌린다). 쉬는 중에만 id 가 바뀐 장치를 이름으로 찾아 맞춘다.
+      const outputPresence = rememberedPresence(outputDevices, state.rememberedOutput);
+      const output = state.isRunning
+        ? null
+        : reconcileInputSelection({
+            list: outputDevices,
+            selectedDeviceId: state.selectedOutputDeviceId,
+            remembered: state.rememberedOutput,
+            running: false,
+            reappeared: lastOutputPresence === false && outputPresence === true,
+          });
+      if (outputPresence !== null) lastOutputPresence = outputPresence;
+      if (outputPresence === true) announcedMissingOutputId = null;
+
+      const patch: Partial<AudioStore> = { devices, outputDevices };
+      if (input.selectedDeviceId !== state.selectedDeviceId) patch.selectedDeviceId = input.selectedDeviceId;
+      if (!sameRemembered(input.remembered, state.rememberedInput)) patch.rememberedInput = input.remembered;
+      if (output) {
+        if (output.selectedDeviceId !== state.selectedOutputDeviceId) {
+          patch.selectedOutputDeviceId = output.selectedDeviceId;
+          if (audioEngine.supportsOutputSelection) await audioEngine.setOutputDevice(output.selectedDeviceId).catch(() => undefined);
+        }
+        if (!sameRemembered(output.remembered, state.rememberedOutput)) {
+          patch.rememberedOutput = output.remembered;
+          safeStorage.setRaw(STORAGE_KEYS.outputDevice, output.remembered?.id ?? '');
+        }
       }
+
+      if (input.lost) await stopSession('device-lost');
+      set(patch);
+      if (patch.rememberedInput !== undefined || patch.rememberedOutput !== undefined) persistIoSettings(ioSettingsOf(get()));
+      if (!running && patch.selectedDeviceId !== undefined) loadInputChannels(patch.selectedDeviceId);
     } catch (error) {
       set({ error: audioErrorMessage(error) });
     }
@@ -957,8 +1068,12 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   setOutputDevice: async (deviceId) => {
     try {
       await audioEngine.setOutputDevice(deviceId);
-      set({ selectedOutputDeviceId: deviceId, error: null });
+      const rememberedOutput = makeRemembered(get().outputDevices, deviceId);
+      set({ selectedOutputDeviceId: deviceId, rememberedOutput, error: null });
+      lastOutputPresence = rememberedOutput ? true : null;
+      announcedMissingOutputId = null;
       safeStorage.setRaw(STORAGE_KEYS.outputDevice, deviceId);
+      persistIoSettings(ioSettingsOf(get()));
     } catch {
       set({ error: '출력 장치를 변경할 수 없습니다. 장치 연결과 브라우저 권한을 확인해 주세요.' });
     }
@@ -966,7 +1081,12 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
   setSelectedDevice: async (deviceId) => {
     const wasRunning = get().isRunning;
-    set({ selectedDeviceId: deviceId, error: null });
+    // 사용자가 직접 고른 장치는 기억한다(기본 입력 장치를 고르면 기억을 지운다).
+    const rememberedInput = makeRemembered(get().devices, deviceId);
+    set({ selectedDeviceId: deviceId, rememberedInput, error: null });
+    lastInputPresence = rememberedInput ? true : null;
+    announcedMissingInputId = null;
+    persistIoSettings(ioSettingsOf(get()));
     loadInputChannels(deviceId);
 
     if (!wasRunning || get().inputMode !== 'device') return;
@@ -993,6 +1113,8 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         inputChannelSelectable: audioEngine.getInputInfo()?.selectable ?? null,
       });
       if (fellBackToDefault) announceInputFallback();
+      // 사용자가 방금 고른 장치(또는 기본 장치)로 연결했으므로 '저장된 입력 장치를 찾지 못했다'고 따로 알릴 일이 없다. 출력만 확인한다.
+      await announceUnavailableDevices(devices, false);
     } catch (error) {
       set({
         error: connectErrorMessage(error),
@@ -1029,6 +1151,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         inputChannelSelectable: audioEngine.getInputInfo()?.selectable ?? null,
       });
       if (fellBackToDefault) announceInputFallback();
+      await announceUnavailableDevices(devices, !fellBackToDefault);
     } catch (error) {
       set({
         error: connectErrorMessage(error),
@@ -1059,6 +1182,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         error: null,
         inputChannelSelectable: false,
       });
+      await announceUnavailableDevices(get().devices, false);
     } catch (error) {
       set({
         error: audioErrorMessage(error),
@@ -1386,6 +1510,15 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
 
 if (initialOutputDevice && audioEngine.supportsOutputSelection) {
   void audioEngine.setOutputDevice(initialOutputDevice);
+}
+
+// 장치가 꽂히거나 빠지면(`devicechange`) 목록을 다시 읽는다(S2.13, 설계서 4.4 DeviceManager). 화면 컴포넌트가 아니라 스토어가 지켜서
+// 패널이 접히거나 다시 그려져도 신호를 놓치지 않고, 연주 중 장치가 빠졌을 때 세션을 끝내는 일도 패널이 보이는지와 상관없이 일어난다.
+// 연달아 오는 신호는 하나로 묶는다. 보안 출처가 아니면 `navigator.mediaDevices` 가 없고, 그러면 지켜볼 것이 없다.
+if (typeof navigator !== 'undefined') {
+  watchDeviceChanges(navigator.mediaDevices, () => {
+    void useAudioStore.getState().loadDevices();
+  });
 }
 
 // 자동 입력 채널 판정이 나면(세션마다 한 번) 화면에 보이고 이 장치의 기억에 남긴다.

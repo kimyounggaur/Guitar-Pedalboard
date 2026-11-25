@@ -42,6 +42,7 @@
     "test:audio-session": "node scripts/audio-session-regression.mjs",
     "test:input-stage": "node scripts/input-stage-regression.mjs",
     "test:output-device": "node scripts/output-device-regression.mjs",
+    "test:device-manager": "node scripts/device-manager-regression.mjs",
     "test:history": "node scripts/history-regression.mjs",
     "test:cabinet-ir": "node scripts/cabinet-ir-regression.mjs",
     "test:knob": "node scripts/knob-regression.mjs",
