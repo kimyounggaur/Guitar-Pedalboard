@@ -36,8 +36,11 @@ export interface ServedRequest {
 }
 
 export interface DistServerOptions {
-  /** true 면 글자 파일(html·js·css·svg·json)을 gzip 으로 내려 준다. GitHub Pages 가 그렇게 내려 주므로 배포와 같은 전송량을 잰다. 기본 false */
-  gzip?: boolean;
+  /**
+   * true 면 GitHub Pages 처럼 내려 준다: 글자 파일(html·js·css·svg·json)은 gzip, 응답에 `Cache-Control: max-age=600`.
+   * 서비스 워커가 방금 받은 파일을 다시 받을 때 브라우저 캐시를 쓰는지까지 배포와 같게 만들려는 것이다. 기본 false(항상 `no-cache`, 압축 없음 — `vite preview` 와 비슷)
+   */
+  pagesLike?: boolean;
   /** 서비스할 폴더. 기본은 이 저장소의 `dist/`. 옛 코드와 비교할 때만 바꾼다(E2E_DIST_DIR) */
   distDir?: string;
 }
@@ -79,7 +82,7 @@ export async function startDistServer(options: DistServerOptions = {}): Promise<
       return;
     }
     response.setHeader('Content-Type', contentTypeOf(relativePath));
-    response.setHeader('Cache-Control', 'no-cache');
+    response.setHeader('Cache-Control', options.pagesLike === true ? 'max-age=600' : 'no-cache');
     const extension = relativePath.includes('.') ? relativePath.slice(relativePath.lastIndexOf('.') + 1).toLowerCase() : '';
     let body: Uint8Array;
     if (relativePath === 'sw.js') {
@@ -89,7 +92,7 @@ export async function startDistServer(options: DistServerOptions = {}): Promise<
       body = readFileSync(file);
     }
     const rawBytes = body.length;
-    if (options.gzip === true && COMPRESSIBLE.has(extension)) {
+    if (options.pagesLike === true && COMPRESSIBLE.has(extension)) {
       body = gzipSync(body, { level: 6 });
       response.setHeader('Content-Encoding', 'gzip');
     }

@@ -1,6 +1,6 @@
 // E-19 로딩 성능(설계서 S4.1, 보고서 R4-1): 로고가 첫 화면의 대부분을 차지하던 문제.
 //   ① 로고 파일 각 ≤ 50 KB(1배 520 px, 2배 1040 px), 서비스 워커 프리캐시에 logo.png 가 없고 두 로고는 있다
-//   ② 첫 방문 전송량(페이지 + 서비스 워커 프리캐시) ≤ 1 MB — GitHub Pages 처럼 글자 파일을 gzip 으로 내려 주는 서버에서 잰다(압축 안 한 값도 함께 적는다)
+//   ② 첫 방문 전송량(페이지 + 서비스 워커 프리캐시) ≤ 1 MB — GitHub Pages 처럼(글자 파일 gzip, max-age=600) 내려 주는 서버에서 잰다(압축 전 크기도 함께 적는다)
 //   ③ '느린 4G'(내려받기 1.6 Mbps, 지연 150 ms)에서 로고가 화면에 나타나기까지 ≤ 2.5 초 — 데스크톱·휴대폰 둘 다
 //   ④ srcset 이 화면 폭×화면 배율에 맞는 파일을 고른다(데스크톱 1배 → 520 px, 휴대폰 3배 → 1040 px)
 //      · preload(index.html 의 imagesrcset·imagesizes)와 <img> 의 srcset·sizes 가 같아서 로고를 한 번만 받는다
@@ -17,6 +17,8 @@ import { PEDAL_COUNT, pedalCards } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 
 const DIST_DIR = process.env.E2E_DIST_DIR ?? join(repoRoot, 'dist');
+/** 기본은 GitHub Pages 처럼(gzip + max-age). E2E_PAGES_LIKE=0 이면 압축·캐시 없이 내려 줘서 `vite preview` 와 비슷하게 잰다(설계서의 4.2 MB 와 견주려고) */
+const PAGES_LIKE = process.env.E2E_PAGES_LIKE !== '0';
 const LOGO_FILES = ['logo-520.webp', 'logo-1040.webp'];
 const MAX_LOGO_BYTES = 50 * 1024;
 const MAX_FIRST_VISIT_BYTES = 1_000_000;
@@ -31,7 +33,7 @@ const PHONE: BrowserContextOptions = { viewport: { width: 390, height: 844 }, de
 let server: DistServer;
 
 test.beforeEach(async () => {
-  server = await startDistServer({ gzip: true, distDir: DIST_DIR });
+  server = await startDistServer({ pagesLike: PAGES_LIKE, distDir: DIST_DIR });
 });
 
 test.afterEach(async () => {
@@ -177,10 +179,10 @@ test.describe('E-19 로딩 성능 — 로고 경량화(S4.1)', () => {
     }
   });
 
-  test('E-19 첫 방문 전송량(페이지 + 서비스 워커 프리캐시, gzip)은 1 MB 이하다', async ({ browser }) => {
+  test('E-19 첫 방문 전송량(페이지 + 서비스 워커 프리캐시, GitHub Pages 처럼)은 1 MB 이하다', async ({ browser }) => {
     const visit = await firstVisit(browser, DESKTOP);
-    report('첫 방문 전송량(gzip)', `${visit.wireBytes} B (${kb(visit.wireBytes)}), 응답 ${visit.requestCount}건`);
-    report('첫 방문 전송량(압축 전)', `${visit.rawBytes} B (${kb(visit.rawBytes)})`);
+    report(PAGES_LIKE ? '첫 방문 전송량(회선, gzip)' : '첫 방문 전송량(회선, 압축 없음)', `${visit.wireBytes} B (${kb(visit.wireBytes)}), 응답 ${visit.requestCount}건`);
+    report('첫 방문 전송량(압축 전 파일 크기 합)', `${visit.rawBytes} B (${kb(visit.rawBytes)})`);
     expect(visit.wireBytes, '첫 방문 전송량 ≤ 1 MB').toBeLessThanOrEqual(MAX_FIRST_VISIT_BYTES);
   });
 
