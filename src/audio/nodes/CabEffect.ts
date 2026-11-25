@@ -3,7 +3,7 @@ import { BaseEffect } from './BaseEffect';
 import type { CabParams, PedalState } from '../types';
 import { createCabinet } from '../utils/cabinet';
 import { clamp } from '../utils/db';
-import { rampParam, smoothParam } from '../utils/smoothing';
+import { fadeParam, smoothParam } from '../utils/smoothing';
 import { windowTimers, type Timers } from '../utils/timers';
 
 /** 마이크 위치·거리 노브를 마지막으로 돌린 뒤 이만큼 조용해져야 IR 을 새로 만든다. 드래그 중 입력마다 만들지 않기 위해서다(S3.2). */
@@ -127,7 +127,7 @@ export class CabEffect extends BaseEffect {
     this.cancelSwap();
     if (midSwap) {
       // 램프 도중이면 smoothParam 의 cancelScheduledValues 가 값을 램프 앞 값으로 되돌리므로, 지금 값에서 이어서 내린다.
-      rampParam(this.convolvedGain.gain, 0, this.context, CAB_IR_SWAP_FADE_SECONDS);
+      fadeParam(this.convolvedGain.gain, 0, this.context, CAB_IR_SWAP_FADE_SECONDS);
     } else {
       smoothParam(this.convolvedGain.gain, 0, this.context);
     }
@@ -168,7 +168,7 @@ export class CabEffect extends BaseEffect {
 
   private beginFade(): void {
     this.phase = 'fadingOut';
-    rampParam(this.convolvedGain.gain, 0, this.context, CAB_IR_SWAP_FADE_SECONDS);
+    fadeParam(this.convolvedGain.gain, 0, this.context, CAB_IR_SWAP_FADE_SECONDS);
     this.swapTimer = this.timers.setTimeout(() => this.completeSwap(), CAB_IR_SWAP_FADE_SECONDS * 1000);
   }
 
@@ -182,7 +182,7 @@ export class CabEffect extends BaseEffect {
     }
     this.load(wanted);
     this.phase = 'fadingIn';
-    rampParam(this.convolvedGain.gain, this.cabinetMakeup, this.context, CAB_IR_SWAP_FADE_SECONDS);
+    fadeParam(this.convolvedGain.gain, this.cabinetMakeup, this.context, CAB_IR_SWAP_FADE_SECONDS);
     this.settleTimer = this.timers.setTimeout(() => {
       this.settleTimer = null;
       this.phase = 'idle';

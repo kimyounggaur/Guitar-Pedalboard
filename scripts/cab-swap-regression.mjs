@@ -6,7 +6,8 @@
 //   4. 모델·사용자 IR 은 디바운스 없이 바로 페이드를 시작한다. 교체 중에 노브가 더 움직여도 램프를 다시 걸지 않고, 가장 새로운 값으로 만든다.
 //   5. 교체 도중 끔·사용자 IR 해제·dispose 에서도 타이머가 남지 않고 게인이 튀지 않는다(램프 중간에 값을 되돌리는 취소를 쓰지 않는다).
 //   6. 렌더 시각 타이머(contextTimers): 요청보다 일찍 울리지 않고, 현재 퀀텀 안에는 걸지 않으며, 지우면 울리지 않는다.
-//   7. 소스 단언: 버퍼는 load 한 곳에서만 바꾸고, CabEffect 는 창 타이머를 직접 부르지 않는다.
+//   7. 소스 단언: 버퍼는 load 한 곳에서만 바꾸고, CabEffect 는 창 타이머를 직접 부르지 않는다. 페이드는 fadeParam 으로만 한다 —
+//      Chrome 에서 cancelAndHoldAtTime 바로 뒤에 건 선형 램프는 페이드가 되지 않고 끊김이 된다(프로브 P-25 로 확인, REFACTOR_LOG L-220).
 //   8. 설계서 변경 1·2 의 현재 상태(기록): 좌우 IR 이 같고, 기본 설정의 주파수 응답 편차가 3 dB 이하다.
 // 실제 소리로 잰 클릭(출력 1차 차분 피크 증가 ≤ +6 dB)은 프로브 P-25(npm run probe)가 본다.
 import assert from 'node:assert/strict';
@@ -222,6 +223,12 @@ function sameIr(buffer, expected) {
   }
   return true;
 }
+// Chrome 에서 페이드를 끊김으로 만드는 cancelAndHoldAtTime(+램프)은 Cab 의 두 가지(컨볼버·우회) 게인에 쓰지 않는다.
+const assertNoHold = (effect) => {
+  for (const name of ['convolvedGain', 'bypassGain']) {
+    ok(!effect[name].gain.calls.includes('cancelAndHoldAtTime'), `${name}: cancelAndHoldAtTime 을 쓰지 않는다`);
+  }
+};
 const gainAt = (effect, clock) => effect.convolvedGain.gain.valueAt(clock.now);
 const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().context, model, mic, dist).makeupDb / 20);
 
@@ -244,6 +251,7 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   equal(world.built.length, builtBefore, '같은 설정은 IR 을 다시 만들지 않는다');
   equal(world.timers.pending, 0, '같은 설정은 타이머를 걸지 않는다');
   ok(!effect.convolvedGain.gain.calls.slice(callsBefore).some((call) => call === 'linearRamp' || call === 'cancelAndHoldAtTime'), '같은 설정은 페이드를 걸지 않는다');
+  assertNoHold(effect);
   effect.dispose();
 }
 
@@ -255,6 +263,7 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   effect.update(pedalWith({ model: 'greenback-4x12' }));
   equal(world.swaps.length, 1, '처음 고르는 모델은 바로 들어간다');
   equal(world.timers.pending, 0, '처음 고르는 모델은 타이머가 없다');
+  assertNoHold(effect);
   effect.dispose();
 }
 
@@ -296,6 +305,7 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   equal(effect.phase, 'idle', '교체가 끝나면 idle');
   near(gainAt(effect, world.clock), makeupOf('v30-4x12', mic, 30), 1e-6, '새 IR 의 보정값으로 되살아난다');
   equal(world.timers.pending, 0, '끝나면 남은 타이머가 없다');
+  assertNoHold(effect);
   effect.dispose();
 }
 
@@ -317,6 +327,7 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   equal(world.swaps.length, 1, '거리 변경도 한 번 바뀐다');
   near(world.swaps[0].gain, 0, 1e-9, '거리 변경: 교체 순간 게인 0');
   ok(sameIr(world.swaps[0].buffer, expectedIr(world, 'v30-4x12', 55, 80)), '거리 80 으로 만든 IR');
+  assertNoHold(effect);
   effect.dispose();
 }
 
@@ -354,6 +365,7 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   ok(sameIr(world.swaps[1].buffer, expectedIr(world, 'greenback-4x12', 20, 30)), '두 번째 교체는 마이크 20 의 IR');
   world.timers.advance(100);
   near(gainAt(effect, world.clock), makeupOf('greenback-4x12', 20, 30), 1e-6, '마지막 보정값으로 끝난다');
+  assertNoHold(effect);
   effect.dispose();
 }
 
@@ -381,6 +393,7 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   world.timers.advance(300);
   near(gainAt(effect, world.clock), makeupOf('v30-4x12', 55, 30), 1e-6, '다시 켜면 보정값으로 올라간다');
   near(effect.bypassGain.gain.valueAt(world.clock.now), 0, 1e-3, '다시 켜면 우회 가지 0');
+  assertNoHold(effect);
   effect.dispose();
 }
 
@@ -389,6 +402,7 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   world.timers.advance(500);
   effect.update(pedalWith({ micPosition: 80 }));
   ok(world.timers.pending > 0, 'dispose 전에 디바운스 타이머가 있다');
+  assertNoHold(effect);
   effect.dispose();
   equal(world.timers.pending, 0, 'dispose 는 타이머를 모두 접는다');
   world.timers.advance(1000);
@@ -418,6 +432,7 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   equal(world.swaps[1].normalize, false, '해제하면 만든 IR 의 비정규화로 돌아온다');
   near(world.swaps[1].gain, 0, 1e-9, '해제 교체 순간 게인 0');
   ok(sameIr(world.swaps[1].buffer, expectedIr(world, 'v30-4x12', 10, 90)), '해제하면 그 사이 움직인 노브 값의 IR 로 돌아온다');
+  assertNoHold(effect);
   effect.dispose();
 }
 
@@ -461,6 +476,8 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   ok(assigned.every((value) => value === 'null'), `컨볼버 버퍼는 load 밖에서 null(해제)로만 바꾼다: ${assigned.join(', ')}`);
   ok(/convolver\.buffer\s*=\s*source\.buffer/.test(source) && /convolver\.buffer\s*=\s*cabinet\.impulse/.test(source), 'load 안에서 사용자 IR 과 만든 IR 을 넣는다');
   ok(!/\bwindow\b/.test(source.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/windowTimers/g, '')), 'CabEffect 는 창 타이머를 직접 부르지 않는다(주입받은 Timers 만 쓴다)');
+  ok(!/\brampParam\b|cancelAndHoldAtTime/.test(source.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')), 'CabEffect 는 rampParam·cancelAndHoldAtTime 을 쓰지 않는다(fadeParam 만)');
+  ok(/fadeParam/.test(source), 'CabEffect 는 fadeParam 으로 페이드한다');
   equal(CAB_IR_DEBOUNCE_MS, 120, '설계서: 마이크·거리 노브는 120 ms 멈춘 뒤에만 IR 을 다시 만든다');
   equal(CAB_IR_SWAP_FADE_SECONDS, 0.02, '설계서: IR 을 바꿀 때 20 ms 웻 페이드');
   const factory = await readFile(new URL('src/audio/offline/effectFactory.ts', rootUrl), 'utf8');
