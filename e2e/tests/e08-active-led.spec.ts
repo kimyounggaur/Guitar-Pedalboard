@@ -10,6 +10,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { PEDAL_COUNT, connectGuitar, openApp, pedalCards, pedalSwitches } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
+import { pasteImport } from '../helpers/preset-io';
 import {
   DEFAULT_ACTIVE_NAMES,
   PEDALS,
@@ -351,9 +352,8 @@ test.describe('E-08 옛 사용자 프리셋(픽스처 02)', () => {
 
     // 프리셋을 하나 더 가져온다: v2 프리셋 키만 늘어나고 v1 프리셋 키는 옛 글자 그대로다.
     const imported = { version: 11, presets: [{ id: 'e08-imported', name: 'E08 가져온 프리셋', updatedAt: 1, pedals: [] }] };
-    await page.getByLabel('가져올 프리셋 JSON').fill(JSON.stringify(imported));
-    await page.getByRole('button', { name: '붙여넣은 JSON 가져오기' }).click();
-    await expect(page.locator('.preset-message')).toContainText('1개의 프리셋을 가져왔습니다');
+    await pasteImport(page, JSON.stringify(imported));
+    await expect(page.locator('.preset-message')).toContainText('1개 가져옴');
     await expect
       .poll(async () => [...((await readStoredPresetNames(page)) ?? [])].sort(), { message: '가져온 뒤 v2 사용자 프리셋' })
       .toEqual(['E08 가져온 프리셋', 'Switch Combos A', 'Switch Combos B']);

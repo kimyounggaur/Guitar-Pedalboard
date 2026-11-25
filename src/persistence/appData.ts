@@ -42,6 +42,11 @@ function rememberPresets(store: PresetsStoreV2 | null): void {
   presetCarry = new Map((store?.presets ?? []).map((preset) => [preset.id, carryOfPreset(preset)]));
 }
 
+/** 저장된 프리셋에 딸린 값(만든 시각, 모르는 필드). 내보내기 파일이 이 값을 그대로 싣는다(S2.7). 옛 방식 모드나 새 프리셋은 없다. */
+export function getPresetCarry(id: string): PresetCarry | undefined {
+  return presetCarry.get(id);
+}
+
 /** 앱을 연 결과. 처음 부를 때 한 번만 저장 형식을 정하고(필요하면 v1 에서 v2 로 옮기고), 이후에는 같은 결과를 돌려 준다. */
 export function getBoot(): BootResult {
   if (!boot) {

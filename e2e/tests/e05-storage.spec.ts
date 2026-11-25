@@ -17,6 +17,7 @@ import { connectButton, connectGuitar, openApp, PEDAL_COUNT, pedalCards } from '
 import { fixturesDir, repoRoot } from '../helpers/env';
 import { expect, test } from '../helpers/fixtures';
 import { mockStorage, readAudioTracking, trackAudioContexts } from '../helpers/mocks';
+import { pasteImport } from '../helpers/preset-io';
 
 // 서비스 워커가 가운데서 요청을 받아 가면 page.route 가 닿지 않으므로(정적 안내 시험), 이 파일 전체에서 서비스 워커를 쓰지 않는다.
 test.use({ serviceWorkers: 'block' });
@@ -276,9 +277,8 @@ test.describe('E-05 저장소·오류', () => {
 
     // 사용자가 직접 한 일: 내 프리셋 하나를 가져오고, Drive 를 끈다(페달 상태가 저장된다).
     const mine = { version: 11, presets: [{ id: 'e05-mine', name: 'E05 내 프리셋', updatedAt: 1, pedals: [] }] };
-    await page.getByLabel('가져올 프리셋 JSON').fill(JSON.stringify(mine));
-    await page.getByRole('button', { name: '붙여넣은 JSON 가져오기' }).click();
-    await expect(page.locator('.preset-message')).toContainText('1개의 프리셋을 가져왔습니다');
+    await pasteImport(page, JSON.stringify(mine));
+    await expect(page.locator('.preset-message')).toContainText('1개 가져옴');
     await stompOf(page, 'Drive').click();
     await expect(stompOf(page, 'Drive')).toHaveAttribute('aria-pressed', 'false');
     const saved = await page.evaluate(
