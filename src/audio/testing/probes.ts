@@ -3,6 +3,7 @@
 // docs/baseline/audio-probe.json 과 tolerances.json 의 허용 오차로 비교한다.
 // 측정만 한다. 목표값(설계서의 '목표' 열)을 넘는지 판정하는 일은 각 Step 의 수용 기준이 맡는다.
 import type { MonitorMsg } from '../engine/guardSpec';
+import { setFeatureFlagOverride } from '../../config/flags';
 import { CompressorEffect } from '../nodes/CompressorEffect';
 import { mixGains } from '../nodes/mixLaw';
 import { getPhaserWetMakeup, PHASER_CENTER_FREQUENCY } from '../nodes/PhaserEffect';
@@ -1819,8 +1820,99 @@ const p27: ProbeDefinition = {
   },
 };
 
+// ---------------------------------------------------------------------------------------------
+// P-28 — Compressor 새 경로(기능 플래그 newCompressor, S3.6)
+// ---------------------------------------------------------------------------------------------
+const p28: ProbeDefinition = {
+  id: 'P-28',
+  title: 'Compressor 새 경로(newCompressor)',
+  describe:
+    '기능 플래그 newCompressor 를 켠 새 컴프레서(RMS 검출기·자동 메이크업 없음)를 잰다. ① P-08 과 같은 방법의 Mix 75%·45% 리플(mixN.rippleDb). ' +
+    '② 처리 지연: REF-NOISE 상호상관으로 Compressor 한 개와 빈 체인의 지연 차(latencyMs.extraOverEmpty). ' +
+    '③ P-21 과 같은 방법으로 −10 dBFS 220 Hz 지속음의 표시 감소량(gr.displayedToneDb)과 Mix 100% 의 실제 출력 레벨 변화(gr.toneLevelChangeDb)를 재고, 둘의 차(gr.displayedMinusMeasuredDb)를 낸다. 옛 경로의 차는 gr.legacyDisplayedMinusMeasuredDb. ' +
+    '④ 공장 프리셋 중 Compressor 가 켜진 것마다 REF-PC(8초)를 보정·리미터 없이 렌더해 새 경로와 옛 경로의 RMS 차(presetDeltaDb.<id> = 새 − 옛, dB)를 적는다. 요약은 presets.count·deltaMinDb·deltaMaxDb·deltaMedianDb. 플래그는 이 프로브 안에서만 켜고 끝나면 되돌린다.',
+  steps: 'S3.6',
+  async run(ctx) {
+    const rate = ctx.sampleRate;
+    const values: Record<string, MetricValue> = {};
+    const noise = signals.refNoise(rate, 20, -20);
+    const centers = m.octaveCenters(100, 1000, 12);
+    const tone = signals.refSine(rate, 3, 220, -10);
+    const probeNoise = signals.refNoise(rate, 1.5, -20);
+    const readReduction = async (mix: number | undefined, input: Float32Array) => {
+      let value = Number.NaN;
+      const render = await ctx.render({
+        input: [input],
+        pedals: [pedal('compressor', mix === undefined ? {} : { mix })],
+        afterRender: async (handle) => {
+          await delayMs(150);
+          const effect = handle.effects.get('compressor');
+          if (effect instanceof CompressorEffect) value = effect.getGainReduction();
+        },
+      });
+      return { render, displayed: value };
+    };
+    const lagMs = async (pedals: PedalState[]) => {
+      const render = await ctx.render({ input: [probeNoise], pedals, alignOutput: false });
+      const { lagSamples } = m.crossCorrelationLag(
+        render.input[0], render.output[0], Math.round(rate * 0.02), seconds(render, 0.3), seconds(render, 1.3),
+      );
+      return (lagSamples / rate) * 1000;
+    };
+    const graIn = m.rmsDb(tone, rate, tone.length);
+    const presetDeltas: number[] = [];
+    try {
+      setFeatureFlagOverride('newCompressor', true);
+      // ① 리플
+      for (const mix of [75, 45]) {
+        const render = await ctx.render({ input: [noise], pedals: [pedal('compressor', { mix })] });
+        const spectra = m.welchSpectra(render.input[0], render.output[0], rate, {
+          fftSize: 8192, start: seconds(render, 1), end: render.leadFrames + render.signalFrames,
+        });
+        const gains = m.bandGainDb(spectra, centers, 1 / 12);
+        values[`mix${mix}.rippleDb`] = (Math.max(...gains) - Math.min(...gains)) / 2;
+      }
+      // ② 지연
+      values['latencyMs.extraOverEmpty'] = (await lagMs([pedal('compressor')])) - (await lagMs([]));
+      // ③ GR 표시와 실측
+      const silent = await readReduction(undefined, new Float32Array(rate * 2));
+      values['gr.displayedSilenceDb'] = silent.displayed;
+      const held = await readReduction(100, tone);
+      const measured = bodyLevelDb(held.render, 1) - graIn;
+      values['gr.displayedToneDb'] = held.displayed;
+      values['gr.toneLevelChangeDb'] = measured;
+      values['gr.displayedMinusMeasuredDb'] = held.displayed - measured;
+      setFeatureFlagOverride('newCompressor', false);
+      const oldHeld = await readReduction(100, tone);
+      values['gr.legacyDisplayedMinusMeasuredDb'] = oldHeld.displayed - (bodyLevelDb(oldHeld.render, 1) - graIn);
+      // ④ 프리셋 음량 변화(보정·리미터 없는 원래 음량, 새 − 옛)
+      const input = signals.refPc(rate);
+      for (const preset of defaultPresets) {
+        const pedals = activePedals(clonePedals(preset.pedals));
+        if (!pedals.some((candidate) => candidate.type === 'compressor')) continue;
+        setFeatureFlagOverride('newCompressor', false);
+        const before = bodyLevelDb(await ctx.render({ input: [input], pedals, limiter: false, presetTrimDb: 0 }));
+        setFeatureFlagOverride('newCompressor', true);
+        const after = bodyLevelDb(await ctx.render({ input: [input], pedals, limiter: false, presetTrimDb: 0 }));
+        values[`presetDeltaDb.${preset.id}`] = after - before;
+        presetDeltas.push(after - before);
+      }
+    } finally {
+      setFeatureFlagOverride('newCompressor', null);
+    }
+    const sorted = [...presetDeltas].sort((a, b) => a - b);
+    values['presets.count'] = presetDeltas.length;
+    values['presets.deltaMinDb'] = sorted[0] ?? 0;
+    values['presets.deltaMaxDb'] = sorted[sorted.length - 1] ?? 0;
+    values['presets.deltaMedianDb'] = sorted.length === 0 ? 0 : sorted.length % 2 === 1
+      ? sorted[(sorted.length - 1) / 2]
+      : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+    return { metrics: metrics(values) };
+  },
+};
+
 export const probes: ProbeDefinition[] = [
-  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25, p26, p27,
+  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25, p26, p27, p28,
 ];
 
 // ---------------------------------------------------------------------------------------------
