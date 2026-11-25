@@ -3,7 +3,7 @@
 > `node docs/refactoring/tools/list-regex-assertions.mjs` 로 생성한 파일이다(수정하지 말고 다시 생성한다). 줄 번호는 생성한 시점의 `scripts/` 기준이므로, 시험 파일을 고친 Step 뒤에는 다시 생성한다.
 > 세는 대상은 `assert.match(` 와 `assert.doesNotMatch(` 호출이다. 보고서의 "337곳"은 기준 커밋 `4ac9cf7`에서 이 두 호출을 센 값과 같다(316 + 21).
 
-**생성 시점 합계: 391곳** (match 357 + doesNotMatch 34)
+**생성 시점 합계: 390곳** (match 356 + doesNotMatch 34)
 
 | 파일 | match | doesNotMatch | 합계 |
 |---|---:|---:|---:|
@@ -19,10 +19,10 @@
 | recording-regression.mjs | 35 | 2 | 37 |
 | responsive-a11y-regression.mjs | 104 | 8 | 112 |
 | safe-storage-regression.mjs | 13 | 1 | 14 |
-| shortcuts-regression.mjs | 34 | 0 | 34 |
+| shortcuts-regression.mjs | 33 | 0 | 33 |
 | tap-tempo-regression.mjs | 13 | 1 | 14 |
 | tremolo-regression.mjs | 14 | 2 | 16 |
-| **합계** | **357** | **34** | **391** |
+| **합계** | **356** | **34** | **390** |
 
 ## 파일별 위치
 
@@ -417,40 +417,39 @@
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
 |---:|---|---|---|
-| 181 | match | `globalSource` | `/capture: true/` |
-| 186 | match | `serviceSource` | `/tagName === 'input'[\s\S]*tagName === 'select'[\s\S]*tagName === 'tex` |
-| 187 | match | `serviceSource` | `/tagName === 'button'/` |
-| 188 | match | `serviceSource` | `/tagName === 'a'[\s\S]*hasAttribute\('href'\)/` |
-| 189 | match | `serviceSource` | `/contenteditable/` |
-| 190 | match | `serviceSource` | `/\[role="button"\]/` |
-| 191 | match | `serviceSource` | `/\[tabindex\]:not/` |
-| 200 | match | `serviceSource` | `/command\.index < 0 \\|\\| command\.index > 14/` |
-| 201 | match | `serviceSource` | `/if \(audioState\.isLoading\) return true/` |
-| 202 | match | `serviceSource` | `/audioState\.isRunning[\s\S]*audioState\.stop\(\)[\s\S]*audioState\.st` |
-| 203 | match | `serviceSource` | `/tapTempoTap\(\)/` |
-| 204 | match | `serviceSource` | `/activateSlot\(command\.slot\)/` |
-| 205 | match | `serviceSource` | `/getState\(\)\.panic\(\)/` |
-| 207 | match | `serviceSource` | `/export function isEscapeOwnedByTarget/` |
-| 208 | match | `serviceSource` | `/export function isShortcutBlockedByTarget/` |
-| 209 | match | `serviceSource` | `/command\.type === 'panic'\) return event\.isComposing \\|\\| isEscape` |
-| 213 | match | `serviceSource` | `/!command \\|\\| isShortcutBlockedByTarget\(command, event\)/` |
-| 219 | match | `serviceSource.slice(modalBranch, globalE` | `/command\?\.type === 'panic'[\s\S]*closeHelp\(\)[\s\S]*return/,` |
-| 224 | match | `routingSource` | `/event\.repeat/` |
-| 225 | match | `routingSource` | `/event\.ctrlKey \\|\\| event\.metaKey \\|\\| event\.altKey/` |
-| 226 | match | `routingSource` | `/SHIFT_PEDAL_KEY_CODES\.indexOf/` |
-| 227 | match | `routingSource` | `/Digit0/` |
-| 229 | match | `helpSource` | `/role="dialog"/` |
-| 230 | match | `helpSource` | `/aria-modal="true"/` |
-| 231 | match | `helpSource` | `/aria-labelledby="shortcut-help-title"/` |
-| 232 | match | `helpSource` | `/closeButtonRef\.current\?\.focus\(\)/` |
-| 233 | match | `helpSource` | `/previousFocus\?\.isConnected[\s\S]*previousFocus\.focus\(\)/` |
-| 234 | match | `helpSource` | `/event\.key !== 'Tab'/` |
-| 235 | match | `helpSource` | `/event\.shiftKey[\s\S]*firstElement[\s\S]*lastElement/` |
-| 236 | match | `helpSource` | `/querySelectorAll<HTMLElement>\(FOCUSABLE_SELECTOR\)/` |
-| 237 | match | `helpSource` | `/onKeyDown=\{handleKeyDown\}/` |
-| 243 | match | `cssSource` | `/\.shortcut-help-backdrop/` |
-| 244 | match | `cssSource` | `/\.shortcut-help-dialog:focus-visible/` |
-| 245 | match | `cssSource` | `/@media \(prefers-reduced-motion: reduce\)/` |
+| 187 | match | `serviceSource` | `/tagName === 'input'[\s\S]*tagName === 'select'[\s\S]*tagName === 'tex` |
+| 188 | match | `serviceSource` | `/tagName === 'button'/` |
+| 189 | match | `serviceSource` | `/tagName === 'a'[\s\S]*hasAttribute\('href'\)/` |
+| 190 | match | `serviceSource` | `/contenteditable/` |
+| 191 | match | `serviceSource` | `/\[role="button"\]/` |
+| 192 | match | `serviceSource` | `/\[tabindex\]:not/` |
+| 201 | match | `serviceSource` | `/command\.index < 0 \\|\\| command\.index > 14/` |
+| 202 | match | `serviceSource` | `/if \(audioState\.isLoading\) return true/` |
+| 203 | match | `serviceSource` | `/audioState\.isRunning[\s\S]*audioState\.stop\(\)[\s\S]*audioState\.st` |
+| 204 | match | `serviceSource` | `/tapTempoTap\(\)/` |
+| 205 | match | `serviceSource` | `/activateSlot\(command\.slot\)/` |
+| 206 | match | `serviceSource` | `/getState\(\)\.panic\(\)/` |
+| 208 | match | `serviceSource` | `/export function isEscapeOwnedByTarget/` |
+| 209 | match | `serviceSource` | `/export function isShortcutBlockedByTarget/` |
+| 210 | match | `serviceSource` | `/command\.type === 'panic'\) return event\.isComposing \\|\\| isEscape` |
+| 214 | match | `serviceSource` | `/!command \\|\\| isShortcutBlockedByTarget\(command, event\)/` |
+| 220 | match | `serviceSource.slice(modalBranch, globalE` | `/command\?\.type === 'panic'[\s\S]*closeHelp\(\)[\s\S]*return/,` |
+| 225 | match | `routingSource` | `/event\.repeat/` |
+| 226 | match | `routingSource` | `/event\.ctrlKey \\|\\| event\.metaKey \\|\\| event\.altKey/` |
+| 227 | match | `routingSource` | `/SHIFT_PEDAL_KEY_CODES\.indexOf/` |
+| 228 | match | `routingSource` | `/Digit0/` |
+| 230 | match | `helpSource` | `/role="dialog"/` |
+| 231 | match | `helpSource` | `/aria-modal="true"/` |
+| 232 | match | `helpSource` | `/aria-labelledby="shortcut-help-title"/` |
+| 233 | match | `helpSource` | `/closeButtonRef\.current\?\.focus\(\)/` |
+| 234 | match | `helpSource` | `/previousFocus\?\.isConnected[\s\S]*previousFocus\.focus\(\)/` |
+| 235 | match | `helpSource` | `/event\.key !== 'Tab'/` |
+| 236 | match | `helpSource` | `/event\.shiftKey[\s\S]*firstElement[\s\S]*lastElement/` |
+| 237 | match | `helpSource` | `/querySelectorAll<HTMLElement>\(FOCUSABLE_SELECTOR\)/` |
+| 238 | match | `helpSource` | `/onKeyDown=\{handleKeyDown\}/` |
+| 244 | match | `cssSource` | `/\.shortcut-help-backdrop/` |
+| 245 | match | `cssSource` | `/\.shortcut-help-dialog:focus-visible/` |
+| 246 | match | `cssSource` | `/@media \(prefers-reduced-motion: reduce\)/` |
 
 ### tap-tempo-regression.mjs
 
