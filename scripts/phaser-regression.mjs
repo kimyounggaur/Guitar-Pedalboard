@@ -326,6 +326,61 @@ for (const stages of PHASER_STAGE_OPTIONS) {
   for (const { weights } of midway) assert.ok(Math.abs(weights.reduce((a, b) => a + b, 0) - 1) < 1e-9, 'retargeting mid-fade keeps the sum at 1');
 }
 
+// ---- 꺼진 동안: 출력 0 을 직접 쓰고, 상태를 비우고, LFO 위상은 시간에 맞춰 흐른다 ---------------------------
+{
+  const sampleRate = 48000;
+  let ProcessorClass;
+  vm.runInNewContext(phaserProcessorSource, {
+    sampleRate, AudioWorkletProcessor: MockProcessor,
+    registerProcessor(name, klass) { ProcessorClass = klass; },
+  });
+  const processor = new ProcessorClass({ processorOptions: { stages: 12 } });
+  const params = { rate: [2], depth: [100], feedback: [.9], stages: [12], active: [1] };
+  const feed = (block) => {
+    const l = new Float32Array(128);
+    for (let i = 0; i < 128; i++) l[i] = .5 * Math.sin(2 * Math.PI * 440 * (block * 128 + i) / sampleRate);
+    const out = [new Float32Array(128).fill(1), new Float32Array(128).fill(1)];
+    processor.process([[l]], [out], params);
+    return out;
+  };
+  for (let block = 0; block < 10; block++) feed(block);
+  assert.ok(processor.states[0].some((value) => value !== 0), 'a running phaser holds filter state');
+  const phaseBefore = processor.phase;
+  params.active[0] = 0;
+  const off = feed(10);
+  assert.ok(off.every((channel) => channel.every((value) => value === 0)), 'the off branch writes silence into the output buffers itself');
+  assert.ok(processor.states.every((state) => state.every((value) => value === 0)) && processor.previous.every((value) => value === 0), 'the off branch flushes the filter state');
+  const advance = (2 * Math.PI * 2 * 128) / sampleRate;
+  assert.ok(Math.abs(processor.phase - (phaseBefore + advance) % (2 * Math.PI)) < 1e-9, 'the LFO keeps running while the phaser is off');
+  params.active[0] = 1;
+  const nan = new Float32Array(128); nan[5] = Number.NaN;
+  const outNan = [new Float32Array(128), new Float32Array(128)];
+  processor.process([[nan]], [outNan], params);
+  for (let block = 12; block < 40; block++) assert.ok(feed(block).every((channel) => channel.every(Number.isFinite)), 'a NaN input sample never poisons the filter state');
+}
+
+// ---- 스윕: LFO 정점에서 올패스 꺾임 주파수가 2000 Hz, 골에서 200 Hz ------------------------------------------
+// 1차 올패스는 꺾임 주파수에서 위상이 −90° 다. 4단이면 −360° 라 그 주파수의 사인이 입력과 같은 위상으로 나온다. 중심(632 Hz)이었다면 −580° 로 어긋난다.
+{
+  const sampleRate = 48000;
+  const rate = .05;
+  for (const [seconds, frequency, label] of [[5, 2000, 'peak (+½ decade)'], [15, 200, 'trough (−½ decade)']]) {
+    const start = Math.round(seconds * sampleRate);
+    const { samples } = runProcessor(sampleRate, {
+      stages: 4, feedback: 0, depth: 100, rate, blocks: Math.ceil((start + 4800) / 128),
+      input: (n) => (n >= start - 4800 ? Math.sin(2 * Math.PI * frequency * n / sampleRate) : 0),
+    });
+    let inPhase = 0, quadrature = 0;
+    for (let n = start; n < start + 2400; n++) {
+      const reference = 2 * Math.PI * frequency * n / sampleRate;
+      inPhase += samples[n] * Math.sin(reference);
+      quadrature += samples[n] * Math.cos(reference);
+    }
+    const phase = Math.atan2(quadrature, inPhase);
+    assert.ok(Math.abs(phase) < 0.1, `LFO ${label}: break frequency must be ${frequency} Hz (phase ${phase} rad)`);
+  }
+}
+
 const migrationBundle = await build({
   plugins: [workerUrlStub],
   entryPoints: [
