@@ -1,6 +1,14 @@
+/**
+ * 매핑이 페달을 움직이는 방식(설계서 4.11).
+ * - `momentary`(저장된 이름. 설계서의 **latch**): 스위치가 보낸 값을 그대로 따른다 — 64 이상(Note On)이면 켜고, 미만(Note Off)이면 끈다. 값이 없는 매핑도 이 방식이다.
+ * - `toggle`: 누를 때마다 켜짐·꺼짐이 바뀐다. 뗌(64 미만)은 무시한다.
+ * 저장소에는 예전부터 `momentary` 로 쓰여 있어서 이름을 바꾸지 않았다(바꾸면 이미 저장된 매핑을 읽는 길이 둘이 된다, L-160).
+ */
+export type MidiMode = 'momentary' | 'toggle';
+
 export interface MidiCcMapping {
   channel: number;
-  mode?: 'momentary' | 'toggle';
+  mode?: MidiMode;
   cc: number;
   value: number;
   note?: never;
@@ -8,7 +16,7 @@ export interface MidiCcMapping {
 
 export interface MidiNoteMapping {
   channel: number;
-  mode?: 'momentary' | 'toggle';
+  mode?: MidiMode;
   note: number;
   value: number;
   cc?: never;

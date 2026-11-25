@@ -100,6 +100,13 @@
     gap: 3px;
   }
 
+  /* 좁은 화면에서는 버튼을 글 아래로 내려 손가락으로 누를 만한 크기로 둔다(S2.9). */
+  .midi-reconnect-notice button {
+    align-self: stretch;
+    min-height: 44px;
+    margin-left: 0;
+  }
+
   .workspace {
     grid-template-columns: 1fr;
     gap: 12px;

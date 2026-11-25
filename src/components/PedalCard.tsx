@@ -24,7 +24,7 @@ import type {
   TremoloParams,
 } from '../audio/types';
 import { AudioEngine } from '../audio/AudioEngine';
-import { formatMidiMapping } from '../audio/midi';
+import { describeMidiConnection, formatMidiMapping } from '../audio/midi';
 import { useAudioStore } from '../store/audioStore';
 import { setPedalActive } from '../store/pedalActions';
 import { usePedalStore } from '../store/pedalStore';
@@ -80,6 +80,8 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
   const midiSupported = useAudioStore((state) => state.midiSupported);
   const midiLearningPedalId = useAudioStore((state) => state.midiLearningPedalId);
   const midiMapping = useAudioStore((state) => state.midiMappings[pedal.id]);
+  const midiLink = useAudioStore((state) => state.midiLink);
+  const midiDeviceCount = useAudioStore((state) => state.midiDevices.length);
   const startMidiLearn = useAudioStore((state) => state.startMidiLearn);
   const cancelMidiLearn = useAudioStore((state) => state.cancelMidiLearn);
   const setMidiMode = useAudioStore((state) => state.setMidiMode);
@@ -131,7 +133,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
   const midiStatus = isMidiLearning
     ? 'MIDI 입력 대기 중…'
     : midiMapping
-      ? `매핑됨 · ${formatMidiMapping(midiMapping)}`
+      ? `매핑됨 · ${describeMidiConnection(midiLink, midiDeviceCount)} · ${formatMidiMapping(midiMapping)}`
       : 'MIDI 미매핑';
 
 
@@ -327,8 +329,15 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
                 {midiStatus}
               </span>
               {midiMapping ? (
-                <button type="button" className="midi-learn-button" onClick={() => setMidiMode(pedal.id, midiMapping.mode === 'toggle' ? 'momentary' : 'toggle')}>
-                  방식: {midiMapping.mode === 'toggle' ? '토글' : '누름 유지'}
+                <button
+                  type="button"
+                  className="midi-learn-button"
+                  title={midiMapping.mode === 'toggle'
+                    ? '토글: 누를 때마다 켜짐·꺼짐이 바뀝니다(뗌은 무시). 누르면 래치로 바뀝니다.'
+                    : '래치: 스위치가 보내는 값을 따릅니다(64 이상 켜짐, 미만 꺼짐). 누르면 토글로 바뀝니다.'}
+                  onClick={() => setMidiMode(pedal.id, midiMapping.mode === 'toggle' ? 'momentary' : 'toggle')}
+                >
+                  방식: {midiMapping.mode === 'toggle' ? '토글' : '래치'}
                 </button>
               ) : null}
               {isMidiMenuOpen ? (

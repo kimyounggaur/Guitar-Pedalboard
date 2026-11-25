@@ -33,12 +33,15 @@ import {
   TAP_TEMPO_DEFAULT_BPM,
 } from '../audio/tapTempo';
 import {
-  createMidiMapping,
-  midiMappingMatches,
+  MidiRouter,
+  MidiService,
   parseMidiMessage,
   validateMidiMappings,
   type MidiDeviceInfo,
+  type MidiLink,
   type MidiMappings,
+  type MidiModeNotice,
+  type MidiPermission,
 } from '../audio/midi';
 import { recordingFormatFromMime, selectRecorderMimeType, WavRecorder, type RecordingFileFormat } from '../audio/recording';
 import { ko } from '../i18n/ko';
@@ -186,11 +189,6 @@ audioEngine.setTuningReferenceHz(initialIoSettings.tuningReferenceHz);
 const MIDI_SUPPORTED =
   typeof navigator !== 'undefined' && typeof navigator.requestMIDIAccess === 'function';
 
-let midiAccess: MIDIAccess | null = null;
-let midiAccessPromise: Promise<MIDIAccess> | null = null;
-let midiSessionGeneration = 0;
-const attachedMidiInputs = new Map<string, MIDIInput>();
-
 function readMidiMappings(): MidiMappings {
   // JSON 이 아니면 깨진 값으로 보관한다. 모양이 맞지 않는 항목은 예전처럼 걸러 낸다(validateMidiMappings).
   return safeStorage.read<MidiMappings>(STORAGE_KEYS.midi, (raw) => validateMidiMappings(JSON.parse(raw)), {});
@@ -206,7 +204,52 @@ export function registerMidiAdvancedHandler(handler: ((data: Uint8Array) => bool
   midiAdvancedHandler = handler;
   midiAdvancedMatches = matches;
 }
-const midiPressed = new Map<string, boolean>();
+// MIDI 연결(권한·장치 감시)은 MidiService, 메시지를 어디에 쓸지는 MidiRouter 가 맡는다(S2.9). 여기는 둘을 이 저장소에 이어 붙일 뿐이다.
+const midiService = new MidiService({
+  onMessage: (event) => handleMidiMessage(event),
+  onState: (state) => useAudioStore.setState({ midiLink: state.link, midiPermission: state.permission, midiDevices: state.devices }),
+});
+
+/** 학습이 끝난 뒤 방식을 어떻게 정했는지 알린다. 사용자가 방식을 고르지 않았으므로 무엇으로 정했고 어떻게 바꾸는지를 함께 말한다. */
+function announceMidiMode(notice: MidiModeNotice): void {
+  const pedal = usePedalStore.getState().pedals.find((candidate) => candidate.id === notice.pedalId);
+  const name = pedal?.name ?? '이 페달';
+  showToast({
+    key: `midi-mode:${notice.pedalId}`,
+    kind: 'info',
+    durationMs: 8000,
+    message:
+      notice.mode === 'toggle'
+        ? `${name}: 누른 뒤 1초 안에 뗌이 이어져 '토글'(누를 때마다 전환)로 지정했습니다. 카드의 '방식' 버튼으로 바꿀 수 있습니다.`
+        : `${name}: 1초 안에 뗌이 오지 않아 '래치'(스위치가 보내는 값을 따름)로 지정했습니다. 누를 때마다 전환하려면 카드의 '방식' 버튼으로 토글로 바꾸세요.`,
+  });
+}
+
+const midiRouter = new MidiRouter({
+  getMappings: () => useAudioStore.getState().midiMappings,
+  learned: (midiMappings) => {
+    persistMidiMappings(midiMappings);
+    useAudioStore.setState({ midiMappings, midiLearningPedalId: null, midiError: null });
+  },
+  changeMappings: (midiMappings) => {
+    persistMidiMappings(midiMappings);
+    useAudioStore.setState({ midiMappings });
+  },
+  getLearningPedalId: () => useAudioStore.getState().midiLearningPedalId,
+  endLearning: () => useAudioStore.setState({ midiLearningPedalId: null }),
+  pedalActive: (pedalId) => usePedalStore.getState().pedals.find((pedal) => pedal.id === pedalId)?.active,
+  setPedalActive: (pedalId, active) => {
+    setPedalActive(pedalId, active);
+  },
+  notifyMode: announceMidiMode,
+  setTimer: (callback, ms) => {
+    const timer = setTimeout(callback, ms);
+    // Node 시험이 이 타이머 때문에 끝나지 않는 일을 막는다. 브라우저의 숫자 타이머에는 unref 가 없다.
+    (timer as { unref?: () => void }).unref?.();
+    return timer;
+  },
+  clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+});
 
 function handleMidiMessage(event: MIDIMessageEvent): void {
   const audioState = useAudioStore.getState();
@@ -217,120 +260,7 @@ function handleMidiMessage(event: MIDIMessageEvent): void {
   if (!audioState.midiLearningPedalId && event.data && midiAdvancedHandler?.(event.data)) return;
   const message = parseMidiMessage(event.data);
   if (!message) return;
-  const learningPedalId = audioState.midiLearningPedalId;
-  if (learningPedalId) {
-    const pedalExists = usePedalStore
-      .getState()
-      .pedals.some((pedal) => pedal.id === learningPedalId);
-    if (!pedalExists) {
-      useAudioStore.setState({ midiLearningPedalId: null });
-      return;
-    }
-
-    const midiMappings: MidiMappings = {
-      ...audioState.midiMappings,
-      [learningPedalId]: createMidiMapping(message),
-    };
-    persistMidiMappings(midiMappings);
-    useAudioStore.setState({
-      midiMappings,
-      midiLearningPedalId: null,
-      midiError: null,
-    });
-    return;
-  }
-
-  Object.entries(audioState.midiMappings).forEach(([pedalId, mapping]) => {
-    if (!midiMappingMatches(mapping, message)) return;
-
-    const pedal = usePedalStore.getState().pedals.find((candidate) => candidate.id === pedalId);
-    if (!pedal) return;
-    let active = message.active;
-    if (mapping.mode === 'toggle') {
-      const pressed = message.active;
-      const wasPressed = midiPressed.get(pedalId) ?? false;
-      midiPressed.set(pedalId, pressed);
-      if (!pressed || wasPressed) return;
-      active = !pedal.active;
-    }
-    // 이미 그 상태면 아무것도 하지 않는다(저장도 엔진 호출도 없다). 켜고 끄는 입구는 하나다.
-    setPedalActive(pedalId, active);
-  });
-}
-
-function syncMidiInputs(): void {
-  if (!midiAccess) return;
-
-  const connectedInputs = new Map<string, MIDIInput>();
-  midiAccess.inputs.forEach((input) => {
-    if (input.state === 'connected') connectedInputs.set(input.id, input);
-  });
-
-  attachedMidiInputs.forEach((input, inputId) => {
-    if (connectedInputs.get(inputId) === input) return;
-    if (input.onmidimessage === handleMidiMessage) input.onmidimessage = null;
-    attachedMidiInputs.delete(inputId);
-  });
-
-  connectedInputs.forEach((input, inputId) => {
-    const previousInput = attachedMidiInputs.get(inputId);
-    if (previousInput === input && input.onmidimessage === handleMidiMessage) return;
-    if (previousInput?.onmidimessage === handleMidiMessage) previousInput.onmidimessage = null;
-    input.onmidimessage = handleMidiMessage;
-    attachedMidiInputs.set(inputId, input);
-  });
-
-  const midiDevices: MidiDeviceInfo[] = Array.from(connectedInputs.values())
-    .map((input) => ({
-      id: input.id,
-      name: input.name ?? 'MIDI 입력',
-      manufacturer: input.manufacturer ?? '',
-      state: input.state,
-    }))
-    .sort((left, right) => left.name.localeCompare(right.name));
-  useAudioStore.setState({ midiDevices });
-}
-
-function handleMidiStateChange(): void {
-  syncMidiInputs();
-}
-
-function attachMidiAccess(access: MIDIAccess): void {
-  if (midiAccess === access && midiAccess.onstatechange === handleMidiStateChange) {
-    syncMidiInputs();
-    return;
-  }
-  if (midiAccess && midiAccess !== access) {
-    midiAccess.onstatechange = null;
-  }
-  midiAccess = access;
-  midiAccess.onstatechange = handleMidiStateChange;
-  syncMidiInputs();
-}
-
-async function requestMidiAccessForLearn(): Promise<MIDIAccess> {
-  if (midiAccess) return midiAccess;
-  if (!MIDI_SUPPORTED) throw new Error('Web MIDI를 지원하지 않는 브라우저입니다.');
-
-  const pendingRequest =
-    midiAccessPromise ?? navigator.requestMIDIAccess({ sysex: false });
-  midiAccessPromise = pendingRequest;
-  try {
-    return await pendingRequest;
-  } finally {
-    if (midiAccessPromise === pendingRequest) midiAccessPromise = null;
-  }
-}
-
-function disposeMidiRuntime(): void {
-  midiSessionGeneration += 1;
-  midiAccessPromise = null;
-  attachedMidiInputs.forEach((input) => {
-    if (input.onmidimessage === handleMidiMessage) input.onmidimessage = null;
-  });
-  attachedMidiInputs.clear();
-  if (midiAccess) midiAccess.onstatechange = null;
-  midiAccess = null;
+  midiRouter.handle(message, typeof event.timeStamp === 'number' ? event.timeStamp : performance.now());
 }
 
 export type RecordingStatus = 'idle' | 'recording' | 'ready';
@@ -680,6 +610,9 @@ interface AudioStore {
   estimatedChainGainDb: number;
   tapTempo: { taps: number[]; bpm: number };
   midiDevices: MidiDeviceInfo[];
+  /** 연결 상태(권한·연결 중·연결됨 등)와 브라우저의 MIDI 권한. 카드의 '연결됨/장치 없음' 표시와 '다시 연결' 배너가 읽는다(S2.9). */
+  midiLink: MidiLink;
+  midiPermission: MidiPermission;
   midiSupported: boolean;
   midiLearningPedalId: string | null;
   midiMappings: MidiMappings;
@@ -716,7 +649,11 @@ interface AudioStore {
   setGlobalBpm: (bpm: number) => void;
   setTempoSync: (pedalId: string, sync: boolean) => void;
   adoptTempoFromPedals: () => void;
-  connectSavedMidi: (force?: boolean) => Promise<void>;
+  /**
+   * 저장된 MIDI 설정이 있으면 연결한다. `force`: 매핑이 없어도(고급 설정만 있어도) 시도한다.
+   * `userAction`: 사용자가 버튼을 눌러 부른 것이라 권한 창이 떠도 된다. 아니면(페이지를 열 때) 권한이 이미 허용일 때만 연결한다.
+   */
+  connectSavedMidi: (options?: { force?: boolean; userAction?: boolean }) => Promise<void>;
   setMidiMode: (pedalId: string, mode: 'momentary' | 'toggle') => void;
   startMidiLearn: (pedalId: string) => Promise<void>;
   cancelMidiLearn: () => void;
@@ -891,6 +828,8 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   estimatedChainGainDb: 0,
   tapTempo: { taps: [], bpm: readInitialTempoBpm() },
   midiDevices: [],
+  midiLink: MIDI_SUPPORTED ? 'idle' : 'unsupported',
+  midiPermission: 'unknown',
   midiSupported: MIDI_SUPPORTED,
   midiLearningPedalId: null,
   midiMappings: readMidiMappings(),
@@ -1240,14 +1179,15 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     applyGlobalBpmToSyncedPedals(bpm);
   },
 
-  connectSavedMidi: async (force = false) => {
+  connectSavedMidi: async ({ force = false, userAction = false } = {}) => {
     if (!get().midiSupported || (!force && !Object.keys(get().midiMappings).length)) return;
-    const generation = midiSessionGeneration;
+    const generation = midiService.generation;
     try {
-      const access = await requestMidiAccessForLearn();
-      if (generation === midiSessionGeneration) attachMidiAccess(access);
+      if (userAction) await midiService.connect();
+      else await midiService.connectIfAllowed();
+      if (generation === midiService.generation && get().midiError) set({ midiError: null });
     } catch {
-      if (generation === midiSessionGeneration) set({ midiError: '저장된 MIDI 매핑을 연결하지 못했습니다. MIDI 권한을 확인해 주세요.' });
+      if (generation === midiService.generation) set({ midiError: '저장된 MIDI 매핑을 연결하지 못했습니다. MIDI 권한을 확인해 주세요.' });
     }
   },
 
@@ -1255,7 +1195,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     const mapping = get().midiMappings[pedalId];
     if (!mapping) return;
     const midiMappings = { ...get().midiMappings, [pedalId]: { ...mapping, mode } };
-    midiPressed.delete(pedalId);
+    midiRouter.forget(pedalId);
     persistMidiMappings(midiMappings);
     set({ midiMappings });
   },
@@ -1267,15 +1207,13 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       .pedals.some((pedal) => pedal.id === pedalId);
     if (!pedalExists) return;
 
-    const generation = midiSessionGeneration;
+    const generation = midiService.generation;
     set({ midiLearningPedalId: pedalId, midiError: null });
 
     try {
-      const access = await requestMidiAccessForLearn();
-      if (generation !== midiSessionGeneration) return;
-      attachMidiAccess(access);
+      await midiService.connect();
     } catch {
-      if (generation !== midiSessionGeneration) return;
+      if (generation !== midiService.generation) return;
       set({
         midiDevices: [],
         midiLearningPedalId: null,
@@ -1290,12 +1228,14 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     const midiMappings = { ...get().midiMappings };
     if (!Object.hasOwn(midiMappings, pedalId)) return;
     delete midiMappings[pedalId];
+    midiRouter.forget(pedalId);
     persistMidiMappings(midiMappings);
     set({ midiMappings });
   },
 
   disposeMidi: () => {
-    disposeMidiRuntime();
+    midiService.dispose();
+    midiRouter.dispose();
     set({
       midiDevices: [],
       midiLearningPedalId: null,

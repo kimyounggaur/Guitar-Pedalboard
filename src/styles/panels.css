@@ -33,6 +33,16 @@
   color: var(--warning);
 }
 
+/* 저장된 MIDI 풋스위치를 다시 연결하라는 배너(S2.9): 글이 길면 줄을 바꾸고 버튼은 맨 끝에 둔다. */
+.midi-reconnect-notice {
+  flex-wrap: wrap;
+}
+
+.midi-reconnect-notice button {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
 .mobile-audio-notice {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
