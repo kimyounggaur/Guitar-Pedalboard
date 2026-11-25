@@ -53,6 +53,17 @@ const flags = await load('src/config/flags.ts');
   globalThis.location = { search: '?ff=-newCompressor' };
   resetFeatureFlagOverrides();
   assert.equal(isFeatureEnabled('newCompressor'), false);
+  // 덮어쓰기를 null 로 지우면 주소 값으로 돌아간다(기본값이 아니라)
+  globalThis.location = { search: '?ff=newCompressor' };
+  resetFeatureFlagOverrides();
+  setFeatureFlagOverride('newCompressor', false);
+  setFeatureFlagOverride('newCompressor', null);
+  assert.equal(isFeatureEnabled('newCompressor'), true, 'null 은 주소 값으로 돌아간다');
+  // 주소는 한 번 읽고 기억한다: 읽은 뒤 주소가 바뀌어도 reset 전에는 그대로
+  globalThis.location = { search: '' };
+  assert.equal(isFeatureEnabled('newCompressor'), true, '주소는 한 번만 읽는다');
+  resetFeatureFlagOverrides();
+  assert.equal(isFeatureEnabled('newCompressor'), false, 'reset 뒤에는 새 주소를 읽는다');
   delete globalThis.location;
   resetFeatureFlagOverrides();
   assert.equal(isFeatureEnabled('newCompressor'), false);
@@ -152,6 +163,13 @@ for (const rate of [44100, 48000]) {
   const [quietOut] = drive(belowThreshold, defaultsFor({ threshold: -30 }), quiet);
   assert.deepEqual(quietOut, quiet, `${label}: 문턱 아래(니 0)는 그대로`);
 
+  // RMS 창: 진폭 1 의 1 kHz 사인이 시작하고 5 ms 가 지나면 제곱평균이 정상값(0.5)의 63% 쯤(0.316)이다
+  const windowProbe = new Processor(options2());
+  const fiveMs = Math.round(rate * 0.005);
+  const stepIn = sine(rate, 0.01, 1000, 1).subarray(0, fiveMs);
+  windowProbe.process([[stepIn]], [[new Float32Array(fiveMs), new Float32Array(fiveMs)]], defaultsFor({ ratio: 1 }));
+  assert.ok(windowProbe.meanSquare > .30 && windowProbe.meanSquare < .335, `${label}: 5 ms 뒤 제곱평균 ${windowProbe.meanSquare}`);
+
   // 검출기 보정: 사인에서 RMS 와 피크 검출기가 같은 감소량(오차 0.5 dB 안)
   const peakDetector = new Processor(options2({ detector: 'peak' }));
   drive(peakDetector, defaultsFor(), tone);
@@ -177,6 +195,11 @@ for (const rate of [44100, 48000]) {
   const recovered = (hold.reductionDb - pressed) / -pressed;
   assert.ok(recovered > .55 && recovered < .75, `${label}: 시정수 뒤 회복 ${recovered}`);
 
+  // 가장 센 채널을 따른다: 오른쪽이 더 커도 같은 정도로 누른다
+  const rightLouder = new Processor(options2());
+  drive(rightLouder, defaultsFor(), tone.map((sample) => sample / 2), tone);
+  assert.ok(Math.abs(rightLouder.reductionDb - fresh.reductionDb) < .05, `${label}: 오른쪽이 센 입력 ${rightLouder.reductionDb} 대 ${fresh.reductionDb}`);
+
   // 두 채널은 같은 이득(링크): 한쪽이 절반 크기여도 비가 2 로 유지
   const linked = new Processor(options2());
   const [linkLeft, linkRight] = drive(linked, defaultsFor(), tone, tone.map((sample) => sample / 2));
@@ -197,6 +220,10 @@ for (const rate of [44100, 48000]) {
   assert.equal(badOut[100], 0);
   assert.equal(badOut[101], 0);
   assert.equal(badOut[102], 0);
+  assert.ok(bad.reductionDb < -10 && Number.isFinite(bad.meanSquare), `${label}: 유한하지 않은 표본 뒤에도 계속 누른다(${bad.reductionDb})`);
+  const softKnee = new Processor(options2());
+  drive(softKnee, defaultsFor({ knee: 20 }), poisoned);
+  assert.ok(Number.isFinite(softKnee.reductionDb) && softKnee.reductionDb < -10, `${label}: 소프트 니에서도 ${softKnee.reductionDb}`);
 
   // 무음이 길게 이어져도 감소량 0, 출력 0
   const silent = new Processor(options2());
@@ -221,6 +248,17 @@ for (const rate of [44100, 48000]) {
   const oldReports = countMessages(new Processor());
   assert.ok(newReports >= 29 && newReports <= 30, `${label}: 새 경로 보고 ${newReports}번/초`);
   assert.ok(oldReports >= 19 && oldReports <= 20, `${label}: 옛 경로 보고 ${oldReports}번/초`);
+  // 첫 보고 시각: 새 경로는 1/30 초가 찬 블록에서, 옛 경로는 1/20 초가 찬 블록에서
+  for (const [version, hz] of [[2, 30], [1, 20]]) {
+    const timing = new Processor(version === 2 ? options2() : undefined);
+    const blocksNeeded = Math.ceil(rate / hz / BLOCK);
+    let firstAt = -1;
+    for (let block = 1; block <= blocksNeeded + 2; block += 1) {
+      drive(timing, defaultsFor(), tone.subarray(0, BLOCK));
+      if (firstAt < 0 && timing.port.messages.length > 0) firstAt = block;
+    }
+    assert.equal(firstAt, blocksNeeded, `${label}: 경로 ${version} 첫 보고 블록 ${firstAt} 대 ${blocksNeeded}`);
+  }
   const lastMessage = fresh.port.messages.at(-1);
   assert.equal(lastMessage.type, 'reduction');
   assert.ok(Math.abs(lastMessage.value - fresh.reductionDb) < 1, `${label}: 보고한 값이 실제 감소량을 따른다`);
