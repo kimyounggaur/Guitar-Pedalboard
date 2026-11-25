@@ -20,7 +20,12 @@ import { usePedalStore } from '../store/pedalStore';
 import { PedalIcon } from './PedalIcon';
 import { SortablePedal } from './SortablePedal';
 
-const logoUrl = `${import.meta.env.BASE_URL}logo.webp`;
+// 로고는 표시 폭(데스크톱 높이 56 px ≈ 113 px, 좁은 화면 최대 520 px)에 맞춰 520 px·1040 px 두 가지만 둔다(S4.1).
+// srcset·sizes 는 index.html 의 preload(imagesrcset·imagesizes)와 같은 값이어야 미리 받은 그림을 그대로 쓴다 — E-19 가 한 번만 받는지 본다.
+const logoBase = import.meta.env.BASE_URL;
+const logoUrl = `${logoBase}logo-520.webp`;
+const logoSrcSet = `${logoBase}logo-520.webp 520w, ${logoBase}logo-1040.webp 1040w`;
+const logoSizes = '(min-width: 768px) 113px, min(520px, 62vw)';
 
 interface PedalBoardProps {
   inputPanel?: ReactNode;
@@ -86,9 +91,11 @@ export function PedalBoard({ inputPanel }: PedalBoardProps) {
           <h1 className="app-logo-title">
             <img
               src={logoUrl}
+              srcSet={logoSrcSet}
+              sizes={logoSizes}
               alt="Guitar Pedal Board"
-              width="2048"
-              height="1021"
+              width="520"
+              height="259"
               loading="eager"
               fetchPriority="high"
               decoding="async"
