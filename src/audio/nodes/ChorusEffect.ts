@@ -19,13 +19,10 @@ const DEFAULT_PARAMS: ChorusParams = {
   spread: 60,
   tone: 60,
 };
-const SUPPORTED_VOICE_COUNTS = [2, 3, 4] as const;
+/** 보이스 수를 바꿔 LFO 묶음을 갈아 끼울 때, 물러나는 묶음의 깊이가 0 으로 내려간 뒤 끌 때까지 기다리는 시간(초). 깊이의 시상수(12 ms)의 8배다. */
+const LFO_RETIRE_SECONDS = 0.1;
 
 export const CHORUS_VOICE_BANK_SIZE = 4;
-export const CHORUS_LFO_BANK_SIZE = SUPPORTED_VOICE_COUNTS.reduce(
-  (total, voices) => total + voices,
-  0,
-);
 
 interface ChorusVoice {
   delay: DelayNode;
@@ -34,7 +31,6 @@ interface ChorusVoice {
 }
 
 interface ChorusLfo {
-  voices: ChorusParams['voices'];
   voiceIndex: number;
   oscillator: OscillatorNode;
   depth: GainNode;
@@ -101,7 +97,10 @@ function getToneFrequency(tone: number): number {
 
 export class ChorusEffect extends BaseEffect {
   private readonly voices: ChorusVoice[] = [];
-  private readonly lfos: ChorusLfo[] = [];
+  /** 지금 보이스 수에 맞는 LFO 묶음(보이스마다 하나). 보이스 수를 바꾸면 통째로 갈아 끼운다(S4.2). */
+  private lfos: ChorusLfo[] = [];
+  /** 갈아 끼워져 물러나는 중인 묶음(깊이를 0 으로 내리고 곧 꺼진다). 정리할 때 함께 끈다. */
+  private readonly retiring = new Set<ChorusLfo>();
   private readonly voiceSum: GainNode;
   private readonly tone: BiquadFilterNode;
   private disposed = false;
@@ -131,20 +130,6 @@ export class ChorusEffect extends BaseEffect {
       this.voices.push({ delay, panner, gain });
     }
 
-    SUPPORTED_VOICE_COUNTS.forEach((voices) => {
-      for (let voiceIndex = 0; voiceIndex < voices; voiceIndex += 1) {
-        const oscillator = new OscillatorNode(context, { frequency: DEFAULT_PARAMS.rate });
-        const depth = new GainNode(context, { gain: 0 });
-        const phase = (Math.PI * 2 * voiceIndex) / voices;
-
-        oscillator.setPeriodicWave(createPhaseShiftedSine(context, phase));
-        oscillator.connect(depth);
-        depth.connect(this.voices[voiceIndex].delay.delayTime);
-        oscillator.start();
-        this.lfos.push({ voices, voiceIndex, oscillator, depth });
-      }
-    });
-
     this.voiceSum.connect(this.tone);
     this.tone.connect(this.effectOutput);
     this.update(pedal);
@@ -173,24 +158,65 @@ export class ChorusEffect extends BaseEffect {
       smoothParam(voice.gain.gain, active ? voiceGain : 0, this.context);
     });
 
+    this.syncLfos(params.voices, params.rate);
     this.lfos.forEach((lfo) => {
-      const active = lfo.voices === params.voices && lfo.voiceIndex < params.voices;
       smoothParam(lfo.oscillator.frequency, params.rate, this.context);
-      smoothParam(lfo.depth.gain, active ? modulationDepth : 0, this.context);
+      smoothParam(lfo.depth.gain, modulationDepth, this.context);
     });
 
     smoothParam(this.tone.frequency, getToneFrequency(params.tone), this.context);
+  }
+
+  /**
+   * LFO 를 지금 보이스 수만큼만 둔다(S4.2). 예전에는 2·3·4 보이스용 아홉 개를 모두 돌렸고, 안 쓰는 묶음은 깊이만 0 이었다.
+   * 보이스 수가 같으면 아무것도 하지 않는다. 바뀌면 새 묶음을 만들어 깊이 0 에서 올라오게 하고(이어서 update 가 smoothParam 을 건다)
+   * 옛 묶음은 깊이를 0 으로 내린 뒤 끈다 — 두 묶음이 겹치는 동안에도 지연 시간이 튀지 않는다. 노브를 돌릴 때마다가 아니라 보이스 수를
+   * 고를 때만 노드가 만들어진다.
+   */
+  private syncLfos(voices: ChorusParams['voices'], rate: number): void {
+    if (this.lfos.length === voices) return;
+    // 처음 만들 때는 옛 구현처럼 기본 속도로 시작해 update 가 곧 정한 속도로 부드럽게 옮긴다(소리가 옛 구현과 같다). 그 뒤에는 지금 속도로 시작한다.
+    const frequency = this.lfos.length === 0 ? DEFAULT_PARAMS.rate : rate;
+    this.retireLfos();
+    for (let voiceIndex = 0; voiceIndex < voices; voiceIndex += 1) {
+      const oscillator = new OscillatorNode(this.context, { frequency });
+      const depth = new GainNode(this.context, { gain: 0 });
+      const phase = (Math.PI * 2 * voiceIndex) / voices;
+
+      oscillator.setPeriodicWave(createPhaseShiftedSine(this.context, phase));
+      oscillator.connect(depth);
+      depth.connect(this.voices[voiceIndex].delay.delayTime);
+      oscillator.start();
+      this.lfos.push({ voiceIndex, oscillator, depth });
+    }
+  }
+
+  private retireLfos(): void {
+    const stopAt = this.context.currentTime + LFO_RETIRE_SECONDS;
+    for (const lfo of this.lfos) {
+      smoothParam(lfo.depth.gain, 0, this.context);
+      lfo.oscillator.stop(stopAt);
+      this.retiring.add(lfo);
+      lfo.oscillator.onended = () => {
+        lfo.oscillator.disconnect();
+        lfo.depth.disconnect();
+        this.retiring.delete(lfo);
+      };
+    }
+    this.lfos = [];
   }
 
   override dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
 
-    this.lfos.forEach((lfo) => {
+    [...this.lfos, ...this.retiring].forEach((lfo) => {
+      lfo.oscillator.onended = null;
       lfo.oscillator.stop();
       lfo.oscillator.disconnect();
       lfo.depth.disconnect();
     });
+    this.retiring.clear();
     this.voices.forEach((voice) => {
       voice.delay.disconnect();
       voice.panner.disconnect();

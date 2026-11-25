@@ -11,7 +11,6 @@ import {
   normalizeAutoWahParams,
 } from '../audio/nodes/AutoWahEffect';
 import {
-  CHORUS_LFO_BANK_SIZE,
   CHORUS_VOICE_BANK_SIZE,
   normalizeChorusParams,
 } from '../audio/nodes/ChorusEffect';
@@ -854,8 +853,8 @@ export function runMigrationChecks(): void {
     'Chorus 극단값 클램프',
   );
   assert(
-    CHORUS_VOICE_BANK_SIZE === 4 && CHORUS_LFO_BANK_SIZE === 9,
-    'Chorus 고정 노드 뱅크 크기',
+    CHORUS_VOICE_BANK_SIZE === 4,
+    'Chorus 고정 보이스 뱅크 크기',
   );
 
   const invalidFlangerParams = normalizeFlangerParams({

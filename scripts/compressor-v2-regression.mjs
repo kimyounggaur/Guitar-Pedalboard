@@ -20,7 +20,7 @@ async function load(entry) {
 const flags = await load('src/config/flags.ts');
 {
   const { parseFeatureFlags, isFeatureEnabled, setFeatureFlagOverride, resetFeatureFlagOverrides, FEATURE_FLAG_DEFAULTS, FEATURE_FLAG_NAMES } = flags;
-  assert.deepEqual([...FEATURE_FLAG_NAMES], ['newCompressor', 'oversample2x', 'oversample2xDrive', 'oversample2xCrunch', 'oversample2xFuzz']);
+  assert.deepEqual([...FEATURE_FLAG_NAMES], ['newCompressor', 'oversample2x', 'oversample2xDrive', 'oversample2xCrunch', 'oversample2xFuzz', 'idleDisconnect']);
   assert.equal(FEATURE_FLAG_DEFAULTS.newCompressor, false, '청취 승인 전에는 꺼져 있다(설계서 7.2)');
   assert.deepEqual(parseFeatureFlags(''), {});
   assert.deepEqual(parseFeatureFlags('?ff=newCompressor'), { newCompressor: true });

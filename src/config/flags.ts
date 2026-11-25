@@ -14,6 +14,8 @@ export const FEATURE_FLAG_NAMES = [
   'oversample2xDrive',
   'oversample2xCrunch',
   'oversample2xFuzz',
+  // 꺼진 페달의 이펙트 내부를 쉬게 한다(S4.2): 꺼지고 페이드·꼬리가 끝나면 이펙트 입력을 끊고 워클릿·되먹임·LFO 를 멈춘다. 소리는 같고 CPU 만 준다.
+  'idleDisconnect',
 ] as const;
 
 export type FeatureFlagName = (typeof FEATURE_FLAG_NAMES)[number];
@@ -30,6 +32,8 @@ export const FEATURE_FLAG_DEFAULTS: Readonly<Record<FeatureFlagName, boolean>> =
   oversample2xDrive: true,
   oversample2xCrunch: true,
   oversample2xFuzz: true,
+  // 소리가 같은 최적화라 청취 승인이 필요 없다. 설계서 7.2 는 '검증 뒤 on' 이고, 이 저장소는 P-17·P-23·꼬리 시험으로 검증한 뒤 켠 채로 낸다(L-266).
+  idleDisconnect: true,
 };
 
 export type FeatureFlagOverrides = Partial<Record<FeatureFlagName, boolean>>;

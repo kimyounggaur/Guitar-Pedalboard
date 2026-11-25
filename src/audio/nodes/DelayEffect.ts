@@ -16,7 +16,18 @@ export const TAPE_FLUTTER_HZ = 6.5;
 /** 플러터 지연 깊이(초). 음정 편차 약 ±0.1%. */
 export const TAPE_FLUTTER_DEPTH_S = 0.001 / (2 * Math.PI * TAPE_FLUTTER_HZ);
 
+/** 되먹임 꼬리가 이 크기(−60 dB)까지 줄면 들리지 않는다고 본다. 꺼진 뒤 이 시간이 지나면 되먹임 고리를 끊어 쉰다(S4.2). */
+const TAIL_FLOOR = 0.001;
+/** 꼬리 시간의 상한(초). 되먹임 0.95·지연 2 초 같은 극단에서도 쉬는 시각이 무한히 밀리지 않게 한다. */
+const MAX_TAIL_SECONDS = 60;
+
 export class DelayEffect extends BaseEffect {
+  private feedbackTarget = 0;
+  private pingPongFeedbackTarget = 0;
+  /** 깨어난 직후 첫 갱신에서는 되먹임 이득을 램프 없이 목표로 바로 놓는다(쉬는 동안 0 이었으므로 램프가 첫 반복음을 깎지 않게). */
+  private snapFeedback = false;
+  private lastDelaySeconds = 0.3;
+  private lastFeedbackAmount = 0;
   private readonly delay: DelayNode;
   private readonly feedback: GainNode;
   private readonly tone: BiquadFilterNode;
@@ -127,8 +138,12 @@ export class DelayEffect extends BaseEffect {
     const toneMin = params.mode === 'analog' ? 700 : 1100;
     const toneFrequency = toneMin + (params.tone / 100) * (toneMax - toneMin);
 
+    this.lastDelaySeconds = delayTime;
+    this.lastFeedbackAmount = feedbackAmount;
+    this.feedbackTarget = isPingPong ? 0 : feedbackAmount;
+    this.pingPongFeedbackTarget = isPingPong ? feedbackAmount : 0;
+
     smoothParam(this.delay.delayTime, isPingPong ? delayTime / 2 : delayTime, this.context);
-    smoothParam(this.feedback.gain, isPingPong ? 0 : feedbackAmount, this.context);
     smoothParam(this.tone.frequency, toneFrequency, this.context);
     const isTape = params.mode === 'tape';
     smoothParam(this.wowDepth.gain, isTape ? TAPE_WOW_DEPTH_S : 0, this.context);
@@ -137,10 +152,51 @@ export class DelayEffect extends BaseEffect {
     smoothParam(this.pingPongRightDelay.delayTime, delayTime, this.context);
     smoothParam(this.pingPongLeftTone.frequency, toneFrequency, this.context);
     smoothParam(this.pingPongRightTone.frequency, toneFrequency, this.context);
-    smoothParam(this.pingPongLeftFeedback.gain, isPingPong ? feedbackAmount : 0, this.context);
-    smoothParam(this.pingPongRightFeedback.gain, isPingPong ? feedbackAmount : 0, this.context);
+    this.applyFeedbackGains();
     smoothParam(this.monoPathGain.gain, isPingPong ? 0 : 1, this.context);
     smoothParam(this.pingPongPathGain.gain, isPingPong ? 1 : 0, this.context);
+  }
+
+  /**
+   * 꺼진 뒤 되먹임 꼬리가 −60 dB 아래로 줄 때까지의 시간(초). Trails 가 켜졌을 때만 BaseEffect 가 이 값만큼 더 기다린 뒤 쉰다.
+   * 반복음 n 번째의 크기는 feedback^n 이므로 n = ln(0.001) / ln(feedback) 번이면 충분하고, 한 번 돌 때마다 지연 시간만큼 걸린다.
+   */
+  protected override tailSeconds(): number {
+    const taps = this.lastFeedbackAmount > 0.001 ? Math.ceil(Math.log(TAIL_FLOOR) / Math.log(this.lastFeedbackAmount)) : 0;
+    return Math.min(MAX_TAIL_SECONDS, this.lastDelaySeconds * (taps + 1));
+  }
+
+  /** 쉴 때 되먹임 고리를 끊고(남은 소리가 없으니 고리가 계속 돌 이유가 없다), 깨어나면 목표 이득을 바로 되돌린다. */
+  protected override onIdleChange(idle: boolean): void {
+    if (idle) {
+      const now = this.context.currentTime;
+      for (const gain of this.feedbackGains()) {
+        gain.cancelScheduledValues(now);
+        gain.setValueAtTime(0, now);
+      }
+      return;
+    }
+    this.snapFeedback = true;
+  }
+
+  private feedbackGains(): AudioParam[] {
+    return [this.feedback.gain, this.pingPongLeftFeedback.gain, this.pingPongRightFeedback.gain];
+  }
+
+  private applyFeedbackGains(): void {
+    if (this.isIdle) return;
+    const targets = [this.feedbackTarget, this.pingPongFeedbackTarget, this.pingPongFeedbackTarget];
+    const gains = this.feedbackGains();
+    if (this.snapFeedback) {
+      this.snapFeedback = false;
+      const now = this.context.currentTime;
+      gains.forEach((gain, index) => {
+        gain.cancelScheduledValues(now);
+        gain.setValueAtTime(targets[index], now);
+      });
+      return;
+    }
+    gains.forEach((gain, index) => smoothParam(gain, targets[index], this.context));
   }
 
   override dispose(): void {

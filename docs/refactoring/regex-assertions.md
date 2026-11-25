@@ -3,12 +3,12 @@
 > `node docs/refactoring/tools/list-regex-assertions.mjs` 로 생성한 파일이다(수정하지 말고 다시 생성한다). 줄 번호는 생성한 시점의 `scripts/` 기준이므로, 시험 파일을 고친 Step 뒤에는 다시 생성한다.
 > 세는 대상은 `assert.match(` 와 `assert.doesNotMatch(` 호출이다. 보고서의 "337곳"은 기준 커밋 `4ac9cf7`에서 이 두 호출을 센 값과 같다(316 + 21).
 
-**생성 시점 합계: 388곳** (match 354 + doesNotMatch 34)
+**생성 시점 합계: 391곳** (match 357 + doesNotMatch 34)
 
 | 파일 | match | doesNotMatch | 합계 |
 |---|---:|---:|---:|
 | auto-wah-regression.mjs | 26 | 3 | 29 |
-| chorus-regression.mjs | 14 | 3 | 17 |
+| chorus-regression.mjs | 17 | 3 | 20 |
 | graphic-eq-regression.mjs | 29 | 5 | 34 |
 | howl-guard-regression.mjs | 9 | 5 | 14 |
 | input-stage-regression.mjs | 2 | 0 | 2 |
@@ -22,7 +22,7 @@
 | shortcuts-regression.mjs | 33 | 0 | 33 |
 | tap-tempo-regression.mjs | 13 | 1 | 14 |
 | tremolo-regression.mjs | 14 | 2 | 16 |
-| **합계** | **354** | **34** | **388** |
+| **합계** | **357** | **34** | **391** |
 
 ## 파일별 위치
 
@@ -68,19 +68,22 @@
 | 15 | match | `effectSource` | `/const MAX_DELAY_SECONDS = 0\.028;/` |
 | 16 | match | `effectSource` | `/const MAX_MODULATION_SECONDS = 0\.004;/` |
 | 17 | match | `effectSource` | `/export const CHORUS_VOICE_BANK_SIZE = 4;/` |
-| 18 | match | `effectSource` | `/const SUPPORTED_VOICE_COUNTS = \[2, 3, 4\] as const;/` |
+| 18 | match | `effectSource` | `/const LFO_RETIRE_SECONDS = 0\.1;/` |
 | 19 | !match | `effectSource` | `/\.value\s*=/, 'AudioParam 직접 대입이 있습니다.'` |
 | 20 | !match | `effectSource` | `/setValueAtTime\|linearRampToValueAtTime/` |
-| 26 | !match | `updateSource` | `/new\s+(?:Gain\|Delay\|Oscillator\|StereoPanner\|BiquadFilter)Node/, '` |
-| 31 | match | `updateSource` | `/smoothParam\(lfo\.oscillator\.frequency/` |
-| 32 | match | `updateSource` | `/smoothParam\(lfo\.depth\.gain/` |
-| 33 | match | `effectSource` | `/oscillator\.start\(\` |
-| 34 | match | `effectSource` | `/lfo\.oscillator\.stop\(\` |
-| 35 | match | `effectSource` | `/if \(this\.disposed\) return;/` |
-| 36 | match | `effectSource` | `/voice\.delay\.disconnect\(\` |
-| 37 | match | `effectSource` | `/voice\.panner\.disconnect\(\` |
-| 38 | match | `effectSource` | `/voice\.gain\.disconnect\(\` |
-| 39 | match | `effectSource` | `/lfo\.depth\.disconnect\(\` |
+| 28 | !match | `updateSource` | `/new\s+(?:Gain\|Delay\|Oscillator\|StereoPanner\|BiquadFilter)Node/, '` |
+| 33 | match | `updateSource` | `/this\.syncLfos\(params\.voices, params\.rate\` |
+| 34 | match | `effectSource.slice(syncStart, disposeSta` | `/new OscillatorNode\(/` |
+| 35 | match | `updateSource` | `/smoothParam\(lfo\.oscillator\.frequency/` |
+| 36 | match | `updateSource` | `/smoothParam\(lfo\.depth\.gain/` |
+| 37 | match | `effectSource` | `/oscillator\.start\(\` |
+| 38 | match | `effectSource` | `/lfo\.oscillator\.stop\(\` |
+| 39 | match | `effectSource` | `/lfo\.oscillator\.stop\(stopAt\` |
+| 40 | match | `effectSource` | `/if \(this\.disposed\) return;/` |
+| 41 | match | `effectSource` | `/voice\.delay\.disconnect\(\` |
+| 42 | match | `effectSource` | `/voice\.panner\.disconnect\(\` |
+| 43 | match | `effectSource` | `/voice\.gain\.disconnect\(\` |
+| 44 | match | `effectSource` | `/lfo\.depth\.disconnect\(\` |
 
 ### graphic-eq-regression.mjs
 

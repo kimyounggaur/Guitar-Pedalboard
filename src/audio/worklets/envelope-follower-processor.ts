@@ -33,6 +33,16 @@ class EnvelopeFollowerProcessor extends AudioWorkletProcessor {
 
   process(inputs, outputs, parameters) {
     if (this.disposed) return false;
+    if (!inputs[0] || inputs[0].length === 0) {
+      // Input disconnected (pedal off, S4.2): clear the envelope once and wait. Never return false:
+      // in Chromium a processor that returned false is never called again, even after the input is reconnected.
+      if (!this.rested) {
+        this.rested = true;
+        this.envelope = 0;
+      }
+      return true;
+    }
+    this.rested = false;
 
     const input = inputs[0];
     const audioOutput = outputs[0];

@@ -1108,6 +1108,10 @@ const p17: ProbeDefinition = {
       ['phaserOn4', () => ({ input: [input], pedals: [pedal('phaser', { stages: 4 })], monitoring: false })],
       ['phaserOn12', () => ({ input: [input], pedals: [pedal('phaser', { stages: 12 })], monitoring: false })],
     ];
+    // 꺼진 페달이 하나씩 쓰는 시간(S4.2): 어느 페달이 꺼져서도 시간을 쓰는지 가려내려고 페달마다 혼자 꺼 둔 체인을 잰다.
+    for (const base of initialPedals) {
+      configurations.push([`off.${base.id}`, () => ({ input: [input], pedals: [pedal(base.id, {}, { active: false })], monitoring: false })]);
+    }
     const ATTEMPTS = 5;
     const best: Record<string, number> = Object.fromEntries(configurations.map(([name]) => [name, Number.POSITIVE_INFINITY]));
     const overOverPedals: number[] = [];
@@ -1133,6 +1137,10 @@ const p17: ProbeDefinition = {
     values['ratio.allOffOverAllOn'] = best.allOff / best.allOn;
     values['ratio.phaserOffContribution'] = (best.phaserOff - best.empty) / best.allOn;
     values['ratio.phaserOnContribution'] = (best.phaserOn - best.empty) / best.allOn;
+    // 꺼진 페달 하나가 빈 체인 위에 더하는 시간 ÷ 15개를 켠 체인(S4.2). 모두 끈 체인의 비용(allOffOverAllOn)이 어느 페달에서 오는지 보여 준다.
+    for (const base of initialPedals) {
+      values[`ratio.offContribution.${base.id}`] = (best[`off.${base.id}`] - best.empty) / best.allOn;
+    }
     // 켠 Phaser 가 꺼진 Phaser 보다 더 쓰는 시간의 12단 ÷ 4단(참고용). 12단 고정 구조였다면 1 이고, 지금은 단 계산이 싸서(1~2 ns) 샘플마다 드는 고정 비용에 묻혀 1.1~1.4 정도다.
     values['ratio.phaserStages12Over4'] = (best.phaserOn12 - best.phaserOff) / Math.max(1e-6, best.phaserOn4 - best.phaserOff);
     // 가드·미터가 더한 시간을 15개 페달이 쓰는 시간(켠 체인 − 빈 체인)으로 나눈다. 라운드마다 구한 비율의 가운뎃값이다(위 설명).
@@ -1988,8 +1996,146 @@ const p29: ProbeDefinition = {
   },
 };
 
+// ---------------------------------------------------------------------------------------------
+// P-30 — 꺼진 페달 쉬기(idleDisconnect, S4.2): 쉬었다 깨어난 소리가 쉬지 않은 소리와 같은가
+// ---------------------------------------------------------------------------------------------
+type P30Toggle = { at: number; active: boolean };
+/** 끄고(1초) 켜고(3초) 끄고(4.5초) 켠다(5.5초). 꺼진 지 0.5~2초 만에 깨어나 쉬는 시간이 짧은 경우다. */
+const P30_SHORT: P30Toggle[] = [
+  { at: 1, active: false },
+  { at: 3, active: true },
+  { at: 4.5, active: false },
+  { at: 5.5, active: true },
+];
+/** 1초에 끄고 5.5초에 켠다. Trails 꼬리(딜레이 약 2.3초)가 끝나 되먹임 고리를 끊은 뒤에 깨어나는 경우다. */
+const P30_LONG: P30Toggle[] = [
+  { at: 1, active: false },
+  { at: 5.5, active: true },
+];
+/** LFO 위상을 쉬는 동안 멈추는 페달(워클릿의 LFO, 입력이 없으면 건너뛰는 네이티브 LFO): 깨어난 뒤 위상이 쉬지 않은 렌더와 달라 표본 일치를 요구하지 않는다. */
+const P30_LFO = new Set(['flanger', 'phaser', 'chorus', 'tremolo']);
+/** 쉴 때 상태(검출기·게이트·포락선)를 비우는 페달: 깨어난 직후가 조금 다르다. */
+const P30_STATEFUL = new Set(['auto-wah', 'compressor', 'fuzz', 'noise-gate']);
+const P30_CONFIGS: Array<{ key: string; id: string; params: Record<string, PedalParamValue>; toggles: P30Toggle[]; tail?: boolean; staticLfo?: boolean }> = [
+  ...initialPedals.map((base) => ({ key: base.id, id: base.id, params: {} as Record<string, PedalParamValue>, toggles: P30_SHORT })),
+  // LFO 깊이를 0 으로 둔 변형: LFO 위상이 소리에 영향을 주지 않아 쉬었다 깨어난 소리가 표본까지 같아야 한다. 깨어나지 않는 워클릿(Flanger·Phaser)을 여기서 잡는다.
+  ...(['chorus', 'flanger', 'phaser', 'tremolo'] as const).map((id) => ({ key: `${id}.static`, id, params: { depth: 0 } as Record<string, PedalParamValue>, toggles: P30_SHORT, staticLfo: true })),
+  { key: 'delay.long', id: 'delay', params: {}, toggles: P30_LONG, tail: true },
+  { key: 'delay.tape', id: 'delay', params: { mode: 'tape' }, toggles: P30_SHORT },
+  { key: 'delay.noTrails.long', id: 'delay', params: { trails: false }, toggles: P30_LONG },
+  { key: 'reverb.long', id: 'reverb', params: {}, toggles: P30_LONG, tail: true },
+  { key: 'reverb.noTrails.long', id: 'reverb', params: { trails: false }, toggles: P30_LONG },
+];
+
+const p30: ProbeDefinition = {
+  id: 'P-30',
+  title: '꺼진 페달 쉬기(idleDisconnect)',
+  describe:
+    '페달 한 개(기본값)에 REF-PC 7초를 넣고 1초에 끄고 3초에 켜고 4.5초에 끄고 5.5초에 켠다(.long 구성은 1초에 끄고 5.5초에 켠다: 쉬는 시간이 길다. Delay·Reverb 의 Trails 꼬리·Tape·Trails 끔 변형 포함. Ping-Pong 은 렌더가 반복마다 달라 넣지 않았다 — 되먹임 차단은 test:idle-disconnect 가 본다). 기능 플래그 idleDisconnect 를 켠(쉬는 지금 앱) 렌더와 끈(쉬지 않는 옛 방식) 렌더를 견준다. ' +
+    'diffDb = 두 렌더의 차이 RMS ÷ 끈 렌더 RMS(dB, −200 이면 표본까지 같다). 상태가 없는 페달은 −200 이어야 한다(maxDiffDb.stateless). 상태를 비우는 페달(Auto-Wah·Compressor·Fuzz·Noise Gate)은 깨어난 직후가 조금 달라 값이 있고(maxDiffDb.stateful), ' +
+    'LFO 를 가진 페달(Chorus·Flanger·Phaser·Tremolo)은 쉬는 동안 LFO 위상이 멈춰 깨어난 뒤 위상이 달라 값이 크다 — 이쪽은 levelAfterWakeDb 와 클릭으로 보고, LFO 깊이를 0 으로 둔 .static 변형은 위상이 소리에 영향을 주지 않으므로 상태 없는 페달과 같이 표본 일치(maxDiffDb.stateless)를 요구한다. ' +
+    'levelAfterWakeDb = 깨어난 0.5~1.0초 뒤 구간의 (켠 렌더 − 끈 렌더) 출력 RMS 차(dB) 중 절댓값이 큰 것 — 쉰 페달이 깨어나지 않으면(소리가 죽으면) 크게 나온다(maxAbsLevelAfterWakeDb). ' +
+    'wakeClickDb.<구성>.on/off = 깨어나는 때 둘레 22 ms 의 최대 표본 간 변화가 앞·뒤보다 몇 dB 큰지(P-23 과 같은 방식)의 큰 쪽. maxWakeClickDeltaDb = on − off 의 최댓값. ' +
+    'Trails 꼬리(tail 구성): tailDiffDb = 끈 뒤 꼬리가 울리는 구간(1.1~2.9초)의 상대 차이(−200 이면 꼬리가 그대로), postTailResidualDbfs = 꼬리 끝(−60 dB)에서 되먹임을 끊은 뒤(3.6~5.4초) 두 렌더의 차이 절대 수준(dBFS). repeatDiffDb = 같은 설정(끔)을 두 번 렌더한 차이(−200 이면 렌더가 반복마다 같다. −100 보다 크면 그 구성은 표본 일치 판정에서 뺀다).',
+  steps: 'S4.2',
+  async run(ctx) {
+    const rate = ctx.sampleRate;
+    const values: Record<string, MetricValue> = {};
+    const input = signals.refPc(rate, 7);
+    const renderWith = async (flagOn: boolean, id: string, params: Record<string, PedalParamValue>, toggles: P30Toggle[]): Promise<OfflineRender> => {
+      setFeatureFlagOverride('idleDisconnect', flagOn);
+      const events: ChainEvent[] = toggles.map((toggle) => ({
+        atSeconds: toggle.at,
+        run(handle) {
+          handle.patchPedal(id, { active: toggle.active });
+        },
+      }));
+      // 시작은 켠 채로 둔다(처음부터 꺼져 있으면 만들 때 바로 쉬어서 '켠 채 쉬는' 경로를 못 본다).
+      return ctx.render({ input: [input], pedals: [pedal(id, params)], events, limiter: false, monitoring: false });
+    };
+    const clickDb = (render: OfflineRender, at: number): number => {
+      const frame = Math.round((render.leadFrames + at * rate) / 128) * 128;
+      const window = Math.round(rate * 0.022);
+      const channel = render.output[0];
+      const near = m.maxStep(channel, frame - Math.round(rate * 0.002), frame - Math.round(rate * 0.002) + window);
+      const before = m.maxStep(channel, frame - Math.round(rate * 0.024), frame - Math.round(rate * 0.002));
+      const after = m.maxStep(channel, frame + Math.round(rate * 0.03), frame + Math.round(rate * 0.03) + window);
+      return m.dbOf(near) - m.dbOf(Math.max(before, after));
+    };
+    /** 구간 안 두 렌더의 차이 RMS. relative 면 끈 렌더 RMS 로 나눈다(dB), 아니면 절대(dBFS). */
+    const windowResidualDb = (off: OfflineRender, on: OfflineRender, from: number, to: number, relative: boolean): number => {
+      let residual = 0;
+      let reference = 0;
+      let count = 0;
+      for (let channel = 0; channel < 2; channel += 1) {
+        for (let i = seconds(off, from); i < seconds(off, to); i += 1) {
+          const difference = off.output[channel][i] - on.output[channel][i];
+          residual += difference * difference;
+          reference += off.output[channel][i] * off.output[channel][i];
+          count += 1;
+        }
+      }
+      return relative ? m.dbOf(Math.sqrt(residual / Math.max(reference, 1e-20))) : m.dbOf(Math.sqrt(residual / Math.max(count, 1)));
+    };
+    let worstDelta = Number.NEGATIVE_INFINITY;
+    let worstStateless = Number.NEGATIVE_INFINITY;
+    let worstStateful = Number.NEGATIVE_INFINITY;
+    let worstLevel = 0;
+    let worstTailResidual = Number.NEGATIVE_INFINITY;
+    let worstTailDiff = Number.NEGATIVE_INFINITY;
+    try {
+      for (const config of P30_CONFIGS) {
+        const off = await renderWith(false, config.id, config.params, config.toggles);
+        const on = await renderWith(true, config.id, config.params, config.toggles);
+        const diff = residualDb(off, on);
+        values[`diffDb.${config.key}`] = diff;
+        // 같은 설정(플래그 끔)을 한 번 더 렌더해 렌더 자체가 반복마다 같은지 본다. 반복마다 다른 구성(Ping-Pong 이 그랬다, 약 −25 dB)은 on/off 차이를 판정에서 뺀다.
+        const repeat = residualDb(off, await renderWith(false, config.id, config.params, config.toggles));
+        values[`repeatDiffDb.${config.key}`] = repeat;
+        const repeatable = repeat <= -100;
+        if (repeatable) {
+          if (P30_STATEFUL.has(config.id)) worstStateful = Math.max(worstStateful, diff);
+          else if (config.staticLfo || !P30_LFO.has(config.id)) worstStateless = Math.max(worstStateless, diff);
+        }
+        const wakes = config.toggles.filter((toggle) => toggle.active).map((toggle) => toggle.at);
+        let level = 0;
+        for (const wake of wakes) {
+          const gap = bodyLevelDb(on, wake + 0.5, wake + 1.0) - bodyLevelDb(off, wake + 0.5, wake + 1.0);
+          if (Math.abs(gap) > Math.abs(level)) level = gap;
+        }
+        values[`levelAfterWakeDb.${config.key}`] = level;
+        worstLevel = Math.max(worstLevel, Math.abs(level));
+        const clickOn = Math.max(...wakes.map((wake) => clickDb(on, wake)));
+        const clickOff = Math.max(...wakes.map((wake) => clickDb(off, wake)));
+        values[`wakeClickDb.${config.key}.on`] = clickOn;
+        values[`wakeClickDb.${config.key}.off`] = clickOff;
+        worstDelta = Math.max(worstDelta, clickOn - clickOff);
+        if (config.tail) {
+          const tailDiff = windowResidualDb(off, on, 1.1, 2.9, true);
+          const afterTail = windowResidualDb(off, on, 3.6, 5.4, false);
+          values[`tailDiffDb.${config.key}`] = tailDiff;
+          values[`postTailResidualDbfs.${config.key}`] = afterTail;
+          if (repeatable) {
+            worstTailDiff = Math.max(worstTailDiff, tailDiff);
+            worstTailResidual = Math.max(worstTailResidual, afterTail);
+          }
+        }
+      }
+    } finally {
+      setFeatureFlagOverride('idleDisconnect', null);
+    }
+    values['maxDiffDb.stateless'] = worstStateless;
+    values['maxDiffDb.stateful'] = worstStateful;
+    values.maxAbsLevelAfterWakeDb = worstLevel;
+    values.maxWakeClickDeltaDb = worstDelta;
+    values.maxTailDiffDb = worstTailDiff;
+    values.maxPostTailResidualDbfs = worstTailResidual;
+    return { metrics: metrics(values) };
+  },
+};
+
 export const probes: ProbeDefinition[] = [
-  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25, p26, p27, p28, p29,
+  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25, p26, p27, p28, p29, p30,
 ];
 
 // ---------------------------------------------------------------------------------------------

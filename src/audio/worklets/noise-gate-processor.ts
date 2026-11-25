@@ -17,6 +17,7 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
     // 퍼즈 게이트(S2.2)는 같은 워클릿을 열린 채로 시작하고(Gate 0 이면 입력이 한 샘플도 바뀌지 않는다) 메시지를 보내지 않는 방식으로 쓴다.
     const processorOptions = (options && options.processorOptions) || {};
     const startOpen = processorOptions.startOpen === true;
+    this.startOpen = startOpen;
     this.silent = processorOptions.silent === true;
     this.envelope = 0;
     this.gateGain = startOpen ? 1 : 0;
@@ -24,6 +25,12 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
     this.holdSamples = 0;
     this.framesUntilStatePost = 0;
     this.state = startOpen ? 'Open' : 'Closed';
+    // Exponent math (Math.pow / Math.exp) is redone only when its inputs change, not per sample (S4.2). NaN never equals
+    // a number, so the first sample always computes.
+    this.cachedReductionDb = Number.NaN;
+    this.cachedClosedGain = 0;
+    this.cachedTimeSeconds = Number.NaN;
+    this.cachedCoeff = 0;
   }
 
   getParam(parameters, name, index) {
@@ -38,14 +45,30 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
     }
   }
 
+  rest() {
+    this.rested = true;
+    this.envelope = 0;
+    this.holdSamples = 0;
+    this.gateGain = this.startOpen ? 1 : 0;
+    this.targetOpen = this.startOpen;
+    this.setState(this.startOpen ? 'Open' : 'Closed');
+  }
+
   process(inputs, outputs, parameters) {
     const input = inputs[0];
     const output = outputs[0];
     const quantumSize = output && output[0] ? output[0].length : 128;
 
-    if (!input || input.length === 0 || !output || output.length === 0) {
+    if (!output || output.length === 0) {
       return true;
     }
+    if (!input || input.length === 0) {
+      // Input disconnected (pedal off, S4.2): go back to the initial state once and wait. Never return false:
+      // in Chromium a processor that returned false is never called again, even after the input is reconnected.
+      if (!this.rested) this.rest();
+      return true;
+    }
+    this.rested = false;
 
     const frames = quantumSize;
     const envelopeCoeff = Math.exp(-1 / (sampleRate * 0.008));
@@ -77,10 +100,18 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
         }
       }
 
-      const closedGain = Math.pow(10, reductionDb / 20);
+      if (reductionDb !== this.cachedReductionDb) {
+        this.cachedReductionDb = reductionDb;
+        this.cachedClosedGain = Math.pow(10, reductionDb / 20);
+      }
+      const closedGain = this.cachedClosedGain;
       const targetGain = this.targetOpen ? 1 : closedGain;
       const timeSeconds = this.targetOpen ? attackMs / 1000 : releaseMs / 1000;
-      const coeff = Math.exp(-1 / (sampleRate * timeSeconds));
+      if (timeSeconds !== this.cachedTimeSeconds) {
+        this.cachedTimeSeconds = timeSeconds;
+        this.cachedCoeff = Math.exp(-1 / (sampleRate * timeSeconds));
+      }
+      const coeff = this.cachedCoeff;
       this.gateGain = targetGain + (this.gateGain - targetGain) * coeff;
 
       if (this.targetOpen || this.gateGain > 0.85) {
