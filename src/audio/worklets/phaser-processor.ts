@@ -111,14 +111,22 @@ class PhaserProcessor extends AudioWorkletProcessor {
     }
     const logSpan = Math.log(Math.sqrt(10));
     const center = Math.sqrt(200 * 2000);
+    const depthValues = parameters.depth;
+    const rateValues = parameters.rate;
+    const feedbackValues = parameters.feedback;
+    const phaseUnit = twoPi / sampleRate;
+    let a = 0;
     for (let i = 0; i < frames; i++) {
       if (!this.settled) this.stepWeights();
-      const depth = Math.max(0, Math.min(100, readParam(parameters.depth, i))) / 100;
-      const rate = Math.max(0.05, Math.min(8, readParam(parameters.rate, i)));
-      const feedback = Math.max(0, Math.min(0.9, readParam(parameters.feedback, i)));
-      const frequency = center * Math.exp(logSpan * depth * Math.sin(this.phase));
-      const tangent = Math.tan(Math.PI * frequency / sampleRate);
-      const a = (tangent - 1) / (tangent + 1);
+      const rate = Math.max(0.05, Math.min(8, rateValues[rateValues.length === 1 ? 0 : i]));
+      // 올패스 계수는 8샘플마다만 다시 구한다(LFO 는 8 Hz 이하라 8샘플 사이에 변하는 폭이 0.1 % 도 안 된다. 샘플마다 sin·exp·tan 을 부르던 몫이 단 계산보다 컸다).
+      if ((i & 7) === 0) {
+        const depth = Math.max(0, Math.min(100, depthValues[depthValues.length === 1 ? 0 : i])) / 100;
+        const frequency = center * Math.exp(logSpan * depth * Math.sin(this.phase));
+        const tangent = Math.tan(Math.PI * frequency / sampleRate);
+        a = (tangent - 1) / (tangent + 1);
+      }
+      const feedback = Math.max(0, Math.min(0.9, feedbackValues[feedbackValues.length === 1 ? 0 : i]));
       const count = this.count;
       const taps = this.tapWeights;
       for (let ch = 0; ch < output.length; ch++) {
@@ -135,7 +143,8 @@ class PhaserProcessor extends AudioWorkletProcessor {
         this.previous[ch] = wet;
         output[ch][i] = wet;
       }
-      this.phase = (this.phase + twoPi * rate / sampleRate) % twoPi;
+      this.phase += phaseUnit * rate;
+      if (this.phase >= twoPi) this.phase -= twoPi;
     }
     return true;
   }

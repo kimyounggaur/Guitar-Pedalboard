@@ -1090,6 +1090,9 @@ const p17: ProbeDefinition = {
       ['allOff', () => ({ input: [input], pedals: allPedalsBypassed(), monitoring: false })],
       ['phaserOff', () => ({ input: [input], pedals: [pedal('phaser', {}, { active: false })], monitoring: false })],
       ['phaserOn', () => ({ input: [input], pedals: [pedal('phaser')], monitoring: false })],
+      // 켠 Phaser 의 비용이 고른 단수에 비례하는가(S3.4): 4단과 12단.
+      ['phaserOn4', () => ({ input: [input], pedals: [pedal('phaser', { stages: 4 })], monitoring: false })],
+      ['phaserOn12', () => ({ input: [input], pedals: [pedal('phaser', { stages: 12 })], monitoring: false })],
     ];
     const ATTEMPTS = 5;
     const best: Record<string, number> = Object.fromEntries(configurations.map(([name]) => [name, Number.POSITIVE_INFINITY]));
@@ -1116,6 +1119,8 @@ const p17: ProbeDefinition = {
     values['ratio.allOffOverAllOn'] = best.allOff / best.allOn;
     values['ratio.phaserOffContribution'] = (best.phaserOff - best.empty) / best.allOn;
     values['ratio.phaserOnContribution'] = (best.phaserOn - best.empty) / best.allOn;
+    // 켠 Phaser 가 꺼진 Phaser 보다 더 쓰는 시간의 12단 ÷ 4단(참고용). 12단 고정 구조였다면 1 이고, 지금은 단 계산이 싸서(1~2 ns) 샘플마다 드는 고정 비용에 묻혀 1.1~1.4 정도다.
+    values['ratio.phaserStages12Over4'] = (best.phaserOn12 - best.phaserOff) / Math.max(1e-6, best.phaserOn4 - best.phaserOff);
     // 가드·미터가 더한 시간을 15개 페달이 쓰는 시간(켠 체인 − 빈 체인)으로 나눈다. 라운드마다 구한 비율의 가운뎃값이다(위 설명).
     // 빈 체인에서 잰 것(OverPedals)과 15개를 켠 체인에서 잰 것(InAllOn) 둘 다 본다. 수용 기준은 앞의 것이다.
     const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
