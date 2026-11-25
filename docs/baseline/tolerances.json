@@ -477,6 +477,31 @@
       "atMost": 0.3,
       "step": "S3.5",
       "why": "팩토리 프리셋 Drive 페달의 |Bias| 최댓값. 새 한도 ±0.3 안이라 프리셋 값은 바뀌지 않는다(설계서 S3.5 '프리셋 값은 바꾸지 않되')."
+    },
+    {
+      "match": "P-28.mix*.rippleDb",
+      "atMost": 0.5,
+      "step": "S3.6",
+      "why": "새 컴프레서(newCompressor)로 REF-NOISE 를 통과시킨 0.1~1 kHz 의 1/12 옥타브 이득 리플(± dB). 설계서 S3.6 의 ≤ ±0.5 dB — Mix 75%·45% 모두. 처리음이 원음보다 늦으면 섞을 때 빗살이 생긴다(R3-1)."
+    },
+    {
+      "match": "P-28.latencyMs.extraOverEmpty",
+      "atMost": 0.01,
+      "step": "S3.6",
+      "why": "Compressor 한 개를 켠 체인의 처리 지연에서 빈 체인(리미터 1 ms 포함)의 지연을 뺀 값(ms). 설계서 S3.6 의 '처리 지연 0 샘플'. 한 샘플이 0.02 ms 라 0.01 이하는 0 샘플이다."
+    },
+    {
+      "match": "P-28.gr.displayedMinusMeasuredDb",
+      "atLeast": -1.5,
+      "atMost": 1.5,
+      "step": "S3.6",
+      "why": "−10 dBFS 220 Hz 지속음에서 화면에 보이는 감소량(워클릿 보고값)에서 실제 출력 레벨 변화(Mix 100%)를 뺀 값(dB). 자동 메이크업이 없으면 둘이 같아야 한다(설계서 'GR 표시 = 워클릿 실측값'). 옛 경로는 −11 dB 어긋났다. RMS 검출기가 220 Hz 파형을 따라 흔들려 0.9 dB 안팎 남는다."
+    },
+    {
+      "match": "P-28.presets.count",
+      "atLeast": 38,
+      "step": "S3.6",
+      "why": "공장 프리셋 중 Compressor 가 켜진 것의 수. 설계서 S3.6 이 '40개 중 38개 프리셋' 의 음량 변화를 기록하라고 했다. 38개보다 적으면 일부를 재지 못한 것이다."
     }
   ]
 }
