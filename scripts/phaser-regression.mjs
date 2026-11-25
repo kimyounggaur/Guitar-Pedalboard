@@ -364,6 +364,10 @@ for (const sampleRate of [48000, 44100]) {
   const sweptDepth = renderBlock({ ...base, depth: rising, rate: [8] });
   assert.ok(sweptDepth.slice(0, 8).every((value, index) => Math.abs(value - none[index]) < 1e-4), 'depth 0 at the start of the block changes nothing');
   assert.ok(sweptDepth.slice(100).some((value, index) => Math.abs(value - none[100 + index]) > 1e-3), 'a rising depth array moves the all-pass frequency within the block');
+  const risingRate = new Float32Array(128).map((_, i) => .05 + i / 127 * 7.95);
+  const fastLfo = renderBlock({ ...base, depth: [100], rate: risingRate });
+  const slowLfo = renderBlock({ ...base, depth: [100], rate: [.05] });
+  assert.ok(fastLfo.slice(100).some((value, index) => Math.abs(value - slowLfo[100 + index]) > 1e-3), 'a rising rate array advances the LFO faster within the block');
 }
 
 // ---- 꺼진 동안: 출력 0 을 직접 쓰고, 상태를 비우고, LFO 위상은 시간에 맞춰 흐른다 ---------------------------
