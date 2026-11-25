@@ -7,11 +7,12 @@ import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
 import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
-const [presetStoreSource, panelSource, keyboardSource, shortcutRoutingSource] = await Promise.all([
+const [presetStoreSource, panelSource, keyboardSource, shortcutRoutingSource, chainActionsSource] = await Promise.all([
   readFile(new URL('../src/store/presetStore.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/PresetPanel.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/GlobalKeyboardShortcuts.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/keyboardShortcuts.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/store/chainActions.ts', import.meta.url), 'utf8'),
 ]);
 
 assert.match(presetStoreSource, /slotA: PedalState\[\] \| null/);
@@ -27,7 +28,9 @@ const activateSource = presetStoreSource.slice(activateStart);
 assert.match(activateSource, /applyPresetPedals\(storedPedals, storedTrimDb\)/, '슬롯을 켜면 슬롯에 담긴 음량 보정(S1.4c)도 함께 적용한다');
 assert.match(presetStoreSource, /clearAllCabinetIrs\(\);[\s\S]*setPedals\(clonePedals\(pedals\), clampTrimDb\(trimDb\)\);[\s\S]*adoptTempoFromPedals\(\);[\s\S]*rebuildChain\(\)/);
 assert.match(panelSource, /applyPresetPedals\(preset\.pedals, preset\.trimDb\)/);
-assert.match(panelSource, /clearAllCabinetIrs\(\);[\s\S]*resetPedalOrder\(\)/);
+// S2.8: '기본 페달 설정' 은 `chainActions` 로 옮겼다(되돌리기 스냅숏을 함께 다루려고). IR 을 지운 뒤 페달을 처음 값으로 돌리는 순서는 그대로다.
+assert.match(chainActionsSource, /clearAllCabinetIrs\(\);[\s\S]*resetPedalOrder\(\)/);
+assert.ok(panelSource.includes('resetToDefaultChain()'), "패널의 '기본 페달 설정' 은 chainActions 의 resetToDefaultChain 을 부른다");
 const midiSource = await readFile(new URL('../src/components/MidiAdvancedControls.tsx', import.meta.url), 'utf8');
 assert.match(midiSource, /applyPresetPedals\(preset\.pedals, preset\.trimDb\)/);
 

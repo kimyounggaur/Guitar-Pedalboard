@@ -1063,7 +1063,8 @@ for (const prefix of CONVERTIBLE) {
   deepEqual(parseStored(K.v2State).pedals.drive._extra, { note: '메모', nested: { list: [1, 2, 3] } }, 'M7 앱: 순서를 바꿔도 남는다');
 
   const createdBefore = Object.fromEntries(parseStored(K.v2Presets).presets.map((preset) => [preset.id, preset.createdAt]));
-  app.usePresetStore.getState().savePreset('Extra One', app.usePedalStore.getState().pedals);
+  // S2.8: 같은 이름은 `overwrite: true` 로 말해야 덮어쓴다(묻지 않는 덮어쓰기 경로 없음).
+  app.usePresetStore.getState().savePreset('Extra One', app.usePedalStore.getState().pedals, undefined, { overwrite: true });
   const listAfter = parseStored(K.v2Presets).presets;
   const one = listAfter.find((preset) => preset.id === 'x1');
   ok(one, 'M7 앱: 같은 이름으로 다시 저장하면 같은 id 로 덮어쓴다');
@@ -1129,7 +1130,7 @@ for (const prefix of CONVERTIBLE) {
   equal(a.createdAt, '2026-01-01T00:00:00.000Z', 'v2 저장본: 만든 시각이 남는다');
   equal(a.updatedAt, '2026-06-01T00:00:00.000Z', 'v2 저장본: 건드리지 않은 프리셋의 수정 시각은 그대로');
   equal(a.trimDb, 1.5, 'v2 저장본: 프리셋 음량 보정');
-  app.usePresetStore.getState().savePreset('V2 A', app.usePedalStore.getState().pedals);
+  app.usePresetStore.getState().savePreset('V2 A', app.usePedalStore.getState().pedals, undefined, { overwrite: true });
   const resaved = parseStored(K.v2Presets).presets.find((preset) => preset.id === 'v2-a');
   equal(resaved.createdAt, '2026-01-01T00:00:00.000Z', 'v2 저장본: 다시 저장해도 만든 시각은 그대로');
   ok(Date.parse(resaved.updatedAt) > Date.parse('2026-06-01T00:00:00.000Z'), 'v2 저장본: 다시 저장하면 수정 시각이 새로워진다');
@@ -1201,7 +1202,7 @@ for (const prefix of CONVERTIBLE) {
   // 알림을 본 사이에 사본을 고쳤다면 '정리'가 그것을 지우지 않는다
   const edited = clone(factory.pedals);
   edited[0].params.level = edited[0].params.level === 77 ? 78 : 77;
-  app.usePresetStore.getState().savePreset(factory.name, edited);
+  app.usePresetStore.getState().savePreset(factory.name, edited, undefined, { overwrite: true });
   const stillThere = app.usePresetStore.getState().presets.find((preset) => preset.id === 'dup-exact');
   ok(stillThere && findFactoryCopies([stillThere], defaultPresets).length === 0, 'M5: 같은 이름으로 다시 저장해 사본이 다른 내용이 됐다(기준)');
   toast.action.onAction();
