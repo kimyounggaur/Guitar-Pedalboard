@@ -72,7 +72,6 @@ export function PresetPanel() {
   const [recentIds, setRecentIds] = useState<string[]>(() => readStringList(RECENTS_KEY));
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [measuring, setMeasuring] = useState(false);
-  const pedals = usePedalStore((state) => state.pedals);
   const presetTrimDb = usePedalStore((state) => state.presetTrimDb);
   const setPresetTrimDb = usePedalStore((state) => state.setPresetTrimDb);
   const presets = usePresetStore((state) => state.presets);
@@ -193,7 +192,8 @@ export function PresetPanel() {
     const trimmedName = name.trim();
     if (!trimmedName) { setMessage('프리셋 이름을 입력해 주세요.'); return; }
     const trimDb = presetTrimDb;
-    const snapshot = clonePedals(pedals);
+    // 지금 보드는 저장하는 순간에 읽는다(구독하지 않는다 — 노브를 돌릴 때마다 이 패널이 다시 그려지지 않게, S4.3).
+    const snapshot = clonePedals(usePedalStore.getState().pedals);
     if (savePreset(trimmedName, snapshot, trimDb) === 'exists') {
       setPendingSave({ name: trimmedName, pedals: snapshot, trimDb });
       return;

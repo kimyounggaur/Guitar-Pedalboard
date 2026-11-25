@@ -19,7 +19,12 @@ function schedulePedalSave(pedals: PedalState[], presetTrimDb: number): void {
   writeBoardDebounced(pedals, presetTrimDb, 300);
 }
 
+/**
+ * 순서만 바꾼 새 배열을 만든다. 페달 객체는 그대로 쓴다(S4.3: 바뀐 것이 없는 페달은 참조를 유지해야 카드가 다시 그려지지 않는다).
+ * 범위를 벗어났거나 자리가 같으면 순서는 그대로인 새 배열이다.
+ */
 function movePedal(pedals: PedalState[], oldIndex: number, newIndex: number): PedalState[] {
+  const nextPedals = [...pedals];
   if (
     oldIndex === newIndex ||
     oldIndex < 0 ||
@@ -27,10 +32,9 @@ function movePedal(pedals: PedalState[], oldIndex: number, newIndex: number): Pe
     oldIndex >= pedals.length ||
     newIndex >= pedals.length
   ) {
-    return clonePedals(pedals);
+    return nextPedals;
   }
 
-  const nextPedals = clonePedals(pedals);
   const [movedPedal] = nextPedals.splice(oldIndex, 1);
   nextPedals.splice(newIndex, 0, movedPedal);
   return nextPedals;
@@ -79,11 +83,15 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
 
   setActive: (id, active) =>
     set((state) => {
-      const pedals = state.pedals.map((pedal) =>
-        pedal.id === id ? clonePedal({ ...pedal, active }) : clonePedal(pedal),
-      );
+      // S4.3: 바뀌는 페달만 새 객체로 만들고 나머지는 참조를 그대로 둔다. 이미 같은 상태면 배열도 그대로다.
+      let changed = false;
+      const pedals = state.pedals.map((pedal) => {
+        if (pedal.id !== id || pedal.active === active) return pedal;
+        changed = true;
+        return clonePedal({ ...pedal, active });
+      });
       savePedals(pedals, state.presetTrimDb);
-      return { pedals };
+      return changed ? { pedals } : state;
     }),
 
   updatePedalParam: (id, paramName, value) =>
@@ -97,6 +105,9 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
             ? Math.min(0.95, Math.max(0, value))
             : value;
 
+        // 같은 값이면 그대로 둔다(끌다가 끝에 닿아 같은 값이 거듭 들어와도 카드가 다시 그려지지 않는다).
+        if (Object.is((pedal.params as unknown as Record<string, unknown>)[paramName], nextValue)) return pedal;
+
         return clonePedal({
           ...pedal,
           params: {
@@ -106,6 +117,7 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
         });
       });
 
+      if (pedals.every((pedal, index) => pedal === state.pedals[index])) return state;
       schedulePedalSave(pedals, state.presetTrimDb);
       return { pedals };
     }),
@@ -153,9 +165,7 @@ export const usePedalStore = create<PedalStore>((set, get) => ({
   updatePedal: (pedal) =>
     set((state) => {
       const nextPedal = clonePedal(pedal);
-      const pedals = state.pedals.map((current) =>
-        current.id === pedal.id ? nextPedal : clonePedal(current),
-      );
+      const pedals = state.pedals.map((current) => (current.id === pedal.id ? nextPedal : current));
       savePedals(pedals, state.presetTrimDb);
       return { pedals };
     }),
