@@ -203,4 +203,27 @@ for (const sampleRate of [44100, 48000]) {
   assert.ok(Math.abs(lowest - 177) < 1 && Math.abs(highest - 426) < 2, `${sampleRate} Hz: first notch sweeps ${lowest}~${highest} Hz`);
 }
 
+// 워클릿은 깊이가 너무 커도 지연을 0.5~10 ms 안에 가둔다(manual 1 ms, depth 5 ms → LFO 골에서 0.5 ms, 정점에서 1.5 ms).
+{
+  let ClampProcessor;
+  vm.runInNewContext(flangerProcessorSource, {
+    sampleRate: 48000, AudioWorkletProcessor: MockProcessor,
+    registerProcessor(name, klass) { ClampProcessor = klass; },
+  });
+  const processor = new ClampProcessor();
+  const params = { manual: [0.001], depth: [0.005], rate: [0.25], feedback: [0] };
+  const trough = 48000 * 3;
+  const output = new Float64Array(trough + 1024);
+  for (let block = 0; block * 128 < trough + 512; block++) {
+    const l = new Float32Array(128);
+    if (trough >= block * 128 && trough < (block + 1) * 128) l[trough - block * 128] = 1;
+    const out = [new Float32Array(128), new Float32Array(128)];
+    processor.process([[l]], [out], params);
+    output.set(out[0], block * 128);
+  }
+  let weight = 0, moment = 0;
+  for (let n = trough; n < trough + 400; n++) { weight += output[n]; moment += output[n] * n; }
+  assert.ok(Math.abs((moment / weight - trough) / 48000 - 0.0005) < 2e-6, 'an oversized depth is clamped to manual − 0.5 ms');
+}
+
 console.log('Flanger regression passed: parameter bounds, stereo, sample-level feedback timing and the 44.1/48 kHz delay sweep.');
