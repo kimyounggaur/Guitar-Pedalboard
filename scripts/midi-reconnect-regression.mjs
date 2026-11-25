@@ -369,6 +369,46 @@ const CC = (value, channel = 1, cc = 64) => msg([0xb0 | (channel - 1), cc, value
   assert.equal(h.state.pedals.drive, false, 'forget 뒤 첫 누름은 반복값으로 무시되지 않고 전환한다');
 }
 
+// ⑪ 없는 페달을 가리키는 매핑은 아무것도 하지 않는다(프리셋·순서 변경으로 페달이 사라진 경우)
+{
+  const h = harness({ pedals: { drive: false }, mappings: { ghost: { channel: 1, cc: 64, value: 127 }, drive: { channel: 1, cc: 65, value: 127 } } });
+  h.router.handle(CC(127), 0);
+  assert.deepEqual(h.log.active, [], '없는 페달은 켜지도 꺼지지도 않는다');
+  h.router.handle(CC(127, 1, 65), 1);
+  assert.deepEqual(h.log.active, [['drive', true]]);
+}
+
+// ⑫ 판정 중에 그 페달의 매핑이 다른 컨트롤로 바뀌면(채널·CC·Note 어느 것이든) 그 뗌은 토글 지정에 쓰지 않는다
+{
+  const cases = [
+    ['채널', { channel: 2, cc: 64, value: 127 }, CC(0, 2)],
+    ['CC 번호', { channel: 1, cc: 66, value: 127 }, CC(0, 1, 66)],
+    ['CC→Note', { channel: 1, note: 60, value: 100 }, msg([0x80, 60, 0])],
+  ];
+  for (const [label, replacement, release] of cases) {
+    const h = harness({ learning: 'drive' });
+    h.router.handle(CC(127), 0);
+    h.state.mappings.drive = replacement;
+    h.router.handle(release, 100);
+    assert.equal(h.log.changed, 0, `${label}: 바뀐 매핑에 토글을 적지 않는다`);
+    assert.equal('mode' in h.state.mappings.drive, false, label);
+    assert.equal(h.timers[0].cleared, true, `${label}: 판정을 버린다`);
+  }
+  const notes = harness({ learning: 'drive' });
+  notes.router.handle(msg([0x90, 60, 100]), 0);
+  notes.state.mappings.drive = { channel: 1, note: 61, value: 100 };
+  notes.router.handle(msg([0x80, 61, 0]), 100);
+  assert.equal('mode' in notes.state.mappings.drive, false, 'Note 번호가 바뀐 매핑에도 적지 않는다');
+  const noteToggle = harness({ learning: 'drive' });
+  noteToggle.router.handle(msg([0x90, 60, 100]), 0);
+  noteToggle.router.handle(msg([0x80, 60, 0]), 200);
+  assert.equal(noteToggle.state.mappings.drive.mode, 'toggle', 'Note On → Note Off 도 토글로 지정한다');
+  const noteOffZero = harness({ learning: 'drive' });
+  noteOffZero.router.handle(msg([0x90, 60, 100]), 0);
+  noteOffZero.router.handle(msg([0x90, 60, 0]), 200);
+  assert.equal(noteOffZero.state.mappings.drive.mode, 'toggle', 'Note On 세기 0 도 뗌이다');
+}
+
 // ---------------------------------------------------------------------------------------------
 // 2. 서비스
 // ---------------------------------------------------------------------------------------------
@@ -684,6 +724,14 @@ storeInput.emit([0xb0, 82, 127]);
 assert.equal(pedalOn('delay'), false, '방식을 바꾼 뒤 첫 누름이 반복값으로 먹히지 않는다');
 
 // 연결 실패는 오류 문구를 남기고 banner 가 읽는 상태는 denied
+audio().disposeMidi();
+useAudioStore.setState({ midiError: '이전 오류' });
+const okNav = installNavigator({ permission: 'granted' });
+okNav.access = new MockAccess([]);
+useAudioStore.setState({ midiMappings: { drive: { channel: 1, cc: 64, value: 127 } } });
+await audio().connectSavedMidi();
+assert.equal(audio().midiError, null, '연결에 성공하면 이전 연결 오류를 지운다');
+assert.equal(audio().midiLink, 'connected');
 audio().disposeMidi();
 storeNav.status.state = 'prompt';
 const failNav = installNavigator({ permission: 'prompt', requestImpl: () => Promise.reject(new Error('blocked')) });

@@ -43,16 +43,38 @@ export interface MidiMock {
   disconnect(id: string): Promise<void>;
   /** 장치가 메시지를 보낸 것처럼 midimessage 를 일으킨다. 예: [0xb0, 64, 127] */
   send(id: string, bytes: number[]): Promise<void>;
+  /** 뽑았던 같은 장치를 다시 꽂는다(같은 입력 객체가 'connected' 로 되살아나고 statechange 가 발생한다. 실제 크롬이 하는 일). */
+  reconnect(id: string): Promise<void>;
   /** requestMIDIAccess 호출 횟수와 현재 연결된 입력 수 */
   stats(): Promise<{ requests: number; connectedInputs: number }>;
+  /** 지금 꽂혀 있는 입력 중 앱이 `onmidimessage` 리스너를 붙여 둔 것의 수 */
+  listening(): Promise<number>;
+  /** 권한 모의(`options.permission` 을 준 경우): 지금 권한과, 권한 창이 뜬(= prompt 상태에서 요청한) 횟수 */
+  permission(): Promise<{ state: 'granted' | 'prompt' | 'denied'; prompts: number }>;
+  /** 사용자가 브라우저 설정에서 권한을 바꾼 것처럼 권한을 바꾸고 change 이벤트를 일으킨다. */
+  setPermission(state: 'granted' | 'prompt' | 'denied'): Promise<void>;
+  /** 다음 권한 창에서 사용자가 누를 답. 기본은 허용. */
+  setPromptAnswer(answer: 'allow' | 'deny'): Promise<void>;
+}
+
+export interface MidiMockOptions {
+  /**
+   * MIDI 권한 모의. 주지 않으면 브라우저의 권한 조회를 건드리지 않고 요청은 언제나 성공한다(E-00 모의).
+   * 'granted'·'prompt'·'denied' 는 `navigator.permissions.query({ name: 'midi' })` 가 그 상태를 돌려주고,
+   * 'prompt' 에서 requestMIDIAccess 를 부르면 권한 창이 뜬 것으로 세어(`prompts`) 사용자의 답(`promptAnswer`)대로 허용·거부한다.
+   * 'unsupported': 권한 조회가 예외를 던진다(Firefox·Safari 처럼). 요청은 권한 창 없이 성공한다.
+   * 권한은 새로고침해도 이어진다(sessionStorage). 새로고침마다 장치·요청 횟수는 처음으로 돌아간다.
+   */
+  permission?: 'granted' | 'prompt' | 'denied' | 'unsupported';
+  promptAnswer?: 'allow' | 'deny';
 }
 
 /**
  * `navigator.requestMIDIAccess` 를 가짜로 바꾼다. 처음에는 장치가 없고 `connect()` 로 꽂는다.
  * 앱이 쓰는 표면만 구현했다: access.inputs(Map), access.onstatechange, input.onmidimessage·state·id·name.
  */
-export async function mockMidi(page: Page): Promise<MidiMock> {
-  await page.addInitScript(() => {
+export async function mockMidi(page: Page, options: MidiMockOptions = {}): Promise<MidiMock> {
+  await page.addInitScript((opts) => {
     type Handler = ((event: unknown) => void) | null;
     interface FakeInput {
       id: string;
@@ -70,8 +92,56 @@ export async function mockMidi(page: Page): Promise<MidiMock> {
     }
     const inputs = new Map<string, FakeInput>();
     const listeners = new Map<string, Set<(event: unknown) => void>>();
-    const stats = { requests: 0 };
+    const stats = { requests: 0, prompts: 0 };
     let counter = 0;
+
+    // --- 권한 모의(opts.permission 이 있을 때만) ---
+    type PermState = 'granted' | 'prompt' | 'denied';
+    const PERMISSION_KEY = '__midiMockPermission';
+    const savedPermission = window.sessionStorage.getItem(PERMISSION_KEY);
+    let permState: PermState =
+      savedPermission === 'granted' || savedPermission === 'prompt' || savedPermission === 'denied'
+        ? savedPermission
+        : opts.permission === undefined || opts.permission === 'unsupported'
+          ? 'prompt'
+          : opts.permission;
+    let promptAnswer: 'allow' | 'deny' = opts.promptAnswer ?? 'allow';
+    const statusListeners = new Set<(event: unknown) => void>();
+    const permissionStatus = {
+      get state() {
+        return permState;
+      },
+      onchange: null as Handler,
+      addEventListener(type: string, listener: (event: unknown) => void) {
+        if (type === 'change') statusListeners.add(listener);
+      },
+      removeEventListener(type: string, listener: (event: unknown) => void) {
+        if (type === 'change') statusListeners.delete(listener);
+      },
+    };
+    const setPermState = (next: PermState) => {
+      if (next === permState) return;
+      permState = next;
+      window.sessionStorage.setItem(PERMISSION_KEY, next);
+      const event = { type: 'change', target: permissionStatus };
+      permissionStatus.onchange?.(event);
+      statusListeners.forEach((listener) => listener(event));
+    };
+    if (opts.permission !== undefined) {
+      const realPermissions = navigator.permissions;
+      Object.defineProperty(navigator, 'permissions', {
+        configurable: true,
+        value: {
+          query: (descriptor: { name?: string }) => {
+            if (descriptor?.name !== 'midi') return realPermissions.query(descriptor as PermissionDescriptor);
+            if (opts.permission === 'unsupported') {
+              return Promise.reject(new TypeError("Failed to execute 'query' on 'Permissions': 'midi' is not a valid enum value of type PermissionName."));
+            }
+            return Promise.resolve(permissionStatus);
+          },
+        },
+      });
+    }
     const access = {
       inputs,
       outputs: new Map(),
@@ -128,6 +198,29 @@ export async function mockMidi(page: Page): Promise<MidiMock> {
         input.onmidimessage?.(event);
         (input as FakeInput & { __listeners: Set<(event: unknown) => void> }).__listeners.forEach((listener) => listener(event));
       },
+      reconnect(id: string) {
+        const input = inputs.get(id);
+        if (!input) return;
+        input.state = 'connected';
+        input.connection = 'open';
+        fireStateChange(input);
+      },
+      listening() {
+        let count = 0;
+        inputs.forEach((input) => {
+          if (input.state === 'connected' && input.onmidimessage) count += 1;
+        });
+        return count;
+      },
+      permission() {
+        return { state: permState, prompts: stats.prompts };
+      },
+      setPermission(state: PermState) {
+        setPermState(state);
+      },
+      setPromptAnswer(answer: 'allow' | 'deny') {
+        promptAnswer = answer;
+      },
       stats() {
         let connected = 0;
         inputs.forEach((input) => {
@@ -141,10 +234,21 @@ export async function mockMidi(page: Page): Promise<MidiMock> {
       configurable: true,
       value: () => {
         stats.requests += 1;
+        if (opts.permission !== undefined) {
+          if (permState === 'denied') return Promise.reject(new DOMException('MIDI access was denied.', 'SecurityError'));
+          if (permState === 'prompt') {
+            stats.prompts += 1; // 권한 창이 떴다
+            if (promptAnswer === 'deny') {
+              setPermState('denied');
+              return Promise.reject(new DOMException('MIDI access was denied.', 'SecurityError'));
+            }
+            setPermState('granted');
+          }
+        }
         return Promise.resolve(access);
       },
     });
-  });
+  }, options);
 
   const call = <T>(expression: string): Promise<T> => page.evaluate(expression) as Promise<T>;
   return {
@@ -152,7 +256,12 @@ export async function mockMidi(page: Page): Promise<MidiMock> {
       call<string>(`window.__midiMock.connect(${JSON.stringify(name)}, ${JSON.stringify(manufacturer ?? 'Mock')})`),
     disconnect: (id) => call<void>(`window.__midiMock.disconnect(${JSON.stringify(id)})`),
     send: (id, bytes) => call<void>(`window.__midiMock.send(${JSON.stringify(id)}, ${JSON.stringify(bytes)})`),
+    reconnect: (id) => call<void>(`window.__midiMock.reconnect(${JSON.stringify(id)})`),
     stats: () => call<{ requests: number; connectedInputs: number }>('window.__midiMock.stats()'),
+    listening: () => call<number>('window.__midiMock.listening()'),
+    permission: () => call<{ state: 'granted' | 'prompt' | 'denied'; prompts: number }>('window.__midiMock.permission()'),
+    setPermission: (state) => call<void>(`window.__midiMock.setPermission(${JSON.stringify(state)})`),
+    setPromptAnswer: (answer) => call<void>(`window.__midiMock.setPromptAnswer(${JSON.stringify(answer)})`),
   };
 }
 
