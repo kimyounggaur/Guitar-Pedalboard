@@ -1919,7 +1919,10 @@ const P29_PEDALS: ReadonlyArray<[string, string, Record<string, PedalParamValue>
   ['crunch', 'crunch', { gain: 100, mix: 100 }],
   ['fuzz', 'fuzz', { fuzz: 100, mix: 100 }],
 ];
-const P29_FREQUENCIES_KHZ = [2, 2.5, 3, 3.5, 4, 4.5, 5] as const;
+// 설계서 S3.7 의 시험 대역은 2~5 kHz(0.5 kHz 간격 7점)다. 앞의 1·1.5 kHz 는 실제 기타 음(24프렛 1번 줄 ≈ 1.3 kHz)에 가까운 참고 점이라
+// maxDiffDb·worst*Db 에는 넣지 않는다.
+const P29_FREQUENCIES_KHZ = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] as const;
+const P29_BAND_MIN_KHZ = 2;
 const P29_FFT_SIZE = 32768;
 
 const p29: ProbeDefinition = {
@@ -1928,9 +1931,9 @@ const p29: ProbeDefinition = {
   describe:
     '기능 플래그 oversample2x 를 켠(2배 — 지금 앱) 경우와 끈(4배 — 설계서의 옛 값) 경우를 한 번에 잰다. ' +
     '① 지연: REF-NOISE 상호상관으로 Drive·Crunch·Fuzz 한 개와 빈 체인의 지연 차(latencyMs.extra.<페달>.<배수>, ms). 4배 값이 params/latency.json 의 oversample 4x 표가 된다. ' +
-    '② 에일리어싱: 페달을 최대(Drive 100·Crunch Gain 100·Fuzz 100, Mix 100%)로 두고 2~5 kHz(0.5 kHz 간격 7점) 사인(−12 dBFS)을 넣어, ' +
+    '② 에일리어싱: 페달을 최대(Drive 100·Crunch Gain 100·Fuzz 100, Mix 100%)로 두고 사인(−12 dBFS)을 넣어(설계서 대역 2~5 kHz 0.5 kHz 간격 7점 + 실제 기타 음에 가까운 참고 점 1·1.5 kHz), ' +
     '출력의 배음이 아닌 성분 전력을 기본음 대비 dB 로 잰다(alias.<페달>.<kHz>.<배수>, dBc — 기본음을 FFT bin 에 딱 맞춰(32768점) 배음 자리를 정확히 가린다). ' +
-    '차(diffDb = 2배 − 4배)가 설계서 S3.7 의 "고조파가 아닌 성분의 증가 ≤ 6 dB(4배 대비)" 다. maxDiffDb·worst2xDb 는 7점 중 가장 나쁜 값이다.',
+    '차(diffDb = 2배 − 4배)가 설계서 S3.7 의 "고조파가 아닌 성분의 증가 ≤ 6 dB(4배 대비)" 다. maxDiffDb·worst2xDb·worst4xDb 는 설계서 대역 7점 중 가장 나쁜 값이다(1·1.5 kHz 는 넣지 않는다).',
   steps: 'S3.7',
   async run(ctx) {
     const rate = ctx.sampleRate;
@@ -1949,9 +1952,7 @@ const p29: ProbeDefinition = {
         empty[mode] = await lagMs([]);
       }
       values['latencyMs.empty'] = empty['2x'];
-      const levels: Record<string, Record<string, number>> = {};
       for (const [name, id, params] of P29_PEDALS) {
-        levels[name] = {};
         for (const mode of modes) {
           setFeatureFlagOverride('oversample2x', mode === '2x');
           values[`latencyMs.extra.${name}.${mode}`] = (await lagMs([pedal(id, params)])) - empty[mode];
@@ -1970,12 +1971,11 @@ const p29: ProbeDefinition = {
             const render = await ctx.render({ input: [tone], pedals: [pedal(id, params)], limiter: false });
             measured[mode] = m.nonHarmonicDb(render.output[0], P29_FFT_SIZE, bin, seconds(render, 0.5));
             values[`alias.${name}.${khz}.${mode}`] = measured[mode];
-            worst[mode] = Math.max(worst[mode], measured[mode]);
+            if (khz >= P29_BAND_MIN_KHZ) worst[mode] = Math.max(worst[mode], measured[mode]);
           }
           const diff = measured['2x'] - measured['4x'];
           values[`alias.${name}.${khz}.diffDb`] = diff;
-          diffs.push(diff);
-          levels[name][String(khz)] = diff;
+          if (khz >= P29_BAND_MIN_KHZ) diffs.push(diff);
         }
         values[`alias.${name}.maxDiffDb`] = Math.max(...diffs);
         values[`alias.${name}.worst2xDb`] = worst['2x'];
