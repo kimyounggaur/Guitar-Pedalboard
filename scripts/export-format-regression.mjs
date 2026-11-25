@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
 import { workerUrlStub } from './lib/esbuild-plugins.mjs';
@@ -247,6 +248,23 @@ ok(oldFileText.length > 200_000, `예전 파일은 팩토리 40개를 포함해 
   equal(plan.add.length, 0);
 }
 
+// origin 이 user 라고 적혀 있어도 `factory-` 로 시작하는 id 는 팩토리 몫이다(손으로 고친 v2 파일). 앱은 사용자 프리셋에 그 id 를 주지 않는다.
+{
+  const v2 = JSON.parse(exportedText);
+  v2.presets.push({ ...v2.presets[0], id: 'factory-hand-made', name: '손으로 만든 항목', origin: 'user' });
+  const plan = planOf(JSON.stringify(v2), userPresets(), defaultPresets);
+  equal(plan.factory, 1, 'origin user 여도 factory- id 는 제외');
+  equal(plan.add.length, 0);
+}
+
+// 스토어가 지금 앱의 팩토리 프리셋을 계획에 넘기는지: id 가 다른 사본이어도 이름+내용이 같으면 제외한다
+{
+  const text = serializePresetPayload([{ ...plain(defaultPresets[7]), id: 'copied-through-store' }]);
+  const plan = store().planImport(text);
+  equal(plan.factory, 1, '스토어의 계획도 팩토리 사본(이름+내용 일치)을 제외');
+  equal(plan.add.length + plan.conflicts.length, 0);
+}
+
 // ---------------------------------------------------------------------------------------------
 // 7. 충돌: 같은 id·다른 내용, 같은 이름·다른 내용
 // ---------------------------------------------------------------------------------------------
@@ -341,6 +359,7 @@ const changedDrive = (item, drive) => v2Of({ ...item, pedals: item.pedals.map((p
   equal(result.next[0], existing[0], '첫 충돌은 건너뜀');
   equal(result.next[1].pedals.find((pedal) => pedal.id === 'drive').params.drive, 4.5, '둘째 충돌은 덮어씀');
   equal(result.next[2].name, '새 프리셋');
+  equal(result.next[2].updatedAt, NOW, '추가한 프리셋의 고친 시각은 가져온 시각');
 }
 
 {
@@ -378,6 +397,7 @@ const changedDrive = (item, drive) => v2Of({ ...item, pedals: item.pedals.map((p
   ok(copy && copy.id !== target.id && copy.trimDb === 6, '사본은 새 id·가져온 내용');
   ok(storedPresets().some((item) => item.name === copyName), '저장본에도 있다');
 
+  await sleep(5); // 덮어쓴 시각(고친 시각)이 처음 저장한 시각보다 확실히 뒤가 되게 한다
   const overwriteResult = store().commitImport(store().planImport(text), ['overwrite']);
   equal(formatImportSummary(overwriteResult), '1개 가져옴 · 0개 건너뜀');
   equal(userPresets().find((item) => item.id === target.id).trimDb, 6, '덮어쓰기는 파일의 내용으로');
@@ -386,6 +406,13 @@ const changedDrive = (item, drive) => v2Of({ ...item, pedals: item.pedals.map((p
 
   store().reloadPresets();
   equal(userPresets().find((item) => item.id === target.id).trimDb, 6, '저장소에서 다시 읽어도 같다');
+
+  // 내보내기는 저장된 만든 시각(createdAt)을 그대로 싣는다. 덮어써서 고친 시각이 새로 정해져도 만든 시각은 처음 것이다.
+  const storedTarget = storedPresets().find((item) => item.id === target.id);
+  ok(Date.parse(storedTarget.createdAt) < Date.parse(storedTarget.updatedAt), '덮어쓴 프리셋은 만든 시각이 고친 시각보다 앞선다');
+  const reexported = JSON.parse(store().exportPresets()).presets.find((item) => item.id === target.id);
+  equal(reexported.createdAt, storedTarget.createdAt, '내보내기 파일에 만든 시각이 그대로 실린다');
+  equal(reexported.updatedAt, storedTarget.updatedAt, '고친 시각도 그대로');
 }
 
 // ---------------------------------------------------------------------------------------------

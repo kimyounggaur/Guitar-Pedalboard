@@ -106,10 +106,8 @@ export function parseImportFile(text: string): ParsedImportFile {
   const presets = parsePresetJson(text);
   return {
     source: 'v1',
-    candidates: presets.map((preset) => ({
-      preset,
-      origin: preset.id.startsWith(FACTORY_ID_PREFIX) ? 'factory' : 'user',
-    })),
+    // v1 파일에는 origin 이 없다. 팩토리 항목은 `planImport` 가 `factory-` id 로 가른다(L-143).
+    candidates: presets.map((preset) => ({ preset, origin: 'user' as const })),
   };
 }
 

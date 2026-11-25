@@ -39,7 +39,7 @@ export async function exportToDownload(page: Page): Promise<{ download: Download
 /**
  * 가져올 파일을 쓰고 경로를 돌려 준다. 같은 이름으로 다시 쓰면 덮어쓴다.
  * 시험 제목이 들어 있는 출력 폴더(`testInfo.outputPath`)에는 쓰지 않는다 — 이 환경에서는 경로에 영문이 아닌 글자(한글, '·')가 있으면
- * 파일 선택 창에 건넨 파일이 앱에 닿지 않는다(`change` 가 오지 않는다. 영문·숫자·`:`·`-` 경로는 된다). S2.7 에서 만난 문제, 기록 L-143.
+ * 파일 선택 창에 건넨 파일이 앱에 닿지 않는다(`change` 가 오지 않는다. 영문·숫자·`:`·`-` 경로는 된다). S2.7 에서 만난 문제, 기록 L-147.
  * 그래서 글자가 영문뿐인 고정 폴더(`test-results/e11-import-files`)를 쓴다.
  */
 export function writeImportFile(name: string, text: string): string {

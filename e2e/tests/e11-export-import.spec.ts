@@ -119,8 +119,14 @@ test.describe('E-11 프리셋 내보내기·가져오기', () => {
     const { text, factoryEntries } = legacyExportWithFactory(['E11 Old 1', 'E11 Old 2']);
     expect(factoryEntries, '시험 파일에 팩토리 항목이 40개 든다').toBe(FACTORY_COUNT);
 
+    // 가져와서 늘어난 것이 보이도록 '내 프리셋' 탭으로 옮겨 가는지(기준선부터 있던 동작): 다른 탭에서 시작해도 가져오면 '내 프리셋' 이 열린다.
+    const heading = page.locator('.preset-browser-heading h2');
+    const libraryTab = (name: string) => page.locator('.preset-library-list').getByRole('button', { name });
+    await libraryTab('전체 프리셋').click();
+    await expect(heading).toHaveText('전체 프리셋');
     await importThroughChooser(page, writeImportFile('guitar-pedalboard-presets-old.json', text));
     await expect(presetMessage(page)).toHaveText('2개 가져옴 · 40개 건너뜀');
+    await expect(heading).toHaveText('내 프리셋');
     expect(await totalPresetCount(page), '내 프리셋 2개만 늘었다').toBe(total + 2);
     expect(await libraryCount(page, '내 프리셋')).toBe(3);
 
@@ -129,10 +135,12 @@ test.describe('E-11 프리셋 내보내기·가져오기', () => {
     expect(stored.some((preset) => preset.id.startsWith('factory-'))).toBe(false);
     expect(stored.every((preset) => preset.origin === 'user')).toBe(true);
 
-    // 같은 파일을 다시: 모두 건너뛴다.
+    // 같은 파일을 다시: 모두 건너뛰고, 아무것도 늘지 않았으니 보던 탭도 그대로다.
+    await libraryTab('전체 프리셋').click();
     await importThroughChooser(page, writeImportFile('guitar-pedalboard-presets-old.json', text));
     await expect(presetMessage(page)).toHaveText('0개 가져옴 · 42개 건너뜀');
     expect(await totalPresetCount(page)).toBe(total + 2);
+    await expect(heading).toHaveText('전체 프리셋');
   });
 
   test('같은 프리셋이 있고 내용이 다르면 묻는다: 덮어쓰기 · 사본으로 추가 · 건너뛰기', async ({ page }) => {
