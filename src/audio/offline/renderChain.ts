@@ -13,6 +13,7 @@ import { dbToGain } from '../utils/db';
 import { ImpulseCache } from '../utils/impulseCache';
 import { clampTrimDb } from './loudnessSpec';
 import { createContextTimers } from './contextTimers';
+import { setContextTimers } from '../utils/timers';
 import { createOfflineEffect } from './effectFactory';
 import { registerWorklets } from './workletModules';
 
@@ -228,6 +229,8 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
   };
   // 이펙트가 거는 타이머(Cab 의 IR 교체 디바운스·페이드)는 창 시계가 아니라 렌더 시각으로 잰다.
   const timers = createContextTimers(context, (frame, run) => scheduleSuspend(frame, () => run()));
+  // BaseEffect 의 '쉬기' 타이머도 같은 렌더 시계를 쓴다(S4.2). 이펙트를 만들기 전에 등록해야 한다.
+  setContextTimers(context, timers);
 
   try {
     // 리버브 임펄스를 미리 만들어 두면 생성 직후 짧은 대기만으로 적용된다.

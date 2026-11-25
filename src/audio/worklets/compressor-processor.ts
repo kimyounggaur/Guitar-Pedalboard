@@ -44,7 +44,22 @@ class CompressorProcessor extends AudioWorkletProcessor {
   }
   process(inputs, outputs, parameters) {
     if (this.disposed) return false;
+    if (!inputs[0] || inputs[0].length === 0) return this.rest();
+    this.rested = false;
     return this.version === 2 ? this.processV2(inputs, outputs, parameters) : this.processV1(inputs, outputs, parameters);
+  }
+  // Input disconnected (pedal off, S4.2): clear the state once, then do nothing until an input is reconnected.
+  // Never return false here: in Chromium a processor that returned false is never called again, even after the input is reconnected.
+  rest() {
+    if (this.rested) return true;
+    this.rested = true;
+    const wasReducing = this.reductionDb !== 0;
+    this.meanSquare = 0;
+    this.makeupDb = 0;
+    this.reductionDb = 0;
+    this.framesSinceReport = 0;
+    if (wasReducing) this.port.postMessage({ type: 'reduction', value: 0 });
+    return true;
   }
   processV2(inputs, outputs, parameters) {
     const input = inputs[0] || [];

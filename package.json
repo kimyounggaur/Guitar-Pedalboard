@@ -39,6 +39,7 @@
     "test": "node scripts/run-all-tests.mjs",
     "test:compressor-phase": "node scripts/compressor-phase-regression.mjs",
     "test:compressor-v2": "node scripts/compressor-v2-regression.mjs",
+    "test:idle-disconnect": "node scripts/idle-disconnect-regression.mjs",
     "test:oversample": "node scripts/oversample-regression.mjs",
     "test:crunch-curve": "node scripts/crunch-curve-regression.mjs",
     "test:audio-session": "node scripts/audio-session-regression.mjs",

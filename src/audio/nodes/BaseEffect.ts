@@ -1,11 +1,15 @@
+import { isFeatureEnabled } from '../../config/flags';
 import type { BasePedalParams, EffectType, PedalState } from '../types';
 import { clamp } from '../utils/db';
 import { smoothParam } from '../utils/smoothing';
+import { timersFor } from '../utils/timers';
 import { mixGains, type MixLaw } from './mixLaw';
 
 /** 페달을 켜고 끌 때 게이트·원음·효과음 이득이 옮겨가는 시간. 워클릿이 꺼지는 시점(꺼질 때 이 시간만큼 기다린다)도 이 값을 따른다. */
 export const ROUTING_FADE_SECONDS = 0.012;
 const WET_CUT_FADE_SECONDS = 0.003;
+/** 페달이 꺼진 뒤 페이드가 끝났다고 보고 이펙트 입력을 끊기까지 더 기다리는 여유(초, S4.2). 크로스페이드·워클릿 메시지가 어긋나도 소리를 자르지 않게 한다. */
+const IDLE_MARGIN_SECONDS = 0.01;
 
 export interface BaseEffectOptions {
   /** 원음과 효과음을 섞는 방식(S3.1). 정하지 않으면 crossfade — 딜레이·리버브만 additive 를 고른다. */
@@ -35,6 +39,12 @@ export class BaseEffect {
   /** 소리에 걸리는가(S2.4: 옛 enabled·bypassed 두 값의 곱을 하나로 합쳤다). 켜고 끄는 크로스페이드가 이 값 하나로 움직인다. */
   private active = true;
   private trails = false;
+  /** 꺼진 페달의 이펙트 내부를 쉬게 하는가(기능 플래그 idleDisconnect, S4.2). 이펙트를 만들 때 한 번 읽는다. */
+  private readonly idleDisconnect = isFeatureEnabled('idleDisconnect');
+  /** 이펙트 입력을 끊고 내부를 쉬게 한 상태 */
+  private idle = false;
+  private idleSynced = false;
+  private idleTimer: number | null = null;
   /** 원음·효과음을 섞는 방식. 처음 라우팅을 맞추기 전에 정해져야 해서 생성자 인자로만 받는다. */
   protected readonly mixLaw: MixLaw;
 
@@ -100,9 +110,77 @@ export class BaseEffect {
       pedal.active,
       this.hasTrails(pedal),
     );
+    this.syncIdle(pedal.active, this.hasTrails(pedal));
+  }
+
+  /** 이펙트 내부가 쉬는 중인가. 하위 클래스가 되먹임·LFO 를 다룰 때 본다. */
+  protected get isIdle(): boolean {
+    return this.idle;
+  }
+
+  /**
+   * 꺼진 뒤에도 소리가 남는 시간(초). Trails 가 켜진 딜레이·리버브만 덮어쓴다(되먹임·잔향이 끝까지 울리도록 그만큼 기다린 뒤 쉰다).
+   * 소리가 남지 않으면 0 이다.
+   */
+  protected tailSeconds(): number {
+    return 0;
+  }
+
+  /**
+   * 이펙트가 쉬기 시작하거나(idle = true) 깨어날 때(false) 불린다. 입력은 이미 끊겼거나(쉬기) 아직 이어지지 않았다(깨우기).
+   * 워클릿은 입력이 끊기면 스스로 멈추므로 여기서 할 일이 없다. 되먹임 고리·자유롭게 도는 LFO 가 있는 이펙트만 덮어쓴다.
+   */
+  protected onIdleChange(_idle: boolean): void {
+    // 기본은 아무것도 하지 않는다.
+  }
+
+  /**
+   * 페달이 꺼지고 페이드(와 Trails 꼬리)가 끝나면 이펙트 입력(effectGate → effectInput)을 끊는다. 입력이 없는 네이티브 노드는 브라우저가
+   * 건너뛰고, 워클릿은 입력이 끊긴 것을 보고 상태를 비운 채 멈춘다. 켜지면 바로 다시 잇는다(이득은 0 에서 올라가므로 소리가 튀지 않는다).
+   * 처음 불린 때(만들어진 직후)는 흘러간 소리가 없으니 기다리지 않고 바로 쉰다.
+   */
+  private syncIdle(active: boolean, trails: boolean): void {
+    if (!this.idleDisconnect) return;
+    const first = !this.idleSynced;
+    this.idleSynced = true;
+    if (active) {
+      this.cancelIdleTimer();
+      if (this.idle) this.wake();
+      return;
+    }
+    if (this.idle || this.idleTimer !== null) return;
+    if (first) {
+      this.enterIdle();
+      return;
+    }
+    const waitSeconds = ROUTING_FADE_SECONDS + IDLE_MARGIN_SECONDS + (trails ? this.tailSeconds() : 0);
+    this.idleTimer = timersFor(this.context).setTimeout(() => {
+      this.idleTimer = null;
+      this.enterIdle();
+    }, waitSeconds * 1000);
+  }
+
+  private enterIdle(): void {
+    if (this.idle) return;
+    this.effectGate.disconnect(this.effectInput);
+    this.idle = true;
+    this.onIdleChange(true);
+  }
+
+  private wake(): void {
+    this.idle = false;
+    this.onIdleChange(false);
+    this.effectGate.connect(this.effectInput);
+  }
+
+  private cancelIdleTimer(): void {
+    if (this.idleTimer === null) return;
+    timersFor(this.context).clearTimeout(this.idleTimer);
+    this.idleTimer = null;
   }
 
   dispose(): void {
+    this.cancelIdleTimer();
     this.input.disconnect();
     this.output.disconnect();
     this.effectInput.disconnect();
