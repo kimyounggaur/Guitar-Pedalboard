@@ -206,7 +206,6 @@ export class MidiService {
     connectedInputs.forEach((input, inputId) => {
       const previousInput = this.attached.get(inputId);
       if (previousInput === input && input.onmidimessage === this.messageHandler) return;
-      if (previousInput?.onmidimessage === this.messageHandler) previousInput.onmidimessage = null;
       input.onmidimessage = this.messageHandler;
       this.attached.set(inputId, input);
     });
