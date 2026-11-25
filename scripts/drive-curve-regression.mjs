@@ -176,6 +176,16 @@ for (const mode of MODES) {
       assert.ok(finite, `${label}: 유한한 값만`);
       assert.ok(largest <= 1.31, `${label}: 크기 ${largest} 가 1 + tanh(0.3) 안쪽이어야 한다`);
       assert.equal(decreases, 0, `${label}: 곡선은 줄어들지 않는다(단조)`);
+      // 하드 클립 모드(Distortion·Fuzz)는 양끝이 포화한다: 끝에서 끝까지 폭이 바이어스와 상관없이 정확히 2 이고(최종 ±2 클램프가
+      // 자르지 않는다), 바이어스 0 이면 양끝이 정확히 ±1(클립 한계)이다.
+      if (mode === 'distortion' || mode === 'fuzz') {
+        const swing = curve[curve.length - 1] - curve[0];
+        assert.ok(Math.abs(swing - 2) < 1e-6, `${label}: 끝에서 끝까지 폭 ${swing} 는 2 이어야 한다`);
+        if (bias === 0) {
+          assert.equal(curve[0], -1, `${label}: 바이어스 0 의 왼쪽 끝은 -1`);
+          assert.equal(curve[curve.length - 1], 1, `${label}: 바이어스 0 의 오른쪽 끝은 1`);
+        }
+      }
     }
   }
 }
