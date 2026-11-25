@@ -66,7 +66,7 @@
 | R2-10 지연·글리치 숫자가 실제와 다름, ASIO 안내 | 부분 | 글리치는 브라우저 `playbackStats.underrunEvents`(`AudioEngine.ts:620-627`), 입력 지연은 장치가 알려 준 값만 따로 표시(`AudioEngine.ts:629-643`)하고 "실제 왕복 지연이 아님"을 명시(`Meter.tsx:283-287`), ASIO 문구는 소스·README 어디에도 없음 | 합계가 출력 지연뿐이다 — 입력 지연은 합계 밖, 처리 지연은 "추정 미지원"(`Meter.tsx:286`). `latency.ts` 분리·P-16 없음 → S2.10 |
 | R2-11 앱 아이콘·파비콘 없음 | 부분 | `public/pwa-192x192.png`, `pwa-512x512.png`(purpose any), `apple-touch-icon.png`, `favicon.ico`, 매니페스트(`vite.config.ts:17-45`) | maskable·`favicon.svg` 없음, 매니페스트 `lang`·`id` 없음, `index.html:12-15`에 `<link>` 중복 → S2.14 |
 | R2-12 단축키 3가지 문제 | 해결 | 물리 키(`event.code`) 사용 → 한글 IME에서 동작(`keyboardShortcuts.ts:27-29`), Esc=Panic(`:37`), 10~15번째는 `0 Q W E R Y`(`:30`) | 설계서의 `Shift+1~6`(D13)과 다른 방식으로 이미 해결 → S2.11은 도움말·테스트만 |
-| R2-13 튜너가 옥타브를 구분 못 함 | 해결 | `octaveMismatch`·`targetNote`·`stringNumber`(`tunings.ts:124-126`, `types.ts` PitchReading), 하한 28 Hz(`tuner-processor.ts:4`), `chromatic` 프리셋 | P-22 → S2.12 축소 |
+| R2-13 튜너가 옥타브를 구분 못 함 | 해결 | `octaveMismatch`·`targetNote`·`stringNumber`(`tunings.ts:124-126`, `types.ts` PitchReading), 하한 28 Hz(`tuner-processor.ts:4`), `chromatic` 프리셋 | P-22 → S2.12 축소 (S2.12 에서 `octaveMismatch` 는 `octavesAbove`·`checkString` 으로 바뀌고 줄 선택은 옥타브를 접지 않는다 — L-186~L-189) |
 | R2-14 삭제·초기화 확인 없음, 묻지 않는 덮어쓰기 | 부분 | `window.confirm` 3곳: 덮어쓰기 `PresetPanel.tsx:170`, 삭제 `:178`, 초기화 `:193` | 가져오기(`presetStore.ts:544-562`)는 같은 이름의 사용자 프리셋을 묻지 않고 덮어쓴다(설계서 수용 기준 "묻지 않고 덮어쓰는 경로 0개"에 걸림). 삭제·초기화에 "실행 취소"가 없고 대화상자는 브라우저 기본이다 → S2.8 |
 | R2-15 입출력 장치 관리가 수동 | 부분 | `devicechange`로 목록 갱신(`ConnectGuitarPanel.tsx:81`), 출력 장치 선택(`AudioEngine.ts:152-167`, `audioStore.ts:798-806`), 입력이 끊기면 정지(`audioStore.ts:1215-1221`) | 기본 장치 자동 추종·`device-lost` 처리·장치 id 안정화 없음 → S2.13 |
 
