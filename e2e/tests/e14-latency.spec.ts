@@ -4,14 +4,17 @@
 //   ③ playbackStats 가 없는 환경(모의)에서는 끊김이 '측정 불가'이고 이유가 툴팁에 있다. 연결 전에는 '--' 다.
 //   ④ 입력·출력을 못 읽는 환경(모의)에서는 해당 항목이 '미포함'이고 합계에서 빠진다.
 //   ⑤ 합계가 크면 '지연을 줄이려면: …' 안내가 나오고, 화면(문구·툴팁·속성 포함)과 README 어디에도 'ASIO' 가 없다.
-//   ⑥ 휴대폰 화면에서 새 문구가 가로로 넘치지 않는다.
+//   ⑥ 세션을 시작하기 전에 이미 쌓여 있던 끊김은 세지 않는다(장치 모드). 시작한 뒤의 증가분만 보인다.
+//   ⑦ 음원 파일 모드에서도 같다. 입력은 '입력 없음(음원 파일)' 이다.
+//   ⑧ 휴대폰 화면에서 새 문구가 가로로 넘치지 않는다.
 // 숫자(단위 변환·합계·경계·표 값)를 하나하나 맞추는 쪽은 Node 시험(scripts/latency-regression.mjs)이다. 여기서는 브라우저가 실제로 주는 값이 화면에 맞게 나오는지 본다.
 // 지연·끊김 수는 1초마다 다시 읽으므로(설계서 4.12) 값을 기다릴 때는 poll 을 쓴다.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { connectGuitar, horizontalOverflow, openApp, setMobileDock } from '../helpers/app';
-import { repoRoot } from '../helpers/env';
+import { fixturePath, repoRoot } from '../helpers/env';
+import { openFileThroughButton } from '../helpers/file-media';
 import { expect, test } from '../helpers/fixtures';
 import { stompOf } from '../helpers/storage';
 
@@ -23,6 +26,7 @@ const ADVICE = '지연을 줄이려면: 유선 헤드폰 사용 · 블루투스 
 const headline = (page: Page): Locator => page.locator('.latency-status > span').first();
 const itemOf = (page: Page, key: 'input' | 'processing' | 'output'): Locator => page.locator(`.latency-status .latency-item-${key}`);
 const underrunOutput = (page: Page): Locator => page.locator('.performance-status .underrun-count');
+const compactLatency = (page: Page): Locator => page.locator('.performance-status > span', { hasText: '지연' }).locator('output');
 const underrunLabel = (page: Page): Locator => page.locator('.performance-status > span', { has: page.locator('.underrun-count') });
 
 interface Parsed {
@@ -153,8 +157,9 @@ test.describe('E-14 지연·끊김 표시', () => {
     expect(Math.abs(pedals - baselinePedalsMs(rateKhz))).toBeLessThanOrEqual(0.15);
     expect(limiter).toBeCloseTo(1, 0);
     expect(input).toBeGreaterThanOrEqual(0);
-    // 연결 상태 줄(한 줄 요약)의 지연도 같은 합계다.
+    // 연결 상태 줄(한 줄 요약)과 미터 아래 한 줄 요약의 지연도 같은 합계다.
     await expect(page.locator('.connect-status-latency .connect-status-value')).toHaveText(`${total.toFixed(1)}ms`);
+    await expect(compactLatency(page)).toHaveText(`${total.toFixed(1)}ms`);
 
     // Drive 를 끄면 처리 지연이 Drive 몫(약 2.7~2.9 ms)만큼 줄고, 다시 켜면 돌아온다. 1초 간격으로 다시 읽으므로 기다린다.
     await stompOf(page, 'Drive').click();
@@ -249,7 +254,46 @@ test.describe('E-14 지연·끊김 표시', () => {
     expect(readFileSync(join(REPO, 'README.md'), 'utf8')).not.toMatch(/asio/i);
   });
 
-  test('E-14 ⑥ 휴대폰 화면에서 지연 문구가 가로로 넘치지 않는다', async ({ launchWithMic }) => {
+  test('E-14 ⑥ 세션을 시작하기 전에 쌓인 끊김은 세지 않고 시작한 뒤의 증가분만 보인다(장치)', async ({ page }) => {
+    // 브라우저가 알려 주는 누적값을 시험이 정한다: 연결하기 전에 이미 5건이 쌓여 있다.
+    await page.addInitScript(() => {
+      const fake = { underrunEvents: 5 };
+      Object.defineProperty(window, '__e14Fake', { configurable: true, value: fake });
+      Object.defineProperty(AudioContext.prototype, 'playbackStats', { configurable: true, get: () => fake });
+    });
+    await openApp(page);
+    await expect(underrunOutput(page)).toHaveText('--');
+    await connectGuitar(page);
+    await expect(underrunOutput(page), '시작 전의 5건은 세지 않는다').toHaveText('0회');
+    await page.waitForTimeout(1300);
+    await expect(underrunOutput(page)).toHaveText('0회');
+    await page.evaluate(() => {
+      (window as unknown as { __e14Fake: { underrunEvents: number } }).__e14Fake.underrunEvents = 8;
+    });
+    await expect(underrunOutput(page), '시작한 뒤 늘어난 3건만 보인다').toHaveText('3회');
+  });
+
+  test('E-14 ⑦ 음원 파일 모드에서도 시작 전의 끊김은 세지 않고, 입력은 입력 없음(음원 파일)이다', async ({ page }) => {
+    await page.addInitScript(() => {
+      const fake = { underrunEvents: 5 };
+      Object.defineProperty(window, '__e14Fake', { configurable: true, value: fake });
+      Object.defineProperty(AudioContext.prototype, 'playbackStats', { configurable: true, get: () => fake });
+    });
+    await openApp(page);
+    await openFileThroughButton(page, fixturePath('ref-pc.wav'));
+    await expect(itemOf(page, 'input')).toHaveText('입력 없음(음원 파일)');
+    await expect(underrunOutput(page), '시작 전의 5건은 세지 않는다').toHaveText('0회');
+    // 파일에는 입력 지연이 없으므로 합계는 처리 + 출력이다.
+    const { total } = await readHeadline(page);
+    const processing = await readNumber(itemOf(page, 'processing'), /^처리 ([\d.]+) ms/);
+    expect(total).toBeGreaterThanOrEqual(processing - 0.15);
+    await page.evaluate(() => {
+      (window as unknown as { __e14Fake: { underrunEvents: number } }).__e14Fake.underrunEvents = 7;
+    });
+    await expect(underrunOutput(page), '시작한 뒤 늘어난 2건만 보인다').toHaveText('2회');
+  });
+
+  test('E-14 ⑧ 휴대폰 화면에서 지연 문구가 가로로 넘치지 않는다', async ({ launchWithMic }) => {
     const { page } = await launchWithMic(undefined, PHONE);
     await openApp(page);
     await setMobileDock(page, true);
