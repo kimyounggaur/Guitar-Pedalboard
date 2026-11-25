@@ -25,8 +25,8 @@
         "metrics": {
           "inputPeakDb": -12,
           "peakWithLimiterDb": -1,
-          "peakWithoutLimiterDb": 69.347,
-          "rmsWithLimiterDb": -10.645,
+          "peakWithoutLimiterDb": 69.84,
+          "rmsWithLimiterDb": -10.7,
           "defaultCabOffPeakDb": -1,
           "defaultCabOffPeakWithoutLimiterDb": 2.965
         }
@@ -736,17 +736,22 @@
           "static.default.notchCount": 4,
           "sweep.frames": 20,
           "sweep.minHz": 150.732,
-          "sweep.maxHz": 452.197
+          "sweep.maxHz": 452.197,
+          "sweep.comb.frames": 20,
+          "sweep.comb.minHz": 172.266,
+          "sweep.comb.maxHz": 419.897
         }
       },
       "P-12": {
         "title": "Phaser 리플",
         "metrics": {
-          "combRippleDb": 17.074,
-          "highBandRippleDb": 16.269,
-          "maxDb": 5.473,
-          "minDb": -11.411,
-          "notchCount": 6
+          "combRippleDb": 10.556,
+          "modelErrorDb": 0.925,
+          "modelErrorFullDb": 1.667,
+          "highBandRippleDb": 15.503,
+          "maxDb": 5.411,
+          "minDb": -10.5,
+          "notchCount": 3
         }
       },
       "P-13": {
@@ -1022,8 +1027,8 @@
         "metrics": {
           "inputPeakDb": -12,
           "peakWithLimiterDb": -1,
-          "peakWithoutLimiterDb": 68.782,
-          "rmsWithLimiterDb": -10.473,
+          "peakWithoutLimiterDb": 68.399,
+          "rmsWithLimiterDb": -10.576,
           "defaultCabOffPeakDb": -1,
           "defaultCabOffPeakWithoutLimiterDb": 2.988
         }
@@ -1733,17 +1738,22 @@
           "static.default.notchCount": 4,
           "sweep.frames": 20,
           "sweep.minHz": 175.781,
-          "sweep.maxHz": 421.875
+          "sweep.maxHz": 421.875,
+          "sweep.comb.frames": 20,
+          "sweep.comb.minHz": 175.781,
+          "sweep.comb.maxHz": 421.875
         }
       },
       "P-12": {
         "title": "Phaser 리플",
         "metrics": {
-          "combRippleDb": 16.56,
-          "highBandRippleDb": 15.96,
-          "maxDb": 5.454,
-          "minDb": -11.044,
-          "notchCount": 6
+          "combRippleDb": 9.672,
+          "modelErrorDb": 0.925,
+          "modelErrorFullDb": 1.943,
+          "highBandRippleDb": 15.282,
+          "maxDb": 5.457,
+          "minDb": -10.232,
+          "notchCount": 3
         }
       },
       "P-13": {
