@@ -205,7 +205,8 @@ for (const rate of ['44100', '48000']) {
     const signal = build_([[bin, 0.5]]);
     for (let i = 0; i < signal.length; i += 1) signal[i] += i % 2 === 0 ? 0.005 : -0.005;
     const nyquist = nonHarmonicDb(signal, size, bin, 0);
-    assert.ok(nyquist > -45 && nyquist < -30, `나이퀴스트 성분이 센다: ${nyquist}`);
+    // 나이퀴스트 bin 의 전력 (A·N/2)² + 이웃 한 칸 (A·N/4)² 를 기본음 전력 1.5·(a·N/4)² 로 나눈 값: 10·log10(0.3125·1e-4 / 0.09375) = −34.77 dBc.
+    near(nyquist, -34.77, 0.05, '나이퀴스트 bin 과 이웃 한 칸이 모두 센다');
   }
   // guard: 배음 자리 ±guard bin 을 가린다. Hann 창은 한 성분을 ±1 bin 로 번지게 하므로 가장자리 성분은 번진 한 칸이 세어진다.
   assert.ok(measure([[bin, 0.5], [3 * bin + 1, 0.005]]) <= -190, '배음에서 1칸 떨어진 성분은 번짐까지 가려진다');
