@@ -170,15 +170,18 @@ async function evaluate(cdp, expression, timeoutMs) {
   }
 }
 
-async function openProbePage(cdp, url, pageMessages) {
-  await cdp.send('Page.enable');
-  await cdp.send('Runtime.enable');
-  cdp.on('Runtime.exceptionThrown', (params) => pageMessages.push(`예외: ${describeException(params.exceptionDetails ?? {})}`));
-  cdp.on('Runtime.consoleAPICalled', (params) => {
-    if (params.type !== 'error' && params.type !== 'warning') return;
-    const text = (params.args ?? []).map((argument) => argument.value ?? argument.description ?? '').join(' ');
-    pageMessages.push(`${params.type}: ${text}`);
-  });
+async function openProbePage(cdp, url, pageMessages, { listen = true } = {}) {
+  // 같은 연결로 페이지를 다시 열 때는 듣는 쪽을 또 달지 않는다(메시지가 두 번 쌓인다).
+  if (listen) {
+    await cdp.send('Page.enable');
+    await cdp.send('Runtime.enable');
+    cdp.on('Runtime.exceptionThrown', (params) => pageMessages.push(`예외: ${describeException(params.exceptionDetails ?? {})}`));
+    cdp.on('Runtime.consoleAPICalled', (params) => {
+      if (params.type !== 'error' && params.type !== 'warning') return;
+      const text = (params.args ?? []).map((argument) => argument.value ?? argument.description ?? '').join(' ');
+      pageMessages.push(`${params.type}: ${text}`);
+    });
+  }
   const loaded = new Promise((resolvePromise) => cdp.on('Page.loadEventFired', resolvePromise));
   await cdp.send('Page.navigate', { url });
   await Promise.race([loaded, delay(30_000).then(() => { throw new Error('probe.html 로드 시간 초과'); })]);
@@ -357,7 +360,8 @@ async function main() {
     browser = await startChrome({ chromePath, profilePrefix: 'guitar-pedalboard-probe-', quiet: true });
     const { cdp } = browser;
     chromeVersion = (await cdp.send('Browser.getVersion')).product;
-    await openProbePage(cdp, `http://127.0.0.1:${port}/probe.html`, pageMessages);
+    const probeUrl = `http://127.0.0.1:${port}/probe.html`;
+    await openProbePage(cdp, probeUrl, pageMessages);
 
     const available = await evaluate(cdp, 'window.__probe.list()', 10_000);
     const ids = options.only ?? available.map((probe) => probe.id);
@@ -365,7 +369,13 @@ async function main() {
     if (unknown.length > 0) usage(`없는 프로브: ${unknown.join(', ')} (있는 것: ${available.map((probe) => probe.id).join(', ')})`);
 
     console.log(`오디오 렌더 프로브 — ${chromeVersion}, 샘플레이트 ${options.rates.join('·')} Hz, 프로브 ${ids.length}개`);
-    for (const rate of options.rates) {
+    for (const [rateIndex, rate] of options.rates.entries()) {
+      // 샘플레이트마다 새 문서로 시작한다. 프로브가 늘어 렌더가 천 번을 넘으면(S4.2 의 P-30 이 백여 번을 더했다) 한 문서가 만든
+      // 컨텍스트·워클릿 영역이 다 거두어지기 전에 다음 렌더가 끝나지 않고 멈췄다(L-268). 문서를 비우면 한꺼번에 정리된다.
+      if (rateIndex > 0) {
+        await cdp.send('Page.navigate', { url: 'about:blank' });
+        await openProbePage(cdp, probeUrl, pageMessages, { listen: false });
+      }
       results[rate] = {};
       for (const id of ids) {
         const title = available.find((probe) => probe.id === id)?.title;
