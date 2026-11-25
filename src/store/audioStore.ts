@@ -1360,11 +1360,11 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     const activeEffectCount = usePedalStore
       .getState()
       .pedals.filter((pedal) => pedal.active).length;
-    // 입력·출력 지연과 끊김 수는 브라우저가 1초마다 갱신하는 값이라 1초마다만 다시 읽는다(설계서 4.12). 세션이 막 시작돼 아직 못 읽었으면 바로 읽는다.
+    // 입력·출력 지연과 끊김 수는 브라우저가 1초마다 갱신하는 값이라 1초마다만 다시 읽는다(설계서 4.12). 세션이 막 시작돼(읽은 샘플레이트가 0 → 컨텍스트의 값으로 바뀜) 아직 못 읽었으면 바로 읽는다.
     // 처리 지연(켜진 페달 + 리미터)은 페달을 켜고 끌 때, 그래프가 만들어질 때 바뀌므로 매번 읽는다(싸다).
     const now = performance.now();
     const processing = engine.readProcessingLatency();
-    const rereadSlow = state.latency.sampleRate === 0 || state.latency.sampleRate !== processing.sampleRate || now - lastSlowReadAt >= SLOW_READ_INTERVAL_MS;
+    const rereadSlow = state.latency.sampleRate !== processing.sampleRate || now - lastSlowReadAt >= SLOW_READ_INTERVAL_MS;
     if (rereadSlow) lastSlowReadAt = now;
     const latency = rereadSlow ? engine.readLatency() : { ...state.latency, pedals: processing.pedals, limiter: processing.limiter };
     const underrunCount = rereadSlow ? engine.readUnderrunCount() : state.underrunCount;

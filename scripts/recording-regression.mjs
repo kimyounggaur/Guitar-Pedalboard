@@ -625,6 +625,51 @@ useAudioStore.getState().disposeRecording();
   clock += 10;
   refresh();
   assert.equal(calls.full, 4, '비워진 뒤 첫 틱은 바로 읽는다');
+
+  // 읽음의 어느 한 필드만 바뀌어도 화면 값이 바뀐다(필드 비교가 하나라도 빠지면 그 값은 화면에 영영 반영되지 않는다).
+  const full = { sampleRate: 48_000, inputKind: 'device', input: 5, inputSource: 'track-stats', pedals: 2.5, limiter: 1, outputBase: 10, outputDevice: 2 };
+  let current = { ...full };
+  engine.readProcessingLatency = () => ({ sampleRate: current.sampleRate, pedals: current.pedals, limiter: current.limiter });
+  engine.readLatency = () => ({ ...current });
+  useAudioStore.setState({ latency: { ...full }, underrunCount: 0 });
+  clock += 1000;
+  refresh();
+  const slowFields = [
+    ['input', 6],
+    ['inputSource', 'track-settings'],
+    ['inputKind', 'file'],
+    ['outputBase', 11],
+    ['outputDevice', 3],
+  ];
+  for (const [field, value] of slowFields) {
+    current = { ...full, [field]: value };
+    clock += 1000;
+    refresh();
+    assert.equal(shown().latency[field], value, `${field} 만 바뀌어도 1초 뒤 화면 값이 바뀐다`);
+    current = { ...full };
+    clock += 1000;
+    refresh();
+    assert.equal(shown().latency[field], full[field], `${field} 가 되돌아오면 화면도 되돌아온다`);
+  }
+  for (const [field, value] of [['pedals', 3.5], ['limiter', 2]]) {
+    current = { ...full, [field]: value };
+    clock += 100;
+    refresh();
+    assert.equal(shown().latency[field], value, `${field} 는 100 ms 틱에도 바로 반영된다`);
+    current = { ...full };
+    clock += 100;
+    refresh();
+    assert.equal(shown().latency[field], full[field]);
+  }
+
+  // 정지하면 지연·끊김 읽음이 비워진다('--').
+  await useAudioStore.getState().start();
+  useAudioStore.setState({ underrunCount: 3, latency: { ...full } });
+  const stopsBeforeReset = engineStops;
+  await useAudioStore.getState().stop();
+  await settleStop(stopsBeforeReset + 1);
+  assert.equal(useAudioStore.getState().underrunCount, null, '정지하면 끊김 수가 비워진다');
+  assert.equal(useAudioStore.getState().latency.sampleRate, 0, '정지하면 지연 읽음이 비워진다');
 }
 
 console.log(
