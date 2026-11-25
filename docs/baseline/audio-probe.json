@@ -25,8 +25,8 @@
         "metrics": {
           "inputPeakDb": -12,
           "peakWithLimiterDb": -1,
-          "peakWithoutLimiterDb": 69.347,
-          "rmsWithLimiterDb": -10.645,
+          "peakWithoutLimiterDb": 69.84,
+          "rmsWithLimiterDb": -10.7,
           "defaultCabOffPeakDb": -1,
           "defaultCabOffPeakWithoutLimiterDb": 2.965
         }
@@ -736,17 +736,22 @@
           "static.default.notchCount": 4,
           "sweep.frames": 20,
           "sweep.minHz": 150.732,
-          "sweep.maxHz": 452.197
+          "sweep.maxHz": 452.197,
+          "sweep.comb.frames": 20,
+          "sweep.comb.minHz": 172.266,
+          "sweep.comb.maxHz": 419.897
         }
       },
       "P-12": {
         "title": "Phaser 리플",
         "metrics": {
-          "combRippleDb": 17.074,
-          "highBandRippleDb": 16.269,
-          "maxDb": 5.473,
-          "minDb": -11.411,
-          "notchCount": 6
+          "combRippleDb": 10.556,
+          "modelErrorDb": 0.925,
+          "modelErrorFullDb": 1.667,
+          "highBandRippleDb": 15.503,
+          "maxDb": 5.411,
+          "minDb": -10.5,
+          "notchCount": 3
         }
       },
       "P-13": {
@@ -832,25 +837,30 @@
       "P-17": {
         "title": "렌더 시간(CPU 대용 지표)",
         "metrics": {
-          "time.emptyMs": 38.5,
+          "time.emptyMs": 36.3,
           "cpuShare.empty": 0.006,
-          "time.emptyMonitoredMs": 78.9,
+          "time.emptyMonitoredMs": 76,
           "cpuShare.emptyMonitored": 0.012,
-          "time.allOnMs": 1206.1,
-          "cpuShare.allOn": 0.186,
-          "time.allOnMonitoredMs": 1241.4,
-          "cpuShare.allOnMonitored": 0.191,
-          "time.allOffMs": 794.4,
-          "cpuShare.allOff": 0.122,
-          "time.phaserOffMs": 144.2,
-          "cpuShare.phaserOff": 0.022,
-          "time.phaserOnMs": 144.7,
-          "cpuShare.phaserOn": 0.022,
-          "ratio.allOffOverAllOn": 0.659,
-          "ratio.phaserOffContribution": 0.088,
-          "ratio.phaserOnContribution": 0.088,
-          "ratio.monitorOverheadOverPedals": 0.033,
-          "ratio.monitorOverheadInAllOn": 0.027
+          "time.allOnMs": 1167.5,
+          "cpuShare.allOn": 0.18,
+          "time.allOnMonitoredMs": 1224.8,
+          "cpuShare.allOnMonitored": 0.188,
+          "time.allOffMs": 734,
+          "cpuShare.allOff": 0.113,
+          "time.phaserOffMs": 51.7,
+          "cpuShare.phaserOff": 0.008,
+          "time.phaserOnMs": 73.5,
+          "cpuShare.phaserOn": 0.011,
+          "time.phaserOn4Ms": 74.2,
+          "cpuShare.phaserOn4": 0.011,
+          "time.phaserOn12Ms": 81.9,
+          "cpuShare.phaserOn12": 0.013,
+          "ratio.allOffOverAllOn": 0.629,
+          "ratio.phaserOffContribution": 0.013,
+          "ratio.phaserOnContribution": 0.032,
+          "ratio.phaserStages12Over4": 1.342,
+          "ratio.monitorOverheadOverPedals": 0.032,
+          "ratio.monitorOverheadInAllOn": 0.067
         }
       },
       "P-18": {
@@ -1022,8 +1032,8 @@
         "metrics": {
           "inputPeakDb": -12,
           "peakWithLimiterDb": -1,
-          "peakWithoutLimiterDb": 68.782,
-          "rmsWithLimiterDb": -10.473,
+          "peakWithoutLimiterDb": 68.399,
+          "rmsWithLimiterDb": -10.576,
           "defaultCabOffPeakDb": -1,
           "defaultCabOffPeakWithoutLimiterDb": 2.988
         }
@@ -1733,17 +1743,22 @@
           "static.default.notchCount": 4,
           "sweep.frames": 20,
           "sweep.minHz": 175.781,
-          "sweep.maxHz": 421.875
+          "sweep.maxHz": 421.875,
+          "sweep.comb.frames": 20,
+          "sweep.comb.minHz": 175.781,
+          "sweep.comb.maxHz": 421.875
         }
       },
       "P-12": {
         "title": "Phaser 리플",
         "metrics": {
-          "combRippleDb": 16.56,
-          "highBandRippleDb": 15.96,
-          "maxDb": 5.454,
-          "minDb": -11.044,
-          "notchCount": 6
+          "combRippleDb": 9.672,
+          "modelErrorDb": 0.925,
+          "modelErrorFullDb": 1.943,
+          "highBandRippleDb": 15.282,
+          "maxDb": 5.457,
+          "minDb": -10.232,
+          "notchCount": 3
         }
       },
       "P-13": {
@@ -1829,25 +1844,30 @@
       "P-17": {
         "title": "렌더 시간(CPU 대용 지표)",
         "metrics": {
-          "time.emptyMs": 44.1,
+          "time.emptyMs": 42.6,
           "cpuShare.empty": 0.007,
           "time.emptyMonitoredMs": 87.9,
           "cpuShare.emptyMonitored": 0.014,
-          "time.allOnMs": 1543.9,
-          "cpuShare.allOn": 0.238,
-          "time.allOnMonitoredMs": 1348.4,
-          "cpuShare.allOnMonitored": 0.207,
-          "time.allOffMs": 855.6,
-          "cpuShare.allOff": 0.132,
-          "time.phaserOffMs": 156.9,
-          "cpuShare.phaserOff": 0.024,
-          "time.phaserOnMs": 162.1,
-          "cpuShare.phaserOn": 0.025,
-          "ratio.allOffOverAllOn": 0.554,
-          "ratio.phaserOffContribution": 0.073,
-          "ratio.phaserOnContribution": 0.076,
-          "ratio.monitorOverheadOverPedals": 0.025,
-          "ratio.monitorOverheadInAllOn": 0
+          "time.allOnMs": 1476,
+          "cpuShare.allOn": 0.227,
+          "time.allOnMonitoredMs": 1441.4,
+          "cpuShare.allOnMonitored": 0.222,
+          "time.allOffMs": 876,
+          "cpuShare.allOff": 0.135,
+          "time.phaserOffMs": 58.2,
+          "cpuShare.phaserOff": 0.009,
+          "time.phaserOnMs": 85.6,
+          "cpuShare.phaserOn": 0.013,
+          "time.phaserOn4Ms": 80.3,
+          "cpuShare.phaserOn4": 0.012,
+          "time.phaserOn12Ms": 91.6,
+          "cpuShare.phaserOn12": 0.014,
+          "ratio.allOffOverAllOn": 0.593,
+          "ratio.phaserOffContribution": 0.011,
+          "ratio.phaserOnContribution": 0.029,
+          "ratio.phaserStages12Over4": 1.511,
+          "ratio.monitorOverheadOverPedals": 0.034,
+          "ratio.monitorOverheadInAllOn": 0.055
         }
       },
       "P-18": {

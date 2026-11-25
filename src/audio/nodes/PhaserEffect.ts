@@ -1,7 +1,7 @@
 import type { PedalState, PhaserParams } from '../types';
 import { clamp } from '../utils/db';
 import { smoothParam } from '../utils/smoothing';
-import { BaseEffect } from './BaseEffect';
+import { BaseEffect, ROUTING_FADE_SECONDS } from './BaseEffect';
 
 const MIN_RATE_HZ = 0.05;
 const MAX_RATE_HZ = 8;
@@ -15,6 +15,8 @@ export const PHASER_STAGE_OPTIONS = [4, 6, 8, 12] as const;
 const PHASER_MAX_DETUNE_CENTS =
   1200 * Math.log2(PHASER_MAX_FREQUENCY / PHASER_CENTER_FREQUENCY);
 const MIN_WET_MAKEUP = 0.3;
+/** 페달을 끈 뒤 게이트가 완전히 닫힐 때까지(ROUTING_FADE_SECONDS) 기다린 다음 워클릿을 멈춘다. 그 전에 멈추면 꼬리가 뚝 끊겨 딸깍 소리가 난다. */
+const PROCESSOR_STOP_DELAY_SECONDS = ROUTING_FADE_SECONDS + 0.02;
 
 const DEFAULT_PARAMS: PhaserParams = {
   mix: 45,
@@ -88,6 +90,8 @@ export function getPhaserWetMakeup(feedback: number): number {
 export class PhaserEffect extends BaseEffect {
   private readonly processor: AudioWorkletNode;
   private disposed = false;
+  /** 워클릿에 마지막으로 알린 켜짐 상태. null 이면 아직 알린 적이 없다. */
+  private processorActive: boolean | null = null;
 
   constructor(context: BaseAudioContext, pedal: PedalState) {
     const safePedal = normalizePhaserPedal(pedal);
@@ -98,8 +102,9 @@ export class PhaserEffect extends BaseEffect {
       numberOfOutputs: 1,
       outputChannelCount: [2],
       processorOptions: { stages: params.stages },
-      parameterData: { stages: params.stages },
+      parameterData: { stages: params.stages, active: safePedal.active ? 1 : 0 },
     });
+    this.processorActive = safePedal.active;
     this.effectInput.connect(this.processor);
     this.processor.connect(this.effectOutput);
     this.update(safePedal);
@@ -120,6 +125,21 @@ export class PhaserEffect extends BaseEffect {
       stages.setValueAtTime(params.stages, this.context.currentTime);
     }
     this.setMakeup(getPhaserWetMakeup(feedback));
+    this.setProcessorActive(safePedal.active);
+  }
+
+  /**
+   * 꺼진 Phaser 는 필터를 돌리지 않는다(R4-2). 켤 때는 곧바로 알리고(게이트가 같은 시간에 열린다),
+   * 끌 때는 게이트가 닫힌 뒤에 알린다.
+   */
+  private setProcessorActive(active: boolean): void {
+    if (active === this.processorActive) return;
+    this.processorActive = active;
+    const param = this.processor.parameters.get('active');
+    if (!param) return;
+    const now = this.context.currentTime;
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(active ? 1 : 0, active ? now : now + PROCESSOR_STOP_DELAY_SECONDS);
   }
 
   private setProcessorParam(name: string, value: number): void {

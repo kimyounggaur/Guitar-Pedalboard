@@ -165,4 +165,65 @@ assert.ok(stereo.right.every((sample) => sample === 0), 'stereo channels must re
 const mono = render(-.6, false);
 assert.ok(Math.abs(mono.left[192] + .24) < 1e-6, 'negative feedback inverts later tap');
 assert.deepEqual(mono.left, mono.right, 'mono input must reach both channels');
-console.log('Flanger regression passed: parameter bounds, stereo and sample-level feedback timing.');
+
+// ---- S3.4: 샘플레이트와 상관없이 같은 지연 시간(L-233) -------------------------------------------------
+// Flanger 의 첫 노치는 1/(2τ) 다. 기본 LFO(0.25 Hz)가 위상 90°(1.0 s)에서 τ = manual + depth = 2.825 ms, 270°(3.0 s)에서 1.175 ms 가 되는지를
+// 44.1 kHz·48 kHz 에서 임펄스가 나오는 위치(두 샘플의 무게중심)로 재서 177 Hz / 426 Hz 를 확인한다.
+for (const sampleRate of [44100, 48000]) {
+  let SweepProcessor;
+  vm.runInNewContext(flangerProcessorSource, {
+    sampleRate, AudioWorkletProcessor: MockProcessor,
+    registerProcessor(name, klass) { SweepProcessor = klass; },
+  });
+  const manual = 0.002;
+  const depth = getFlangerModulationDepth(manual, 55);
+  assert.ok(Math.abs(depth - 0.000825) < 1e-12, 'default depth 55% of the 1.5 ms safe sweep');
+  const processor = new SweepProcessor();
+  const params = { manual: [manual], depth: [depth], rate: [0.25], feedback: [0] };
+  const impulses = [Math.round(sampleRate * 1.0), Math.round(sampleRate * 3.0)];
+  const centroids = [];
+  const total = impulses[1] + Math.round(sampleRate * 0.02);
+  const output = new Float64Array(total + 128);
+  for (let block = 0; block * 128 < total; block++) {
+    const l = new Float32Array(128);
+    for (const at of impulses) if (at >= block * 128 && at < (block + 1) * 128) l[at - block * 128] = 1;
+    const out = [new Float32Array(128), new Float32Array(128)];
+    processor.process([[l]], [out], params);
+    output.set(out[0], block * 128);
+  }
+  for (const at of impulses) {
+    let weight = 0, moment = 0;
+    for (let n = at; n < at + Math.round(sampleRate * 0.006); n++) { weight += output[n]; moment += output[n] * n; }
+    centroids.push((moment / weight - at) / sampleRate);
+  }
+  assert.ok(Math.abs(centroids[0] - 0.002825) < 2e-6, `${sampleRate} Hz: longest delay ${centroids[0] * 1000} ms`);
+  assert.ok(Math.abs(centroids[1] - 0.001175) < 2e-6, `${sampleRate} Hz: shortest delay ${centroids[1] * 1000} ms`);
+  const lowest = 1 / (2 * centroids[0]);
+  const highest = 1 / (2 * centroids[1]);
+  assert.ok(Math.abs(lowest - 177) < 1 && Math.abs(highest - 426) < 2, `${sampleRate} Hz: first notch sweeps ${lowest}~${highest} Hz`);
+}
+
+// 워클릿은 깊이가 너무 커도 지연을 0.5~10 ms 안에 가둔다(manual 1 ms, depth 5 ms → LFO 골에서 0.5 ms, 정점에서 1.5 ms).
+{
+  let ClampProcessor;
+  vm.runInNewContext(flangerProcessorSource, {
+    sampleRate: 48000, AudioWorkletProcessor: MockProcessor,
+    registerProcessor(name, klass) { ClampProcessor = klass; },
+  });
+  const processor = new ClampProcessor();
+  const params = { manual: [0.001], depth: [0.005], rate: [0.25], feedback: [0] };
+  const trough = 48000 * 3;
+  const output = new Float64Array(trough + 1024);
+  for (let block = 0; block * 128 < trough + 512; block++) {
+    const l = new Float32Array(128);
+    if (trough >= block * 128 && trough < (block + 1) * 128) l[trough - block * 128] = 1;
+    const out = [new Float32Array(128), new Float32Array(128)];
+    processor.process([[l]], [out], params);
+    output.set(out[0], block * 128);
+  }
+  let weight = 0, moment = 0;
+  for (let n = trough; n < trough + 400; n++) { weight += output[n]; moment += output[n] * n; }
+  assert.ok(Math.abs((moment / weight - trough) / 48000 - 0.0005) < 2e-6, 'an oversized depth is clamped to manual − 0.5 ms');
+}
+
+console.log('Flanger regression passed: parameter bounds, stereo, sample-level feedback timing and the 44.1/48 kHz delay sweep.');

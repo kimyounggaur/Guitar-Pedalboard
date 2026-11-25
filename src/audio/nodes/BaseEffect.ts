@@ -3,7 +3,8 @@ import { clamp } from '../utils/db';
 import { smoothParam } from '../utils/smoothing';
 import { mixGains, type MixLaw } from './mixLaw';
 
-const ROUTING_FADE_SECONDS = 0.012;
+/** 페달을 켜고 끌 때 게이트·원음·효과음 이득이 옮겨가는 시간. 워클릿이 꺼지는 시점(꺼질 때 이 시간만큼 기다린다)도 이 값을 따른다. */
+export const ROUTING_FADE_SECONDS = 0.012;
 const WET_CUT_FADE_SECONDS = 0.003;
 
 export interface BaseEffectOptions {
