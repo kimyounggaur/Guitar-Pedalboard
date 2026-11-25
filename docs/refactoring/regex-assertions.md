@@ -3,7 +3,7 @@
 > `node docs/refactoring/tools/list-regex-assertions.mjs` 로 생성한 파일이다(수정하지 말고 다시 생성한다). 줄 번호는 생성한 시점의 `scripts/` 기준이므로, 시험 파일을 고친 Step 뒤에는 다시 생성한다.
 > 세는 대상은 `assert.match(` 와 `assert.doesNotMatch(` 호출이다. 보고서의 "337곳"은 기준 커밋 `4ac9cf7`에서 이 두 호출을 센 값과 같다(316 + 21).
 
-**생성 시점 합계: 391곳** (match 357 + doesNotMatch 34)
+**생성 시점 합계: 390곳** (match 356 + doesNotMatch 34)
 
 | 파일 | match | doesNotMatch | 합계 |
 |---|---:|---:|---:|
@@ -19,10 +19,10 @@
 | recording-regression.mjs | 35 | 2 | 37 |
 | responsive-a11y-regression.mjs | 104 | 8 | 112 |
 | safe-storage-regression.mjs | 13 | 1 | 14 |
-| shortcuts-regression.mjs | 34 | 0 | 34 |
+| shortcuts-regression.mjs | 33 | 0 | 33 |
 | tap-tempo-regression.mjs | 13 | 1 | 14 |
 | tremolo-regression.mjs | 14 | 2 | 16 |
-| **합계** | **357** | **34** | **391** |
+| **합계** | **356** | **34** | **390** |
 
 ## 파일별 위치
 
@@ -202,29 +202,29 @@
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
 |---:|---|---|---|
-| 18 | match | `presetStoreSource` | `/slotA: PedalState\[\] \\| null/` |
-| 19 | match | `presetStoreSource` | `/slotB: PedalState\[\] \\| null/` |
-| 20 | match | `presetStoreSource` | `/activeSlot: PresetComparisonSlot/` |
-| 21 | match | `presetStoreSource` | `/captureCurrentToSlot: \(slot: PresetComparisonSlot\) => void/` |
-| 22 | match | `presetStoreSource` | `/activateSlot: \(slot: PresetComparisonSlot\) => boolean/` |
-| 23 | match | `presetStoreSource` | `/const capturedPedals = clonePedals\(usePedalStore\.getState\(\)\.peda` |
-| 28 | match | `activateSource` | `/applyPresetPedals\(storedPedals, storedTrimDb\)/, '슬롯을 켜면 슬롯에 담긴 음량 보` |
-| 29 | match | `presetStoreSource` | `/clearAllCabinetIrs\(\` |
-| 30 | match | `panelSource` | `/applyPresetPedals\(preset\.pedals, preset\.trimDb\)/` |
-| 32 | match | `chainActionsSource` | `/clearAllCabinetIrs\(\` |
-| 35 | match | `midiSource` | `/applyPresetPedals\(preset\.pedals, preset\.trimDb\)/` |
-| 38 | match | `panelSource` | `/className="preset-ab-buttons"/` |
-| 46 | match | `abButtonsSource` | `/disabled=\{!slotA\}/` |
-| 47 | match | `abButtonsSource` | `/disabled=\{!slotB\}/` |
-| 49 | match | `panelSource` | `/<p role="status" aria-live="polite">/` |
-| 51 | match | `shortcutRoutingSource` | `/key === 't'/` |
-| 52 | match | `shortcutRoutingSource` | `/key === 'a' \\|\\| key === 'b'/` |
-| 53 | match | `shortcutRoutingSource` | `/slot: key === 'a' \? 'A' : 'B'/` |
-| 54 | match | `shortcutRoutingSource` | `/event\.repeat/` |
-| 55 | match | `shortcutRoutingSource` | `/event\.isComposing/` |
-| 56 | match | `shortcutRoutingSource` | `/event\.(?:ctrlKey\|metaKey\|altKey\|shiftKey)/` |
-| 57 | match | `keyboardSource` | `/input'[\s\S]*select'[\s\S]*textarea'[\s\S]*contenteditable/` |
-| 58 | match | `keyboardSource` | `/activateSlot\(command\.slot\)/` |
+| 21 | match | `presetStoreSource` | `/slotA: PedalState\[\] \\| null/` |
+| 22 | match | `presetStoreSource` | `/slotB: PedalState\[\] \\| null/` |
+| 23 | match | `presetStoreSource` | `/activeSlot: PresetComparisonSlot/` |
+| 24 | match | `presetStoreSource` | `/captureCurrentToSlot: \(slot: PresetComparisonSlot\) => void/` |
+| 25 | match | `presetStoreSource` | `/activateSlot: \(slot: PresetComparisonSlot\) => boolean/` |
+| 26 | match | `presetStoreSource` | `/const capturedPedals = clonePedals\(usePedalStore\.getState\(\)\.peda` |
+| 31 | match | `activateSource` | `/applyPresetPedals\(storedPedals, storedTrimDb\)/, '슬롯을 켜면 슬롯에 담긴 음량 보` |
+| 32 | match | `presetStoreSource` | `/clearAllCabinetIrs\(\` |
+| 33 | match | `panelSource` | `/applyPresetPedals\(preset\.pedals, preset\.trimDb\)/` |
+| 35 | match | `chainActionsSource` | `/clearAllCabinetIrs\(\` |
+| 38 | match | `midiSource` | `/applyPresetPedals\(preset\.pedals, preset\.trimDb\)/` |
+| 41 | match | `panelSource` | `/className="preset-ab-buttons"/` |
+| 49 | match | `abButtonsSource` | `/disabled=\{!slotA\}/` |
+| 50 | match | `abButtonsSource` | `/disabled=\{!slotB\}/` |
+| 52 | match | `panelSource` | `/<p role="status" aria-live="polite">/` |
+| 54 | match | `shortcutRoutingSource` | `/key === 't'/` |
+| 55 | match | `shortcutRoutingSource` | `/key === 'a' \\|\\| key === 'b'/` |
+| 56 | match | `shortcutRoutingSource` | `/slot: key === 'a' \? 'A' : 'B'/` |
+| 57 | match | `shortcutRoutingSource` | `/event\.repeat/` |
+| 58 | match | `shortcutRoutingSource` | `/event\.isComposing/` |
+| 59 | match | `shortcutRoutingSource` | `/event\.(?:ctrlKey\|metaKey\|altKey\|shiftKey)/` |
+| 60 | match | `keyboardSource` | `/input'[\s\S]*select'[\s\S]*textarea'[\s\S]*contenteditable/` |
+| 61 | match | `keyboardSource` | `/activateSlot\(command\.slot\)/` |
 
 ### pwa-regression.mjs
 
@@ -417,40 +417,39 @@
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
 |---:|---|---|---|
-| 80 | match | `globalSource` | `/capture: true/` |
-| 81 | match | `globalSource` | `/tagName === 'input'[\s\S]*tagName === 'select'[\s\S]*tagName === 'tex` |
-| 82 | match | `globalSource` | `/tagName === 'button'/` |
-| 83 | match | `globalSource` | `/tagName === 'a'[\s\S]*hasAttribute\('href'\)/` |
-| 84 | match | `globalSource` | `/contenteditable/` |
-| 85 | match | `globalSource` | `/\[role="button"\]/` |
-| 86 | match | `globalSource` | `/\[tabindex\]:not/` |
-| 95 | match | `globalSource` | `/command\.index < 0 \\|\\| command\.index > 14/` |
-| 96 | match | `globalSource` | `/if \(audioState\.isLoading\) return true/` |
-| 97 | match | `globalSource` | `/audioState\.isRunning[\s\S]*audioState\.stop\(\)[\s\S]*audioState\.st` |
-| 98 | match | `globalSource` | `/tapTempoTap\(\)/` |
-| 99 | match | `globalSource` | `/activateSlot\(command\.slot\)/` |
-| 100 | match | `globalSource` | `/getState\(\)\.panic\(\)/` |
-| 102 | match | `globalSource` | `/export function isEscapeOwnedByTarget/` |
-| 103 | match | `globalSource` | `/export function isShortcutBlockedByTarget/` |
-| 104 | match | `globalSource` | `/command\.type === 'panic'\) return event\.isComposing \\|\\| isEscape` |
-| 108 | match | `globalSource` | `/!command \\|\\| isShortcutBlockedByTarget\(command, event\)/` |
-| 113 | match | `globalSource.slice(modalBranch, globalEx` | `/command\?\.type === 'panic'[\s\S]*closeHelp\(\)[\s\S]*return/,` |
-| 118 | match | `routingSource` | `/event\.repeat/` |
-| 119 | match | `routingSource` | `/event\.ctrlKey \\|\\| event\.metaKey \\|\\| event\.altKey/` |
-| 120 | match | `routingSource` | `/event\.shiftKey && !isHelpKey/` |
-| 121 | match | `routingSource` | `/Digit0/` |
-| 123 | match | `helpSource` | `/role="dialog"/` |
-| 124 | match | `helpSource` | `/aria-modal="true"/` |
-| 125 | match | `helpSource` | `/aria-labelledby="shortcut-help-title"/` |
-| 126 | match | `helpSource` | `/closeButtonRef\.current\?\.focus\(\)/` |
-| 127 | match | `helpSource` | `/previousFocus\?\.isConnected[\s\S]*previousFocus\.focus\(\)/` |
-| 128 | match | `helpSource` | `/event\.key !== 'Tab'/` |
-| 129 | match | `helpSource` | `/event\.shiftKey[\s\S]*firstElement[\s\S]*lastElement/` |
-| 130 | match | `helpSource` | `/querySelectorAll<HTMLElement>\(FOCUSABLE_SELECTOR\)/` |
-| 131 | match | `helpSource` | `/onKeyDown=\{handleKeyDown\}/` |
-| 135 | match | `cssSource` | `/\.shortcut-help-backdrop/` |
-| 136 | match | `cssSource` | `/\.shortcut-help-dialog:focus-visible/` |
-| 137 | match | `cssSource` | `/@media \(prefers-reduced-motion: reduce\)/` |
+| 187 | match | `serviceSource` | `/tagName === 'input'[\s\S]*tagName === 'select'[\s\S]*tagName === 'tex` |
+| 188 | match | `serviceSource` | `/tagName === 'button'/` |
+| 189 | match | `serviceSource` | `/tagName === 'a'[\s\S]*hasAttribute\('href'\)/` |
+| 190 | match | `serviceSource` | `/contenteditable/` |
+| 191 | match | `serviceSource` | `/\[role="button"\]/` |
+| 192 | match | `serviceSource` | `/\[tabindex\]:not/` |
+| 201 | match | `serviceSource` | `/command\.index < 0 \\|\\| command\.index > 14/` |
+| 202 | match | `serviceSource` | `/if \(audioState\.isLoading\) return true/` |
+| 203 | match | `serviceSource` | `/audioState\.isRunning[\s\S]*audioState\.stop\(\)[\s\S]*audioState\.st` |
+| 204 | match | `serviceSource` | `/tapTempoTap\(\)/` |
+| 205 | match | `serviceSource` | `/activateSlot\(command\.slot\)/` |
+| 206 | match | `serviceSource` | `/getState\(\)\.panic\(\)/` |
+| 208 | match | `serviceSource` | `/export function isEscapeOwnedByTarget/` |
+| 209 | match | `serviceSource` | `/export function isShortcutBlockedByTarget/` |
+| 210 | match | `serviceSource` | `/command\.type === 'panic'\) return event\.isComposing \\|\\| isEscape` |
+| 214 | match | `serviceSource` | `/!command \\|\\| isShortcutBlockedByTarget\(command, event\)/` |
+| 220 | match | `serviceSource.slice(modalBranch, globalE` | `/command\?\.type === 'panic'[\s\S]*closeHelp\(\)[\s\S]*return/,` |
+| 225 | match | `routingSource` | `/event\.repeat/` |
+| 226 | match | `routingSource` | `/event\.ctrlKey \\|\\| event\.metaKey \\|\\| event\.altKey/` |
+| 227 | match | `routingSource` | `/SHIFT_PEDAL_KEY_CODES\.indexOf/` |
+| 228 | match | `routingSource` | `/Digit0/` |
+| 230 | match | `helpSource` | `/role="dialog"/` |
+| 231 | match | `helpSource` | `/aria-modal="true"/` |
+| 232 | match | `helpSource` | `/aria-labelledby="shortcut-help-title"/` |
+| 233 | match | `helpSource` | `/closeButtonRef\.current\?\.focus\(\)/` |
+| 234 | match | `helpSource` | `/previousFocus\?\.isConnected[\s\S]*previousFocus\.focus\(\)/` |
+| 235 | match | `helpSource` | `/event\.key !== 'Tab'/` |
+| 236 | match | `helpSource` | `/event\.shiftKey[\s\S]*firstElement[\s\S]*lastElement/` |
+| 237 | match | `helpSource` | `/querySelectorAll<HTMLElement>\(FOCUSABLE_SELECTOR\)/` |
+| 238 | match | `helpSource` | `/onKeyDown=\{handleKeyDown\}/` |
+| 244 | match | `cssSource` | `/\.shortcut-help-backdrop/` |
+| 245 | match | `cssSource` | `/\.shortcut-help-dialog:focus-visible/` |
+| 246 | match | `cssSource` | `/@media \(prefers-reduced-motion: reduce\)/` |
 
 ### tap-tempo-regression.mjs
 
@@ -462,14 +461,14 @@
 | 85 | !match | `applySource` | `/rebuildChain/` |
 | 86 | match | `audioStoreSource` | `/setGlobalBpm:[\s\S]*applyGlobalBpmToSyncedPedals\(bpm\)/` |
 | 87 | match | `audioStoreSource` | `/setTempoSync:[\s\S]*applyTempoSyncToPedal/` |
-| 93 | match | `shortcutRoutingSource` | `/key === 't'/` |
-| 94 | match | `shortcutRoutingSource` | `/event\.repeat/` |
-| 95 | match | `shortcutRoutingSource` | `/event\.isComposing/` |
-| 96 | match | `shortcutRoutingSource` | `/event\.(?:ctrlKey\|metaKey\|altKey\|shiftKey)/` |
-| 97 | match | `keyboardSource` | `/input'[\s\S]*select'[\s\S]*textarea'[\s\S]*contenteditable/` |
-| 98 | match | `keyboardSource` | `/addEventListener\('keydown',[\s\S]*capture: true/` |
-| 105 | match | `source` | `/<TapTempoControl \/>/` |
-| 106 | match | `source` | `/setTempoSync\(pedalId, checked\)/` |
+| 96 | match | `shortcutRoutingSource` | `/key === 't'/` |
+| 97 | match | `shortcutRoutingSource` | `/event\.repeat/` |
+| 98 | match | `shortcutRoutingSource` | `/event\.isComposing/` |
+| 99 | match | `shortcutRoutingSource` | `/event\.(?:ctrlKey\|metaKey\|altKey\|shiftKey)/` |
+| 100 | match | `keyboardSource` | `/input'[\s\S]*select'[\s\S]*textarea'[\s\S]*contenteditable/` |
+| 101 | match | `keyboardSource` | `/addEventListener\('keydown',[\s\S]*capture: true/` |
+| 108 | match | `source` | `/<TapTempoControl \/>/` |
+| 109 | match | `source` | `/setTempoSync\(pedalId, checked\)/` |
 
 ### tremolo-regression.mjs
 

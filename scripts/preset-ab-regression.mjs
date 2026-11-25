@@ -7,13 +7,16 @@ import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
 import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
-const [presetStoreSource, panelSource, keyboardSource, shortcutRoutingSource, chainActionsSource] = await Promise.all([
+// S2.11: 키 해석은 input/shortcutKeys.ts, 포커스 규칙·실행은 input/ShortcutService.ts, 리스너는 컴포넌트에 있다.
+const [presetStoreSource, panelSource, keyboardComponentSource, keyboardServiceSource, shortcutRoutingSource, chainActionsSource] = await Promise.all([
   readFile(new URL('../src/store/presetStore.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/PresetPanel.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/GlobalKeyboardShortcuts.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/keyboardShortcuts.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/input/ShortcutService.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/input/shortcutKeys.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/store/chainActions.ts', import.meta.url), 'utf8'),
 ]);
+const keyboardSource = `${keyboardComponentSource}\n${keyboardServiceSource}`;
 
 assert.match(presetStoreSource, /slotA: PedalState\[\] \| null/);
 assert.match(presetStoreSource, /slotB: PedalState\[\] \| null/);

@@ -1410,3 +1410,50 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - 이 Step 은 실제 장치를 보지 못했다(사람 확인 필요에 올림).
 
 ---
+
+## S2.11 키보드 단축키
+
+- 브랜치·병합: `refactor/s2-11-shortcuts` → `phase/2`. 커밋 `14de06e`(C1 — `input/` 으로 나누고 `Shift + 1~6` 추가, 도움말 표 일원화) · `f56af83`(C2 — Node 시험을 새 모듈에 맞추고 새 시험 추가) · `016fd0c`(C3 — e2e E-15 6개) · `e3516a2`(C4 — 변이 시험이 찾은 구멍을 메우는 Node 시험과 E-15 ⑦) · `8e7a3c6`(C5 — 정규식 단언 목록 재생성) · 이 보고서를 담은 문서 커밋(`docs(S2.11): …` — 기록 L-179~L-185·e2e README·README 갱신). **main 에는 병합하지 않는다**(병합하면 Pages 가 자동 배포된다). 소리가 바뀌지 않아 기준선 JSON 은 건드리지 않았다.
+- 해결 항목: R2-12(단축키 3가지 문제), D13(10~15번째 페달 `Shift + 1~6`). **설계서 '현재' 는 기준선과 달랐다**(L-180): 한글 입력 상태의 T·A·B 는 이미 동작했고(키 해석이 `code` 기준), Esc 는 S1.2 부터 녹음을 저장하는 긴급 정지였다. 실제 틈은 ① `Shift + 1~6`(L-179: L-4 의 '`0 Q W E R Y` 유지'를 뒤집지 않고 더함) ② 키를 해석하는 곳과 실행하는 곳을 `src/input/` 로 나눔(L-181) ③ 도움말이 따로 적은 목록이라 실제 키와 어긋날 수 있던 것(L-182) ④ 이것들을 지키는 E-15 시험이었다.
+- 변경 파일(13개, +944 / −288줄, 이 문서 커밋 전): 제품 `src/` 7개(+287 / −185) — 신규 `input/shortcutKeys.ts`(128줄: 키 표·`resolveShortcutCommand`·`SHORTCUT_HELP_ROWS`, 기존 `components/keyboardShortcuts.ts` 49줄을 옮겨 고침)·`input/ShortcutService.ts`(145줄: 컨트롤 포커스 규칙·`executeShortcutCommand`·`createShortcutKeydownHandler`), 고침 `components/GlobalKeyboardShortcuts.tsx`(130 → 39줄: 처리기를 만들어 전역 리스너 하나에 다는 일만)·`components/ShortcutHelp.tsx`(키 표를 그대로 그림)·`components/HistoryControls.tsx`·`hooks/useSidebar.ts`(가져오기 경로). 시험: `e2e/tests/e15-shortcuts.spec.ts`(신규 7개), `scripts/shortcuts-regression.mjs`(대폭 확장)·`tap-tempo`·`preset-ab`·`file-mode`-regression(읽는 소스 경로), `docs/refactoring/regex-assertions.md`(재생성, 줄 번호만 바뀜).
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| 한글 입력 상태 모의(`key: 'ㅅ'`, `code: 'KeyT'`) → 탭 템포 동작. A·B도 같음 | 충족 | e2e ①: `ㅅ`(KeyT)·조합 중 `Process`(KeyT) 가 탭 템포가 되고(탭 1회→2회, `preventDefault` 불림), `ㅁ`(KeyA)·`ㅠ`(KeyB, 조합 중)가 A·B 슬롯을 켠다(켜진 페달이 슬롯의 상태로 바뀌고 `aria-pressed` 가 옮겨 감). 관계없는 한글 키(`ㅋ`=KeyX)는 가로채지 않는다. Node: 한글 `ㅅ ㅁ ㅠ ㅂ ㅈ ㄷ ㄱ`(T A B Q W E R) 를 눌러 본다. **기준선도 이미 통과하는 시험이다**(L-180) |
+| 녹음 중 Esc → 정지 + 녹음 파일 남음(S1.2) | 충족 | e2e ②: 녹음 버튼을 누른 채(포커스가 버튼에 있다) 3초 뒤 Esc → 500 ms 안에 입력 트랙 ended·컨텍스트 closed·'기타 연결하기' 화면, 토스트 '… 녹음은 저장했습니다.', '다운로드' 가 켜지고 받은 파일의 길이 = 녹음 시간 ±0.5초. e2e ⑦: 도움말이 열려 있으면 Esc 는 도움말만 닫는다(포커스가 대화상자 밖이어도). **기준선도 이미 통과하는 시험이다** |
+| Shift + 1~6 → 10~15번째 페달 전환, 도움말에 표시 | 충족 | e2e ③: `Shift+Digit1`~`6` 이 Chorus·Flanger·Phaser·Tremolo·Delay·Reverb 를 하나씩 켜고(다른 페달은 그대로) 한 번 더 누르면 끄며, 윗줄 `0 Q W E R Y` 로 켠 같은 페달을 `Shift + 1~6` 으로 끌 수 있다. 한글 입력 상태·기호 `key`(`!@#$%^`)에서도 같고, `Shift+7`·`Shift+0` 은 아무 일도 없고 가로채지 않는다. e2e ④: 도움말에 'Shift + 1–6' 행이 보이고 일곱 행(`1–9 / 0 / Q W E R Y`·`Shift + 1–6`·`Space`·`T`·`A / B`·`Esc`·`?`)이 그대로 그려지며, 열려 있는 동안 Shift+1·1·T 는 아무 일도 하지 않는다. **옛 코드에서는 ③④⑥ 이 실패한다** |
+| 입력 칸에 포커스가 있을 때 단축키가 동작하지 않음 | 충족 | e2e ⑤: 프리셋 이름 입력 칸에 포커스가 있을 때 T·Shift+1·Space·A·4 를 누르면 입력 칸에 `t! a4` 가 그대로 들어가고 탭·페달·토스트는 불변, 한글 `ㅅ`·Shift+1 이벤트는 처리되지 않는다(`preventDefault` 없음). Node: 입력 칸·select·버튼 포커스에서 `createShortcutKeydownHandler` 가 아무 일도 하지 않고 `preventDefault` 도 부르지 않음 |
+| (설계서에 없는 추가 단언) 반복·Ctrl/⌘/Alt 조합·목록에 없는 키 | 충족 | e2e ⑥: 키를 누르고 있는 반복(T·1·Shift+1)·Ctrl+T·⌘+1·Alt+Shift+1·Ctrl+Shift+3·Ctrl+A·Z·Enter·Shift+T 는 처리하지도 `preventDefault` 를 부르지도 않고(브라우저 기본 동작을 가로채지 않는다), 같은 키의 반복이 아닌 입력은 처리한다 |
+
+**전후**
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| 10~15번째 페달 | 윗줄 `0 Q W E R Y` | `0 Q W E R Y` 와 **`Shift + 1~6`**(같은 여섯 페달, L-179) |
+| 키 해석·실행 위치 | `components/keyboardShortcuts.ts`(해석, 49줄) + `GlobalKeyboardShortcuts.tsx`(포커스 규칙·실행·리스너, 130줄) | `input/shortcutKeys.ts`(해석·키 표·도움말 표) + `input/ShortcutService.ts`(포커스 규칙·실행·keydown 처리기) + 컴포넌트(리스너·도움말 열기, 39줄) |
+| 도움말 키 목록 | 컴포넌트 안의 따로 적은 상수 6행 | 키 표 옆의 `SHORTCUT_HELP_ROWS` 7행 — 시험이 적힌 키를 눌러 봄. Esc 행에 '녹음 중이면 녹음을 저장' |
+| 한글 입력·Esc 긴급 정지·입력 칸 가드 | 이미 동작(시험은 일부만) | 같은 동작, 한글 T·A·B·Q·W·E·R(Node)와 T·A·B(e2e)·Esc 녹음 저장·입력 칸 포커스를 시험이 지킴 |
+| `npm test` | 42개 통과(395.0초) | 42개 통과(413.3초) |
+| `npm run e2e` | 238개 통과(10.2분) | 245개 통과(10.5분 — 새 시험 7개) |
+| 프로브 | 24개, 값 1,696개 | 24개, 값 1,696개(불변) |
+
+- 검증
+  - `npm run typecheck`·`npm run lint`·`npx tsc -p tsconfig.e2e.json --noEmit`·`npx eslint e2e --ext .ts` 오류 0(`npm run lint` 는 전체 e2e 를 돌려 `test-results/` 를 비운 뒤에 돌렸다). 정규식 단언 목록은 `docs/refactoring/tools/list-regex-assertions.mjs` 의 출력과 같다.
+  - **새 시험이 정말 잡는지**: (1) **옛 코드에 돌려 보았다**. e2e E-15 시험 파일을 옛 코드(`phase/2` 의 `561a947`)의 빌드에 돌리면 **③④⑥ 이 실패하고**(`Shift + 1~6` 도, 도움말의 'Shift + 1–6' 행도 없다) ①②⑤⑦는 통과한다 — 기준선이 이미 맞는 동작(L-180)이라 당연하다. 이 시험들은 이후 리팩토링이 한글 입력·Esc 녹음 저장·입력 칸 가드를 깨뜨리는 것을 막는 회귀 방지 시험이다. (2) **변이 시험**: 구현에 56가지 결함(`src/input/shortcutKeys.ts` 31 — 반복·Ctrl·⌘·Alt 무시 빼기, 도움말 키 `?`·Shift+Slash 빼기, 조합 중 처리, Shift 분기·첫 인덱스·키 개수·키 표 오타·T/A/B/Space/Esc 매핑·code 대신 key 판단·fallback 의 Shift·대소문자·`Esc`/`Spacebar`, 도움말 표의 라벨·shift 표시·Esc 문구·슬롯 바꿔치기 / `src/input/ShortcutService.ts` 17 — 도움말이 열려 있을 때의 분기·`stopPropagation`·`preventDefault`·`closeHelp`, 막는 규칙(조합 중·Esc 소유 대상·select·dialog·range 입력)·페달 인덱스·Esc·탭 실행·슬롯 실행 결과 / `components/GlobalKeyboardShortcuts.tsx` 5 — 캡처 옵션·`helpOpenRef` 갱신·도움말 상태·상태 낭독 문구 / `components/ShortcutHelp.tsx` 3 — 행 빼기·라벨↔설명 바꿔치기)을 하나씩 넣고 Node 시험 5개(`shortcuts`·`tap-tempo`·`preset-ab`·`file-mode`·`responsive-a11y`), 살아남으면 빌드해서 e2e(E-15 + E-01 의 도움말 대화상자 시험)를 돌렸다. 처음에 **52개를 잡고 4개가 살아남았다**(L-185): 실행 못 한 키의 `preventDefault`(V6)·빈 슬롯의 결과값(V17)·캡처 옵션(G1)·포커스가 대화상자 밖일 때의 Esc(G3). 시험을 보강한 뒤 4개 모두 잡는다 — **56개 모두 잡힘**(Node 시험 53개, e2e 3개: 상태 낭독 문구·도움말 열기·도움말 상태 갱신). 동작이 같은 변이 하나(V1: `index > 14` → `> 15`)는 소스 단언만이 잡는다. 사용한 변이 도구는 `/tmp` 에 있어 저장소에 넣지 않았다.
+- 만난 문제
+  - **설계서 '현재' 가 기준선과 달랐다**(L-180). 한글 입력·Esc 녹음 저장은 이미 되어 있었다.
+  - **파일을 옮기니 시험 5개가 소스를 못 읽었다**: `tap-tempo`·`preset-ab`·`file-mode`·`shortcuts` 는 옛 경로를 읽고 있었다. 읽는 경로를 새 파일로 고쳤다(옛 정규식 단언은 의미를 지킨 채 새 위치를 가리킨다).
+  - **도움말이 열려 있을 때의 Esc 우선순위를 보는 소스 단언을 동작 시험으로 바꿨다**: 처리기 하나로 합치면서 `createShortcutKeydownHandler` 에 도움말 분기가 들어가, 가짜 이벤트로 눌러 `closeHelp`·`preventDefault`·`stopPropagation` 호출과 긴급 정지가 불리지 않음을 본다.
+  - **변이가 시험의 구멍 4곳을 찾았다**(L-185). 가장 중요한 것은 포커스가 대화상자 밖일 때의 Esc(G3) — 기존 E-01 은 포커스가 대화상자 안에 있어 대화상자 자신이 Esc 를 받는 경로만 지났다.
+- 사람 확인 필요
+  - **실제 한글 입력기**: Windows·macOS 한국어 입력기로 한글 모드에서 T·A·B·Q·W·E·R·Y·`Shift + 1~6` 이 동작하는지(시험은 같은 모양의 이벤트를 보낸 것이다, L-184). 특히 조합 중인 글자가 있는 상태에서의 Esc.
+  - **실제 키보드 배열**: 한국어 키보드뿐 아니라 영문(미국)·일본어·한영 겸용 배열에서 `Shift + 1~6` 과 `?`(Shift + `/`)가 같은 키에서 나오는지. 물리 키 기준이라 배열이 달라도 같은 자리여야 한다.
+  - **문구**: 도움말의 'Shift + 1–6'·Esc 행 설명(L-182). 스크린 리더가 읽어 주는 방식.
+  - **내가 정한 정책**: 윗줄 `0 Q W E R Y` 를 지우지 않고 `Shift + 1~6` 을 더한 것(L-179).
+- 남은 위험
+  - 한글 입력기가 보내는 이벤트를 실제로 만들지 못했다(L-184). 입력기에 따라 `isComposing`·`code` 가 드물게 다르면 시험이 놓칠 수 있다(`code` 가 비는 환경은 `key` 로 알아보되 조합 중이면 무시한다).
+  - `Shift + 1~6` 은 `key` 가 아니라 `code`(`Digit1`~`Digit6`)로 알아본다. 숫자 줄이 아닌 키패드(`Numpad1`)는 단축키가 아니다(기존과 같다).
+  - 도움말과 실제 키는 같은 표에서 나오지만 도움말 설명 문장 자체의 정확성은 시험이 보지 못한다(Esc 행의 '녹음' 한 단어와 Shift 행의 '10–15번째 페달'만 확인).
+  - 새 단축키를 더하면 `shortcutKeys.ts` 의 키 표와 도움말 행(`samples` 포함)을 함께 고쳐야 한다(Node 시험이 어긋나면 알려 준다).
+
+---
