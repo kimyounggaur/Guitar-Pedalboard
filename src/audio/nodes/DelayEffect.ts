@@ -22,7 +22,7 @@ export class DelayEffect extends BaseEffect {
   private readonly pingPongRightFeedback: GainNode;
 
   constructor(context: BaseAudioContext, pedal: PedalState) {
-    super(context, pedal);
+    super(context, pedal, { mixLaw: 'additive' });
     this.delay = context.createDelay(2);
     this.feedback = context.createGain();
     this.tone = context.createBiquadFilter();
