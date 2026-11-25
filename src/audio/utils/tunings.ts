@@ -143,12 +143,9 @@ export function getPitchReading(
       const deviation = candidate.cents - octaves * 1200;
       if (Math.abs(deviation) > OCTAVE_MATCH_TOLERANCE_CENTS) continue;
 
-      // 가장 적게 올라간 줄, 같으면 낮은 줄(번호가 큰 줄): 낮은 줄은 기본음이 약해 한 옥타브 위로 잘못 읽히기 쉽다.
-      if (
-        match === null ||
-        octaves < match.octaves ||
-        (octaves === match.octaves && candidate.stringNumber > match.string.stringNumber)
-      ) {
+      // 가장 적게 올라간 줄로 안내한다(E5 는 6번 줄 E2 의 세 옥타브 위이기도 하지만 1번 줄 E4 의 한 옥타브 위로 말한다).
+      // 기본 튜닝들에서 두 줄이 같은 음 ±100센트 안에 겹치는 일은 없어서 같은 단계의 동률은 생기지 않는다.
+      if (match === null || octaves < match.octaves) {
         match = { string: candidate, octaves, deviation };
       }
     }
