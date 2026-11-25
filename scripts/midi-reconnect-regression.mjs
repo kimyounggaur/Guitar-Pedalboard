@@ -409,6 +409,51 @@ const CC = (value, channel = 1, cc = 64) => msg([0xb0 | (channel - 1), cc, value
   assert.equal(noteOffZero.state.mappings.drive.mode, 'toggle', 'Note On 세기 0 도 뗌이다');
 }
 
+// ⑬ 토글: 누름이 기록되지 않은 채 뗌만 오면(장치를 막 꽂았거나 방식을 바꾼 직후) 전환하지 않는다
+{
+  const h = harness({ mappings: { drive: { channel: 1, cc: 64, value: 127, mode: 'toggle' } } });
+  h.router.handle(CC(0), 0);
+  assert.equal(h.log.active.length, 0, '뗌만 온 것은 전환이 아니다');
+  h.router.handle(CC(127), 10);
+  assert.equal(h.state.pedals.drive, true, '그 뒤 첫 누름은 전환한다');
+}
+
+// ⑭ 학습은 그 페달의 눌림 기억을 비운다: 뗌 없이 다시 학습한 뒤 첫 누름이 '이미 눌려 있음'으로 먹히지 않는다
+{
+  const h = harness({ mappings: { drive: { channel: 1, cc: 64, value: 127, mode: 'toggle' } } });
+  h.router.handle(CC(127), 0);
+  assert.equal(h.state.pedals.drive, true);
+  h.state.learning = 'drive';
+  h.router.handle(CC(127, 1, 70), 100);
+  h.router.handle(CC(0, 1, 70), 200);
+  assert.equal(h.state.mappings.drive.mode, 'toggle');
+  h.router.handle(CC(127, 1, 70), 5000);
+  assert.equal(h.state.pedals.drive, false, '새로 학습한 토글의 첫 누름이 전환한다');
+}
+
+// ⑮ 이미 끝난 판정의 타이머 콜백이 늦게 불려도 알림은 없다 / 판정 중 매핑이 다른 컨트롤로 바뀌었으면 래치 알림도 없다
+{
+  const h = harness({ learning: 'drive' });
+  h.router.handle(CC(127), 0);
+  h.router.handle(CC(0), 100);
+  assert.equal(h.log.notices.length, 1, '토글 알림 한 번');
+  h.timers[0].callback();
+  assert.equal(h.log.notices.length, 1, '끝난 판정은 시간이 다 돼도 다시 알리지 않는다');
+  assert.equal(h.state.mappings.drive.mode, 'toggle');
+
+  const swapped = harness({ learning: 'drive' });
+  swapped.router.handle(CC(127), 0);
+  swapped.state.mappings.drive = { channel: 1, cc: 70, value: 127 };
+  swapped.timers[0].callback();
+  assert.equal(swapped.log.notices.length, 0, '다른 컨트롤이 된 매핑에 래치 알림을 하지 않는다');
+
+  const kept = harness({ learning: 'drive' });
+  kept.router.handle(CC(127), 0);
+  kept.timers[0].callback();
+  assert.equal(kept.log.notices.length, 1);
+  assert.equal(kept.log.notices[0].mode, 'momentary', '1초 안에 뗌이 없으면 래치');
+}
+
 // ---------------------------------------------------------------------------------------------
 // 2. 서비스
 // ---------------------------------------------------------------------------------------------
@@ -428,6 +473,8 @@ function serviceHarness() {
   assert.equal(record.requests, 0);
   await assert.rejects(() => service.connect(), /지원하지 않는/);
   assert.equal(record.requests, 0);
+  service.dispose();
+  assert.equal(service.getState().link, 'unsupported', 'dispose 뒤에도 지원하지 않는 브라우저는 그대로다');
 }
 
 // ① 권한이 이미 허용(granted): 사용자 동작 없이 연결하고 리스너를 붙인다
@@ -601,6 +648,92 @@ function serviceHarness() {
   assert.equal(slow.requests, 0, '권한 조회 중에 끝난 세션은 요청하지 않는다');
 }
 
+// ⑦-2 권한이 허용이 아닌 값으로 바뀌어도 연결하지 않는다 / 값이 그대로 상태에 반영된다 / 바뀐 뒤의 옛 감시는 무시한다
+{
+  const record = installNavigator({ permission: 'prompt' });
+  record.access = new MockAccess([new MockInput('in-1', 'Foot Controller')]);
+  const { service } = serviceHarness();
+  await service.connectIfAllowed();
+  record.status.set('denied');
+  await sleep(10);
+  assert.equal(record.requests, 0, '막힘으로 바뀌어도 요청하지 않는다');
+  assert.equal(service.getState().permission, 'denied');
+  record.status.set('prompt');
+  await sleep(10);
+  assert.equal(record.requests, 0, '다시 묻기로 바뀌어도 요청하지 않는다');
+  assert.equal(service.getState().permission, 'prompt');
+  record.status.set('granted');
+  await sleep(10);
+  assert.equal(record.requests, 1);
+  assert.equal(service.getState().permission, 'granted');
+  service.dispose();
+}
+{
+  const first = new MockPermission('prompt');
+  const second = new MockPermission('prompt');
+  const record = installNavigator({ permission: 'prompt' });
+  record.status = first;
+  record.access = new MockAccess([new MockInput('in-1', 'Foot Controller')]);
+  const { service } = serviceHarness();
+  await service.connectIfAllowed();
+  const staleHandler = first.onchange;
+  assert.equal(typeof staleHandler, 'function');
+  record.status = second;
+  await service.connectIfAllowed();
+  assert.equal(first.onchange, null, '새 권한 감시로 바뀌면 옛 것은 뗀다');
+  assert.equal(typeof second.onchange, 'function');
+  first.state = 'granted';
+  staleHandler({});
+  await sleep(10);
+  assert.equal(record.requests, 0, '바뀌기 전의 옛 권한 감시가 늦게 불려도 연결하지 않는다');
+  assert.equal(service.getState().permission, 'prompt');
+  service.dispose();
+}
+
+// ⑦-3 이미 연결돼 있을 때 다시 부르면 지금 꽂힌 장치를 다시 훑는다(statechange 를 놓쳤어도)
+{
+  const first = new MockInput('in-1', 'Foot Controller');
+  const record = installNavigator({ permission: 'granted' });
+  record.access = new MockAccess([first]);
+  const { service } = serviceHarness();
+  await service.connectIfAllowed();
+  const second = new MockInput('in-2', 'Backup');
+  record.access.inputs.set(second.id, second);
+  await service.connectIfAllowed();
+  assert.ok(second.onmidimessage, 'connectIfAllowed 가 놓친 장치에 붙는다');
+  const third = new MockInput('in-3', 'Third');
+  record.access.inputs.set(third.id, third);
+  await service.connect();
+  assert.ok(third.onmidimessage, 'connect 가 놓친 장치에 붙는다');
+  assert.equal(record.requests, 1, '다시 훑을 뿐 새로 요청하지 않는다');
+
+  // 같은 장치의 리스너를 누가 떼어 갔다면 다시 붙인다
+  first.onmidimessage = null;
+  record.access.fire();
+  assert.ok(first.onmidimessage, '떨어진 리스너를 다시 붙인다');
+  service.dispose();
+}
+
+// ⑦-4 dispose 뒤의 새 연결은 dispose 전의 대기 중인 요청을 이어받지 않고 새로 요청한다
+{
+  const resolvers = [];
+  const record = installNavigator({
+    permission: 'prompt',
+    requestImpl: () => new Promise((resolve) => resolvers.push(resolve)),
+  });
+  const { service } = serviceHarness();
+  const old = service.connect();
+  service.dispose();
+  const fresh = service.connect();
+  assert.equal(record.requests, 2, '끝난 세션의 대기 요청을 재사용하지 않는다');
+  const input = new MockInput('in-1', 'Foot Controller');
+  resolvers[1](new MockAccess([input]));
+  resolvers[0](new MockAccess([]));
+  await Promise.all([old, fresh]);
+  assert.ok(input.onmidimessage, '새 세션에 붙는다');
+  service.dispose();
+}
+
 // ⑧ 카드 표시 문구
 assert.equal(describeMidiConnection('connected', 1), '연결됨');
 assert.equal(describeMidiConnection('connected', 2), '연결됨');
@@ -722,6 +855,43 @@ audio().setMidiMode('delay', 'momentary');
 audio().setMidiMode('delay', 'toggle');
 storeInput.emit([0xb0, 82, 127]);
 assert.equal(pedalOn('delay'), false, '방식을 바꾼 뒤 첫 누름이 반복값으로 먹히지 않는다');
+
+// 없는 페달의 학습은 시작하지 않고, 학습 중 페달이 사라지면 학습을 끝낸다
+await audio().startMidiLearn('ghost');
+assert.equal(audio().midiLearningPedalId, null, '없는 페달은 학습하지 않는다');
+useAudioStore.setState({ midiLearningPedalId: 'ghost' });
+storeInput.emit([0xb0, 99, 127]);
+assert.equal(audio().midiLearningPedalId, null, '학습 중 페달이 사라지면 학습을 끝낸다');
+assert.equal('ghost' in audio().midiMappings, false);
+
+// 학습 결과 알림은 8초 동안 보인다
+assert.equal(toggleToast.durationMs, 8000, '토글 알림은 8초');
+assert.equal(latchToast.durationMs, 8000, '래치 알림은 8초');
+
+// 학습이 끝나면 이전 오류 문구가 사라진다
+useToastStore.getState().clear();
+await audio().startMidiLearn('delay');
+useAudioStore.setState({ midiError: '아직 남은 오류' });
+storeInput.emit([0xb0, 83, 127]);
+assert.equal(audio().midiError, null, '학습에 성공하면 이전 오류를 지운다');
+assert.equal(audio().midiLearningPedalId, null);
+// 방식을 가리는 도중에 앱을 닫으면(dispose) 1초 뒤에 알림이 뜨지 않는다
+audio().disposeMidi();
+await sleep(MIDI_MODE_PROBE_MS + 150);
+assert.equal(useToastStore.getState().toasts.some((toast) => toast.key === 'midi-mode:delay'), false, 'dispose 뒤에는 방식 알림이 없다');
+
+// 연결 도중 앱이 닫히면(dispose) 늦게 실패해도 학습 오류를 띄우지 않는다
+{
+  let rejectRequest;
+  installNavigator({ permission: 'prompt', requestImpl: () => new Promise((_, reject) => (rejectRequest = reject)) });
+  const learning = audio().startMidiLearn('drive');
+  assert.equal(audio().midiLearningPedalId, 'drive');
+  audio().disposeMidi();
+  rejectRequest(new Error('late failure'));
+  await learning;
+  assert.equal(audio().midiError, null, '끝난 세션의 실패는 알리지 않는다');
+  assert.equal(audio().midiLearningPedalId, null);
+}
 
 // 연결 실패는 오류 문구를 남기고 banner 가 읽는 상태는 denied
 audio().disposeMidi();

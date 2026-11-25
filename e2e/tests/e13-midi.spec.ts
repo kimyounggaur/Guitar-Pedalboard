@@ -13,6 +13,7 @@ import { mockMidi, type MidiMock, type MidiMockOptions } from '../helpers/mocks'
 import { pedalGroup, readLocal, seedStorage, stompOf, toastOf } from '../helpers/storage';
 
 const MIDI_KEY = 'guitar-pedalboard:midi';
+const ADVANCED_KEY = 'guitar-pedalboard:midi-advanced';
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } as const;
 const BANNER_BUTTON = 'MIDI 풋스위치 다시 연결';
 
@@ -257,6 +258,47 @@ test.describe('E-13 MIDI 풋스위치', () => {
     await midi.send(id, [0xb0, 86, 127]);
     await midi.send(id, [0xb0, 86, 0]);
     await expectOn(page, 'Delay', true);
+
+    // 같은 버튼으로 래치로 되돌릴 수 있다(저장된 이름은 예전부터 쓰던 'momentary')
+    await modeButton(page, 'Delay').click();
+    await expect(modeButton(page, 'Delay')).toHaveText('방식: 래치');
+    expect((await storedMapping(page, 'delay'))?.mode).toBe('momentary');
+    await midi.send(id, [0xb0, 86, 0]);
+    await expectOn(page, 'Delay', false);
+  });
+
+  test('E-13 저장된 매핑이 없을 때 학습이 막히면 오류만 알리고 재연결 배너는 띄우지 않는다', async ({ page }) => {
+    const midi = await openWithMidi(page, { permission: 'denied' }, false);
+    await pedalGroup(page, 'Delay').getByRole('button', { name: 'Delay MIDI 학습' }).click();
+    await expect(page.locator('.midi-advanced-controls [role="status"]')).toContainText('MIDI 접근 권한을 확인할 수 없습니다.');
+    await expect(midiStatus(page, 'Delay')).toHaveText('MIDI 미매핑');
+    await expect(banner(page)).toHaveCount(0);
+    expect((await midi.stats()).requests).toBe(1);
+  });
+
+  test('E-13 고급 설정(볼륨·와우·프리셋 CC)만 저장돼 있어도 열 때 권한 창은 뜨지 않고, 설정의 연결·저장 버튼은 사용자 동작으로 요청한다', async ({ page }) => {
+    const midi = await mockMidi(page, { permission: 'prompt' });
+    await seedStorage(page, { [ADVANCED_KEY]: JSON.stringify({ channel: 1, volumeCc: 7, wahCc: null, programs: {} }) });
+    await openApp(page);
+    await expect(banner(page)).toBeVisible();
+    expect(await midi.stats()).toEqual({ requests: 0, connectedInputs: 0 });
+    expect((await midi.permission()).prompts, '열 때 권한 창이 뜨면 안 된다').toBe(0);
+
+    // 설정 안의 'MIDI 연결' 버튼은 사용자가 누른 것이다
+    await page.locator('.midi-advanced-controls > summary').click();
+    await page.getByRole('button', { name: 'MIDI 연결', exact: true }).click();
+    await expect.poll(async () => (await midi.permission()).prompts).toBe(1);
+    await expect(banner(page)).toHaveCount(0);
+  });
+
+  test('E-13 고급 설정을 저장하는 것도 사용자 동작이라 그때 권한을 요청한다', async ({ page }) => {
+    const midi = await mockMidi(page, { permission: 'prompt' });
+    await openApp(page);
+    expect((await midi.permission()).prompts).toBe(0);
+    await page.locator('.midi-advanced-controls > summary').click();
+    await page.locator('.midi-advanced-controls').getByLabel('마스터 볼륨').selectOption('7');
+    await expect.poll(async () => (await midi.permission()).prompts).toBe(1);
+    expect(JSON.parse((await readLocal(page, ADVANCED_KEY)) ?? '{}').volumeCc).toBe(7);
   });
 
   test('E-13 장치를 뺐다 다시 꽂으면 리스너가 저절로 다시 붙는다(같은 장치·새 장치 모두)', async ({ page }) => {
