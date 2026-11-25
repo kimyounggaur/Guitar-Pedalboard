@@ -30,10 +30,9 @@ export function SliderControl({ label, value, min, max, step, unit = '', display
         <span title={label}>{label}</span>
         <output>{shownValue}</output>
       </span>
-      <span className="knob-control-shell" style={{ '--knob-rotation': `${rotation}deg`, '--knob-fill': `${clampedProgress * 75}%` } as CSSProperties}>
+      <span className="knob-control-shell" {...dragHandlers} style={{ '--knob-rotation': `${rotation}deg`, '--knob-fill': `${clampedProgress * 75}%` } as CSSProperties}>
         <i aria-hidden="true" />
         <input type="range" min={min} max={max} step={step} value={value} aria-label={label}
-          {...dragHandlers}
           aria-valuetext={`${label} ${accessibleValue}`} onChange={(event) => onChange(Number(event.currentTarget.value))} />
       </span>
       <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />

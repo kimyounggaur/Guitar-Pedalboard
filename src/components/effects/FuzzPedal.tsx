@@ -44,7 +44,7 @@ function FuzzKnob({ label, value, min, max, step, size = 'large', ariaValueText,
   return (
     <div className={`fuzz-knob fuzz-knob-${size}`}>
       <span
-        className="fuzz-knob-shell"
+        className="fuzz-knob-shell" {...dragHandlers}
         style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}
       >
         <i aria-hidden="true" />
@@ -54,7 +54,6 @@ function FuzzKnob({ label, value, min, max, step, size = 'large', ariaValueText,
           max={max}
           step={step}
           value={value}
-          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${accessibleValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}

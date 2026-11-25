@@ -49,12 +49,14 @@ test.describe('F-1 그래픽 EQ 숫자 입력이 화면을 덮던 결함', () =>
     await expect(number).toHaveCSS('pointer-events', 'none');
   });
 
-  test('F-1 레일 안의 range 입력은 포인터를 받는다(드래그 대상이 유지된다)', async ({ page }) => {
+  // S4.4 부터 끌기는 레일(`[data-knob-drag]`)이 받고 레일 안의 투명 range 는 포인터를 받지 않는다(`pointer-events: none`).
+  // 그래서 '숫자 입력이 레일을 덮지 않는다'는 레일의 가운데 점을 받는 것이 레일 자신(또는 그 안쪽 장식)이라는 것으로 본다.
+  test('F-1 레일은 포인터를 받는다(숫자 입력이 덮지 않고, 드래그 대상이 유지된다)', async ({ page }) => {
     await openApp(page);
-    const ranges = page.locator('.vertical-fader-rail input[type="range"]');
-    await expect(ranges).toHaveCount(GRAPHIC_EQ_FADERS);
+    const rails = page.locator('.vertical-fader-rail[data-knob-drag]');
+    await expect(rails).toHaveCount(GRAPHIC_EQ_FADERS);
     for (let index = 0; index < GRAPHIC_EQ_FADERS; index += 1) {
-      const result = await reachable(ranges.nth(index));
+      const result = await reachable(rails.nth(index));
       expect(result, `페이더 ${index + 1}`).toMatchObject({ reachable: true });
     }
   });
@@ -129,10 +131,12 @@ test.describe('F-3 페달 카드 위에서 시작한 터치 스크롤', () => {
 
 // F-4(S1.8 에서 고침, REFACTOR_LOG L-55·L-77): 노브의 장식 층(링·바늘·가운데 캡)이 투명한 range 입력의 가운데를 덮어,
 // 마우스로 노브 한가운데를 끌어도 값이 바뀌지 않았다. 데스크톱 화면의 range 입력 101개 중 13개였다.
-test.describe('F-4 노브 가운데를 눌러도 입력이 포인터를 받는다', () => {
+// S4.4 부터 끌기는 노브의 껍데기(`[data-knob-drag]`)가 받고 투명 range 는 포인터를 받지 않는다(`pointer-events: none`).
+// 그래서 '가운데 점을 받는 것'은 입력 자신이거나(껍데기가 없는 일반 슬라이더) 그 입력을 품은 끌기 껍데기의 안쪽이어야 한다.
+test.describe('F-4 노브 가운데를 눌러도 끌기를 받는다', () => {
   test.use({ viewport: { width: 1920, height: 1080 } });
 
-  test('F-4 모든 노브 입력의 가운데 점을 받는 것은 입력 자신이다', async ({ page }) => {
+  test('F-4 모든 노브 입력의 가운데 점을 받는 것은 입력 자신이거나 그 입력을 품은 끌기 껍데기다', async ({ page }) => {
     await openApp(page);
     const blocked = await page.evaluate(async () => {
       const found: string[] = [];
@@ -142,14 +146,16 @@ test.describe('F-4 노브 가운데를 눌러도 입력이 포인터를 받는�
         const rect = input.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) continue;
         const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-        if (hit !== input) {
+        const shell = input.closest('[data-knob-drag]');
+        const receives = shell ? hit !== null && shell.contains(hit) : hit === input;
+        if (!receives) {
           const card = input.closest('.pedal-card')?.getAttribute('aria-label') ?? '?';
           found.push(`${card} / ${input.getAttribute('aria-label') ?? '?'} ← ${hit ? `${hit.tagName.toLowerCase()}.${String((hit as HTMLElement).className)}` : 'null'}`);
         }
       }
       return found;
     });
-    expect(blocked, '가운데 점을 입력이 아닌 요소가 받는 노브').toEqual([]);
+    expect(blocked, '가운데 점을 끌기 껍데기(또는 일반 슬라이더 자신)가 받지 않는 노브').toEqual([]);
   });
 
   // 전에는 값이 그대로였던 노브들(장식 층 종류별로 하나씩): Noise Gate(`i` 캡), Chorus(공용 껍데기 바늘), Drive(튜브 껍데기), Reverb(리버브 껍데기).

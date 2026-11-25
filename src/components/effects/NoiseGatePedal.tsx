@@ -33,7 +33,7 @@ function NoiseGateKnob({ label, value, min, max, step, className = '', ariaValue
   return (
     <div className={`noise-gate-knob ${className}`}>
       <span
-        className="noise-gate-knob-shell"
+        className="noise-gate-knob-shell" {...dragHandlers}
         style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}
       >
         <input
@@ -42,7 +42,6 @@ function NoiseGateKnob({ label, value, min, max, step, className = '', ariaValue
           max={max}
           step={step}
           value={value}
-          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${ariaValueText}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}

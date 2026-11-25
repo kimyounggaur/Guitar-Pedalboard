@@ -105,8 +105,8 @@
   width: calc(100% + 22px);
   height: calc(100% + 22px);
   opacity: 0;
-  cursor: pointer;
-  touch-action: none;
+  /* S4.4: 포인터 입력은 껍데기가 받는다(accessibility.css, useKnobDrag). 투명 range 는 키보드·보조기기만 받는다. */
+  pointer-events: none;
 }
 
 .select-control {

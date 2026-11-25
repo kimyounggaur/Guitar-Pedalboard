@@ -32,12 +32,12 @@ function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFad
   const clampedProgress = Math.min(Math.max(progress, 0), 1);
   const position = 100 - clampedProgress * 100;
   const key = ({ 'Low Cut': 'lowCut', Bass: 'bassGain', Mid: 'midGain', 'Mid Hz': 'midFreq', 'Mid Q': 'midQ', Treble: 'trebleGain', Presence: 'presenceGain', Level: 'level' } as Record<string, string>)[label];
-  const dragHandlers = useKnobDrag(value, min, max, step, onChange, knobDefault('eq', key));
+  const dragHandlers = useKnobDrag(value, min, max, step, onChange, knobDefault('eq', key), { touchAxis: 'y' });
 
   return (
     <div className="graphic-eq-fader">
       <span>{label}</span>
-      <span className="graphic-eq-slot">
+      <span className="graphic-eq-slot" {...dragHandlers}>
         <span className="graphic-eq-scale" aria-hidden="true" />
         <span className="graphic-eq-thumb" style={{ top: `${position}%` }} aria-hidden="true" />
         <input
@@ -46,7 +46,6 @@ function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFad
           max={max}
           step={step}
           value={value}
-          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}

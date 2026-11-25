@@ -18,6 +18,16 @@ assert.equal(knobDragValue(50, -20, 0, 100, 1), 40);
 assert.equal(knobDragValue(50, 1000, 0, 100, 1), 100);
 assert.equal(knobDragValue(50, -1000, 0, 100, 1), 0);
 assert.equal(knobDragValue(0.5, 25, 0, 1, 0.01), 0.63);
+// S4.4: 200 px = 전체 범위(위로 100 px = 50%), Shift(정밀) = 1/10
+assert.equal(knobDragValue(0, 100, 0, 100, 1), 50);
+assert.equal(knobDragValue(0, 100, 0, 100, 1, true), 5);
+assert.equal(knobDragValue(50, -100, 0, 100, 1, true), 45);
+assert.equal(knobDragValue(1, 100, 0.2, 6, 0.1, true), 1.3);
+assert.equal(knobDragValue(0, 100, 0, 100, 1, false), knobDragValue(0, 100, 0, 100, 1), 'fine 을 주지 않으면 일반 끌기');
+// Delay 시간(20~2000 ms, 1 ms 단위): 1 px 에 일반 ≤ 10 ms, Shift ≤ 1 ms(옛 33 ms)
+assert.ok(knobDragValue(20, 1, 20, 2000, 1) - 20 > 0 && knobDragValue(20, 1, 20, 2000, 1) - 20 <= 10);
+assert.ok(knobDragValue(20, 1, 20, 2000, 1, true) - 20 <= 1);
+assert.ok(knobDragValue(20, 20, 20, 2000, 1, true) - 20 >= 15, 'Shift 로 20 px 끌면 20 ms 안팎(너무 둔하지 않다)');
 const before = usePedalStore.getState().pedals;
 usePedalStore.getState().updatePedalParam('drive', 'drive', 43);
 const after = usePedalStore.getState().pedals;
@@ -45,4 +55,6 @@ assert.ok(syncInputs.some((input) => input.includes('aria-label="D.Time 값 직�
 const freeMarkup = renderToStaticMarkup(createElement(DelayPedal, { pedalId: delay.id, params: { ...delay.params, sync: false }, onChange() {} }));
 const freeInput = [...freeMarkup.matchAll(/<input\b[^>]*>/g)].map((match) => match[0]).find((input) => input.includes('aria-label="D.Time 값 직접 입력"'));
 assert.ok(freeInput && !freeInput.includes('disabled'));
+assert.ok(freeMarkup.includes('data-knob-drag'), 'Delay 노브의 끌기 껍데기에 표지가 있다(S4.4: 포인터는 입력이 아니라 껍데기가 받는다)');
+assert.ok(![...freeMarkup.matchAll(/<input\b[^>]*>/g)].some((match) => match[0].includes('data-knob-drag')), '끌기 핸들러는 range 입력이 아니라 껍데기에 있다');
 console.log('Knob drag and unchanged pedal identity regression passed.');

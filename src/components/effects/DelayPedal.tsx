@@ -150,14 +150,13 @@ function DelayKnob({ label, value, min, max, step = 1, ariaValueText, disabled =
 
   return (
     <div className="delay-knob" title={disabled ? 'Sync 사용 중에는 템포와 음표 단위로 시간이 결정됩니다.' : undefined} style={disabled ? { opacity: 0.55 } : undefined}>
-      <span className="delay-knob-shell" style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}>
+      <span className="delay-knob-shell" {...dragHandlers} style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}>
         <input
           type="range"
           min={min}
           max={max}
           step={step}
           value={value}
-          {...dragHandlers}
           disabled={disabled}
           aria-disabled={disabled || undefined}
           aria-label={label}
