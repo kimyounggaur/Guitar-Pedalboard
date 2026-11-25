@@ -4,6 +4,8 @@
 // 측정만 한다. 목표값(설계서의 '목표' 열)을 넘는지 판정하는 일은 각 Step 의 수용 기준이 맡는다.
 import type { MonitorMsg } from '../engine/guardSpec';
 import { CompressorEffect } from '../nodes/CompressorEffect';
+import { mixGains } from '../nodes/mixLaw';
+import { getPhaserWetMakeup, PHASER_CENTER_FREQUENCY } from '../nodes/PhaserEffect';
 import {
   FUZZ_GATE_ATTACK_MS,
   FUZZ_GATE_HOLD_MS,
@@ -776,7 +778,7 @@ const p11: ProbeDefinition = {
   id: 'P-11',
   title: 'Flanger 노치',
   describe:
-    'REF-NOISE(−20 dBFS)를 Flanger 하나로 통과시켜 전달함수(H1)의 노치를 찾는다. static: 지연 2 ms 고정(LFO 깊이 0)에서 첫 노치와 간격(피드백 0·Mix 50% 와 기본값 두 가지). sweep: 기본값으로 LFO 한 주기(4초) 동안 첫 노치가 움직이는 범위.',
+    'REF-NOISE(−20 dBFS)를 Flanger 하나로 통과시켜 전달함수(H1)의 노치를 찾는다. static: 지연 2 ms 고정(LFO 깊이 0)에서 첫 노치와 간격(피드백 0·Mix 50% 와 기본값 두 가지). sweep: 기본값으로 LFO 한 주기(4초) 동안 첫 노치가 움직이는 범위. sweep.comb: 같은 스윕을 피드백 0·Mix 50%(깊은 노치)로 잰 범위(S3.4 수용 기준은 이쪽).',
   steps: 'S3.4',
   async run(ctx) {
     const rate = ctx.sampleRate;
@@ -807,36 +809,70 @@ const p11: ProbeDefinition = {
     }
 
     // LFO 한 주기(0.25 Hz → 4초) 동안 첫 노치의 위치. 프레임마다 4개 구간의 H1 을 평균한다.
+    // default: 기본값(피드백 60%, Mix 35%) 그대로. 이 값은 노치가 얕고 넓어서(≈ 0.4 dB) 한 칸(≈ 11 Hz) 안팎의 잡음에도 가장 낮은 칸이 옆으로 옮겨 간다 — 44.1 kHz 에서 150.7~452.2 Hz 로 나온 것은 측정이 흔들린 것이다(L-233).
+    // comb: 피드백 0·Mix 50% 로 노치를 깊게(−25 dB 이하) 만들어 같은 스윕을 잰다. 지연이 manual ± depth = 1.175~2.825 ms 이면 첫 노치는 177~426 Hz 다.
     const sweepNoise = signals.refNoise(rate, 4.6, -20);
-    const sweep = await ctx.render({ input: [sweepNoise], pedals: [pedal('flanger')] });
-    const found: number[] = [];
-    for (let center = 0.3; center <= 4.3; center += 0.2) {
-      const start = seconds(sweep, center) - 3584;
-      const spectra = m.welchSpectra(sweep.input[0], sweep.output[0], rate, {
-        fftSize: 4096,
-        hop: 1024,
-        start,
-        end: start + 4096 + 3 * 1024,
-      });
-      const first = m.findNotches(spectra.frequencies, m.h1MagnitudeDb(spectra), {
-        fMin: 100,
-        fMax: 1000,
-        minProminenceDb: 1.5,
-      })[0];
-      if (first) found.push(first.frequency);
+    const sweepVariants: Array<[string, Record<string, PedalParamValue>, number, string]> = [
+      ['', {}, 1.5, 'sweep'],
+      ['comb', { mix: 50, feedback: 0 }, 3, 'sweep.comb'],
+    ];
+    for (const [, params, prominence, prefix] of sweepVariants) {
+      const sweep = await ctx.render({ input: [sweepNoise], pedals: [pedal('flanger', params)] });
+      const found: number[] = [];
+      for (let center = 0.3; center <= 4.3; center += 0.2) {
+        const start = seconds(sweep, center) - 3584;
+        const spectra = m.welchSpectra(sweep.input[0], sweep.output[0], rate, {
+          fftSize: 4096,
+          hop: 1024,
+          start,
+          end: start + 4096 + 3 * 1024,
+        });
+        const first = m.findNotches(spectra.frequencies, m.h1MagnitudeDb(spectra), {
+          fMin: 100,
+          fMax: 1000,
+          minProminenceDb: prominence,
+        })[0];
+        if (first) found.push(first.frequency);
+      }
+      values[`${prefix}.frames`] = found.length;
+      values[`${prefix}.minHz`] = found.length > 0 ? Math.min(...found) : null;
+      values[`${prefix}.maxHz`] = found.length > 0 ? Math.max(...found) : null;
     }
-    values['sweep.frames'] = found.length;
-    values['sweep.minHz'] = found.length > 0 ? Math.min(...found) : null;
-    values['sweep.maxHz'] = found.length > 0 ? Math.max(...found) : null;
     return { metrics: metrics(values) };
   },
 };
+
+/**
+ * Phaser 의 설계한 전달함수(깊이 0 → 단 하나의 1차 올패스 중심 주파수 고정). N 단을 곱하고 직전 샘플 출력을 fb 만큼 되먹이면 W = A/(1 − fb·z⁻¹·A).
+ * 체인 전체는 dry·1 + wet·makeup·W(레벨 100% 라 곱하지 않음).
+ */
+function phaserModelDb(frequency: number, sampleRate: number, stages: number, feedback: number, mix: number): number {
+  const tangent = Math.tan((Math.PI * PHASER_CENTER_FREQUENCY) / sampleRate);
+  const a = (tangent - 1) / (tangent + 1);
+  const w = (2 * Math.PI * frequency) / sampleRate;
+  const z1 = { re: Math.cos(w), im: -Math.sin(w) };
+  const mul = (x: typeof z1, y: typeof z1): typeof z1 => ({ re: x.re * y.re - x.im * y.im, im: x.re * y.im + x.im * y.re });
+  const div = (x: typeof z1, y: typeof z1): typeof z1 => {
+    const d = y.re * y.re + y.im * y.im;
+    return { re: (x.re * y.re + x.im * y.im) / d, im: (x.im * y.re - x.re * y.im) / d };
+  };
+  let all = { re: 1, im: 0 };
+  const stage = div({ re: a + z1.re, im: z1.im }, { re: 1 + a * z1.re, im: a * z1.im });
+  for (let i = 0; i < stages; i += 1) all = mul(all, stage);
+  const loop = mul(z1, all);
+  const wet = div(all, { re: 1 - feedback * loop.re, im: -feedback * loop.im });
+  const gains = mixGains('crossfade', mix, true, false);
+  const makeup = getPhaserWetMakeup(feedback);
+  const re = gains.dry + gains.wet * makeup * wet.re;
+  const im = gains.wet * makeup * wet.im;
+  return 20 * Math.log10(Math.hypot(re, im));
+}
 
 const p12: ProbeDefinition = {
   id: 'P-12',
   title: 'Phaser 리플',
   describe:
-    'REF-NOISE(−20 dBFS)를 Phaser(6단, 피드백 90%, 깊이 0 = 노치 고정, Mix 50%)로 통과시켜 전달함수를 잰다. combRippleDb: 1.5~9 kHz 에서 ±1.5 kHz 이동 평균을 뺀 나머지의 최대−최소(넓은 설계상의 노치·공진은 빠지고 좁은 간격의 빗살만 남는다). highBandRippleDb: 4~10 kHz 원시 최대−최소.',
+    'REF-NOISE(−20 dBFS)를 Phaser(6단, 피드백 90%, 깊이 0 = 노치 고정, Mix 50%)로 통과시켜 전달함수를 잰다. combRippleDb: 1.5~9 kHz 에서 ±1.5 kHz 이동 평균을 뺀 나머지의 최대−최소(설계한 노치·공진이 이동 평균보다 좁으면 그대로 남는다). modelErrorDb / modelErrorFullDb: 잰 전달함수와 설계한 전달함수(1차 올패스 N 단 + 샘플 단위 피드백의 닫힌 식)의 차이 최댓값(1.5~9 kHz / 0.1~10 kHz) — 설계에 없는 빗살이 얼마나 있는가. highBandRippleDb: 4~10 kHz 원시 최대−최소.',
   steps: 'S3.4',
   async run(ctx) {
     const rate = ctx.sampleRate;
@@ -861,9 +897,20 @@ const p12: ProbeDefinition = {
     const high = inBand(4000, 10000);
     const all = inBand(100, 10000);
     const notches = m.findNotches(spectra.frequencies, magnitude, { fMin: 100, fMax: 10000, minProminenceDb: 3, smoothBins: 1 });
+    // 잰 전달함수와 설계한 전달함수(phaserModelDb)의 차이 중 가장 큰 값(dB). 설계한 노치·공진은 둘 다 갖고 있어 빠지고, 설계에 없는 빗살만 남는다.
+    const modelError = (low: number, high: number): number => {
+      let worst = 0;
+      spectra.frequencies.forEach((frequency, index) => {
+        if (frequency < low || frequency > high) return;
+        worst = Math.max(worst, Math.abs(magnitude[index] - phaserModelDb(frequency, rate, 6, 0.9, 0.5)));
+      });
+      return worst;
+    };
     return {
       metrics: metrics({
         combRippleDb: m.detrendedRippleDb(spectra.frequencies, magnitude, 1500, 9000, 1500),
+        modelErrorDb: modelError(1500, 9000),
+        modelErrorFullDb: modelError(100, 10000),
         highBandRippleDb: Math.max(...high) - Math.min(...high),
         maxDb: Math.max(...all),
         minDb: Math.min(...all),
