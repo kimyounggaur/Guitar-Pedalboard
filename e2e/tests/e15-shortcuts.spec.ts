@@ -6,13 +6,14 @@
 //   ④ 도움말에 'Shift + 1–6' 이 보이고 표의 일곱 행이 그대로 그려진다. 도움말이 열려 있는 동안은 다른 키가 동작하지 않는다.
 //   ⑤ 글자 입력 칸에 포커스가 있으면 단축키가 동작하지 않고, 입력 칸은 누른 글자를 그대로 받는다.
 //   ⑥ 키를 누르고 있는 반복·Ctrl/⌘/Alt 조합·목록에 없는 키는 아무 일도 하지 않고 브라우저 기본 동작을 가로채지 않는다(preventDefault 없음).
+//   ⑦ 연결한 채 도움말이 열려 있고 포커스가 대화상자 밖(배경을 눌러 body)일 때의 Esc 는 도움말만 닫고 연결은 유지한다. 한 번 더 누르면 긴급 정지.
 // 한글 입력기가 보내는 이벤트는 Playwright 가 만들 수 없어(`keyboard.press` 는 key 를 영문으로 채운다) 같은 모양의 keydown 을 포커스된 요소에 직접 보낸다.
 // 실제 한글 입력기(Windows·macOS)에서 눌러 보는 것은 사람 확인 항목이다(docs/baseline/README-e2e.md).
 import { readFileSync } from 'node:fs';
 import type { Locator, Page } from '@playwright/test';
-import { connectGuitar, openApp, panicButton } from '../helpers/app';
+import { connectGuitar, disconnectButton, openApp, panicButton } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
-import { markTriggers, mockHowlGuard, trackAudioContexts } from '../helpers/mocks';
+import { markTriggers, mockHowlGuard, readAudioTracking, trackAudioContexts } from '../helpers/mocks';
 import { DEFAULT_ACTIVE_NAMES, PEDALS, stompOf } from '../helpers/storage';
 import { waitForTeardown } from '../helpers/teardown';
 
@@ -255,5 +256,34 @@ test.describe('E-15 키보드 단축키', () => {
     await expect(tempoStatus(page)).toContainText('탭 1회');
     expect(await sendKeydown(page, { key: '!', code: 'Digit1', shiftKey: true })).toBe(true);
     await expect(stompOf(page, 'Chorus')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('수용 기준 ⑦: 도움말이 열려 있고 포커스가 대화상자 밖이어도 Esc 는 도움말만 닫는다 — 연결은 유지, 한 번 더 누르면 긴급 정지', async ({ page }) => {
+    await trackAudioContexts(page);
+    await markTriggers(page);
+    await mockHowlGuard(page);
+    await openApp(page);
+    await connectGuitar(page);
+    await blurFocus(page);
+
+    await page.keyboard.press('Shift+Slash');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // 배경을 눌러 포커스가 body 로 빠진 상태: 이때는 대화상자가 Esc 를 받지 못하고 전역 처리기가 도움말 상태를 보고 판단한다.
+    await blurFocus(page);
+    expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await page.waitForTimeout(300);
+    const tracking = await readAudioTracking(page);
+    expect(tracking.inputTracks.every((track) => track.readyState === 'live'), '도움말을 닫는 Esc 가 마이크를 끄면 안 됩니다').toBe(true);
+    expect(tracking.contexts.every((context) => context.state === 'running')).toBe(true);
+    await expect(disconnectButton(page)).toBeVisible();
+    await expect(page.locator('.toast')).toHaveCount(0);
+
+    // 도움말이 닫혔으니 같은 Esc 는 이제 긴급 정지다.
+    await page.keyboard.press('Escape');
+    await waitForTeardown(page, LIMIT_MS);
   });
 });

@@ -178,7 +178,8 @@ assert.equal(
   '전역 keydown listener는 정확히 하나여야 합니다.',
 );
 assert.equal([...globalSource.matchAll(/window\.removeEventListener\('keydown'/g)].length, 1);
-assert.match(globalSource, /capture: true/);
+// 캡처 단계에서 듣는다: 컨트롤이 keydown 을 먼저 삼켜도 긴급 정지(Esc)가 통해야 한다. 등록과 해제의 옵션이 같아야 해제된다.
+assert.equal([...globalSource.matchAll(/\{ capture: true \}/g)].length, 2, '전역 keydown 은 캡처 단계로 달고 같은 옵션으로 떼어야 합니다.');
 // 컴포넌트는 처리기를 만들어 달기만 한다. 키를 해석·실행하는 코드는 input/ 에 있다(S2.11).
 assert.ok(globalSource.includes("from '../input/ShortcutService'"));
 assert.ok(globalSource.includes('createShortcutKeydownHandler({ isHelpOpen: () => helpOpenRef.current, openHelp, closeHelp })'));
@@ -579,6 +580,23 @@ for (const target of [textInput, plainButton, escapeOwnedTargets['<select>']]) {
   }
   assert.deepEqual(baseline(), before, `${target.tagName} 포커스에서 단축키가 동작했습니다.`);
 }
+// 실행하지 못한 키는 처리한 것이 아니다: 저장된 슬롯이 없는 A/B 는 아무것도 바꾸지 못하므로 preventDefault 도 부르지 않는다.
+usePresetStore.setState({
+  activateSlot: (slot) => {
+    activatedSlot = slot;
+    return false;
+  },
+});
+assert.equal(executeShortcutCommand({ type: 'activate-slot', slot: 'A' }, () => {}), false, '빈 슬롯의 A 는 실행하지 못한 것입니다.');
+activatedSlot = null;
+record = pressThrough(keydown, 'ㅁ', { code: 'KeyA' });
+assert.deepEqual({ activatedSlot, prevented: record.prevented }, { activatedSlot: 'A', prevented: 0 }, '빈 슬롯의 A 는 시도하되 기본 동작을 가로채지 않습니다.');
+usePresetStore.setState({
+  activateSlot: (slot) => {
+    activatedSlot = slot;
+    return true;
+  },
+});
 // 목록에 없는 키·반복 입력·Ctrl 조합은 아무 일도 없고 preventDefault 도 없다(브라우저 기본 동작을 가로채지 않는다).
 {
   const before = baseline();
