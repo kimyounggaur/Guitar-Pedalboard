@@ -702,6 +702,67 @@ const p10: ProbeDefinition = {
 };
 
 // ---------------------------------------------------------------------------------------------
+// P-26 — Delay 핑퐁 반복음의 시각과 좌우 (S3.3 선택 항목)
+// ---------------------------------------------------------------------------------------------
+const PINGPONG_TAPS = 4;
+
+const p26: ProbeDefinition = {
+  id: 'P-26',
+  title: 'Delay 핑퐁 반복음 타이밍',
+  describe:
+    '단일 임펄스(0.5)를 Delay 핑퐁(Sync 켬, 120 BPM, 1/4 → 500 ms, 피드백 60%, Mix 100%, Tone 100%)에 넣어 원음(0 ms) 뒤 반복음 네 개의 시각(ms)과 어느 쪽 귀에 들리는지를 잰다. ' +
+    '첫 반복음 시각(first)은 T/2 = 250 ms 가 기대값(10월 계획서 M-7), 이어지는 반복음은 T 간격으로 왼쪽·오른쪽을 번갈아야 한다(side: −1 왼쪽, +1 오른쪽, 0 같은 크기).',
+  steps: 'S3.3',
+  async run(ctx) {
+    const rate = ctx.sampleRate;
+    const input = signals.refImpulse(rate, 2.6, 0, 0.5);
+    const render = await ctx.render({
+      input: [input],
+      pedals: [
+        pedal('delay', { mode: 'pingpong', sync: true, bpm: 120, division: '1/4', feedback: 0.6, mix: 100, tone: 100 }),
+      ],
+    });
+    const left = render.output[0];
+    const right = render.output[1] ?? render.output[0];
+    const start = seconds(render, 0.1);
+    const end = Math.min(left.length, render.leadFrames + render.signalFrames);
+    const envelope = (index: number) => Math.max(Math.abs(left[index]), Math.abs(right[index]));
+    let peak = 0;
+    for (let i = start; i < end; i += 1) peak = Math.max(peak, envelope(i));
+    const threshold = peak * 0.1;
+    const window = Math.round(rate * 0.05);
+    const gap = Math.round(rate * 0.2);
+    const values: Record<string, MetricValue> = {};
+    let index = start;
+    let found = 0;
+    while (index < end && found < PINGPONG_TAPS) {
+      if (envelope(index) <= threshold) {
+        index += 1;
+        continue;
+      }
+      let best = index;
+      let leftEnergy = 0;
+      let rightEnergy = 0;
+      for (let i = index; i < Math.min(end, index + window); i += 1) {
+        if (envelope(i) > envelope(best)) best = i;
+        leftEnergy += left[i] * left[i];
+        rightEnergy += right[i] * right[i];
+      }
+      found += 1;
+      values[`tap${found}.ms`] = ((best - render.leadFrames) / rate) * 1000;
+      const balanceDb = 10 * Math.log10((rightEnergy + 1e-20) / (leftEnergy + 1e-20));
+      values[`tap${found}.side`] = balanceDb > 6 ? 1 : balanceDb < -6 ? -1 : 0;
+      index += gap;
+    }
+    for (let tap = found + 1; tap <= PINGPONG_TAPS; tap += 1) {
+      values[`tap${tap}.ms`] = null;
+      values[`tap${tap}.side`] = null;
+    }
+    return { metrics: metrics(values) };
+  },
+};
+
+// ---------------------------------------------------------------------------------------------
 // P-11 / P-12 — Flanger 노치, Phaser 리플
 // ---------------------------------------------------------------------------------------------
 function describeNotches(notches: m.Notch[]): { first: number | null; spacing: number | null } {
@@ -1654,7 +1715,7 @@ const p25: ProbeDefinition = {
 };
 
 export const probes: ProbeDefinition[] = [
-  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25,
+  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25, p26,
 ];
 
 // ---------------------------------------------------------------------------------------------

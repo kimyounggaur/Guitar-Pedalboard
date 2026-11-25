@@ -49,6 +49,7 @@
     "test:latency": "node scripts/latency-regression.mjs",
     "test:mix-law": "node scripts/mix-law-regression.mjs",
     "test:cab-swap": "node scripts/cab-swap-regression.mjs",
+    "test:delay-tape": "node scripts/delay-tape-regression.mjs",
     "test:peak-limiter": "node scripts/peak-limiter-regression.mjs",
     "test:preset-loudness": "node scripts/preset-loudness-regression.mjs",
     "test:preset-normalize": "node scripts/preset-normalize-regression.mjs",
