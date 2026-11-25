@@ -31,6 +31,7 @@
     "test:auto-wah": "node scripts/auto-wah-regression.mjs",
     "test:graphic-eq": "node scripts/graphic-eq-regression.mjs",
     "test:tuner": "node scripts/tuner-regression.mjs",
+    "test:tuner-reading": "node scripts/tuner-reading-regression.mjs",
     "preview": "vite preview",
     "test:dsp-safety": "node scripts/dsp-safety-regression.mjs",
     "test:howl": "node scripts/howl-guard-regression.mjs",

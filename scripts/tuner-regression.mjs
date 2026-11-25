@@ -216,9 +216,16 @@ function assertTuningTargets() {
 
   assert.equal(getPitchReading(e2, 'standard').note, 'E2');
   assert.equal(getPitchReading(e3, 'standard').note, 'E3');
-  assert.equal(getPitchReading(e3, 'standard').octaveMismatch, true);
+  // E3 는 6번 줄 E2 의 한 옥타브 위: 줄은 6번으로 읽고 옥타브 안내를 붙인다(S2.12).
+  assert.equal(getPitchReading(e3, 'standard').octavesAbove, 1);
+  assert.equal(getPitchReading(e3, 'standard').stringNumber, 6);
   assert.equal(getPitchReading(e5, 'standard').note, 'E5');
-  assert.equal(getPitchReading(NOTE_FREQUENCIES.D2, 'standard').octaveMismatch, true);
+  // D2 는 옥타브를 접어 D3 로 읽던 것을 그대로 6번 줄 E2 보다 200센트 낮은 음으로 읽는다(S2.12).
+  const d2 = getPitchReading(NOTE_FREQUENCIES.D2, 'standard');
+  assert.equal(d2.stringNumber, 6);
+  assert.equal(d2.targetNote, 'E2');
+  assert.equal(d2.octavesAbove, undefined);
+  assert.ok(Math.abs(d2.cents + 200) < 1e-6, `D2 는 6번 줄보다 200센트 낮아야 합니다: ${d2.cents}`);
   assert.equal(getPitchReading(130.81278265, 'chromatic').note, 'C3');
   assert.equal(getPitchReading(e2, 'standard').stringNumber, 6);
   assert.equal(getPitchReading(NOTE_FREQUENCIES.D2, 'drop-d').note, 'D2');
@@ -231,7 +238,26 @@ function assertTuningTargets() {
   }
 }
 
+// 가장 낮은 음(워클렛 28Hz, 노드 55Hz)의 2.5주기가 분석 창(4096 샘플)에 들어가야 한다. 안 들어가면 최대 지연이 창에 잘려 저음 판정이 흔들린다.
+function assertAnalysisWindowCoversLowestNote() {
+  for (const sampleRate of [8_000, 16_000, 22_050, 32_000, ...SAMPLE_RATES]) {
+    const { processor } = createProcessor(sampleRate);
+    const windowSamples = processor.ring.length;
+    const periods28 = (windowSamples / processor.analysisSampleRate) * 28;
+    const periods55 = (windowSamples / processor.analysisSampleRate) * 55;
+    assert.ok(periods55 >= 2.5, `${sampleRate}Hz: 55Hz 기준 분석 창이 ${periods55.toFixed(2)}주기입니다.`);
+    assert.ok(periods28 >= 2.5, `${sampleRate}Hz: 28Hz 기준 분석 창이 ${periods28.toFixed(2)}주기입니다.`);
+    assert.equal(
+      processor.maximumLag,
+      Math.ceil(processor.analysisSampleRate / 28),
+      `${sampleRate}Hz: 최대 지연이 창 크기에 잘려서는 안 됩니다.`,
+    );
+    assert.ok(windowSamples >= 2.5 * processor.maximumLag, `${sampleRate}Hz: 창이 최대 지연의 2.5배보다 작습니다.`);
+  }
+}
+
 assertTuningTargets();
+assertAnalysisWindowCoversLowestNote();
 
 for (const sampleRate of SAMPLE_RATES) {
   for (const [note, frequency] of Object.entries(NOTE_FREQUENCIES)) {
