@@ -4,12 +4,15 @@ import type { CrunchParams, PedalState } from '../types';
 import { clamp } from '../utils/db';
 import { createCrunchCurve } from '../utils/curves';
 import { createDcBlocker } from '../utils/dcBlocker';
+import { oversampleModeFor } from '../utils/oversample';
 import { smoothParam } from '../utils/smoothing';
 
 export class CrunchEffect extends BaseEffect {
   private readonly preGain: GainNode;
   private readonly lowCut: BiquadFilterNode;
   private readonly shaper: WaveShaperNode;
+  /** 이 이펙트의 WaveShaper 오버샘플링(기능 플래그 oversample2x*, S3.7). 만들 때 한 번 정한다. */
+  private readonly oversampleMode = oversampleModeFor('crunch');
   private readonly dcBlocker: BiquadFilterNode;
   private readonly tone: BiquadFilterNode;
   private readonly presence: BiquadFilterNode;
@@ -29,7 +32,7 @@ export class CrunchEffect extends BaseEffect {
 
     this.lowCut.type = 'highpass';
     this.lowCut.Q.value = 0.72;
-    this.shaper.oversample = '2x';
+    this.shaper.oversample = this.oversampleMode;
     this.tone.type = 'lowpass';
     this.tone.Q.value = 0.78;
     this.presence.type = 'peaking';
@@ -48,9 +51,9 @@ export class CrunchEffect extends BaseEffect {
     this.update(pedal);
   }
 
-  /** WaveShaper 2배 오버샘플링 필터가 더하는 지연. P-16 이 잰 값이다(params/latency.json). */
+  /** WaveShaper 오버샘플링 필터가 더하는 지연. P-16(2배)·P-29(4배)가 잰 값이다(params/latency.json). */
   protected override processingLatencySeconds(): number {
-    return fixedLatencySeconds('oversample2x', this.context.sampleRate);
+    return fixedLatencySeconds(this.oversampleMode === '2x' ? 'oversample2x' : 'oversample4x', this.context.sampleRate);
   }
 
   override update(pedal: PedalState): void {

@@ -7,16 +7,29 @@
  *
  * 설계서의 '개발자 메뉴로 켠다' 는 아직 없다: 앱에 개발자 메뉴가 없고, 소리 비교를 하는 사람은 주소를 바꾸는 쪽이 간단하다.
  */
-export const FEATURE_FLAG_NAMES = ['newCompressor'] as const;
+export const FEATURE_FLAG_NAMES = [
+  'newCompressor',
+  // 왜곡 페달 오버샘플링 2배(S3.7). 마스터 하나와 페달별 셋: 페달은 마스터와 자기 플래그가 모두 켜져 있어야 2배이고, 아니면 4배다.
+  'oversample2x',
+  'oversample2xDrive',
+  'oversample2xCrunch',
+  'oversample2xFuzz',
+] as const;
 
 export type FeatureFlagName = (typeof FEATURE_FLAG_NAMES)[number];
 
 /**
- * 기본값. 설계서 7.2 는 '청취 승인 뒤 on' 이라 승인 전에는 모두 꺼져 있다. 승인을 받으면 해당 줄을 true 로 바꾸고,
+ * 기본값. 설계서 7.2 는 '청취 승인 뒤 on' 이라 소리가 달라지는 플래그는 승인 전에는 꺼져 있다. 승인을 받으면 해당 줄을 true 로 바꾸고,
  * 프리셋 음량이 달라지니 `npm run trims` 를 다시 돌린다(REFACTOR_LOG L-248).
+ * 예외 — `oversample2x*`: 이 저장소는 처음부터 왜곡 페달이 2배 오버샘플링이었다(기준 커밋). 켜져 있는 것이 지금의 소리이고,
+ * 끄면(`?ff=-oversample2x`) 설계서가 말한 옛 4배가 된다. 그래서 기본값이 켜짐이다(REFACTOR_LOG L-254).
  */
 export const FEATURE_FLAG_DEFAULTS: Readonly<Record<FeatureFlagName, boolean>> = {
   newCompressor: false,
+  oversample2x: true,
+  oversample2xDrive: true,
+  oversample2xCrunch: true,
+  oversample2xFuzz: true,
 };
 
 export type FeatureFlagOverrides = Partial<Record<FeatureFlagName, boolean>>;
