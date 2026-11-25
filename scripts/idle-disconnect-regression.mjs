@@ -65,9 +65,10 @@ class Param {
   constructor(value = 0) { this.value = value; }
   cancelScheduledValues() {}
   cancelAndHoldAtTime() {}
-  setValueAtTime(value) { this.value = value; }
-  linearRampToValueAtTime(value) { this.value = value; }
-  setTargetAtTime(value) { this.value = value; }
+  // 마지막으로 값을 정한 방식('value' = 바로, 'target' = 부드럽게)을 기억해 깨어날 때 바로 놓는지 본다.
+  setValueAtTime(value) { this.value = value; this.via = 'value'; }
+  linearRampToValueAtTime(value) { this.value = value; this.via = 'ramp'; }
+  setTargetAtTime(value) { this.value = value; this.via = 'target'; }
 }
 class FakeNode {
   constructor() {
@@ -151,6 +152,7 @@ assert.equal(timersFor({}), windowTimers, '등록이 없으면 창 타이머');
   assert.equal(connected(effect), true, '21 ms 에는 아직 이어짐');
   timers.advance(1);
   assert.equal(connected(effect), false, '22 ms 에 끊김');
+  assert.equal(effect.effectGate.edges.has(effect.dryGain), true, '원음 경로(effectGate → dryGain)는 끊지 않는다');
   assert.equal(timers.pending, 0);
 
   // 꺼진 채 갱신을 거듭해도 타이머를 또 걸지 않는다
@@ -238,6 +240,9 @@ const delayOn = (overrides = {}) => stateOf('delay', overrides, true);
   effect.update(delayOn({ feedback: 0.6, timeMs: 400 }));
   assert.equal(connected(effect), true);
   assert.equal(effect.feedback.gain.value, 0.6, '깨어나면 되먹임을 목표값으로 되돌린다');
+  assert.equal(effect.feedback.gain.via, 'value', '깨어난 첫 갱신은 램프 없이 바로 놓는다(첫 반복음을 깎지 않게)');
+  effect.update(delayOn({ feedback: 0.5, timeMs: 400 }));
+  assert.equal(effect.feedback.gain.via, 'target', '그 다음부터는 평소처럼 부드럽게');
   assert.equal(effect.pingPongLeftFeedback.gain.value, 0, '모노 모드에서 Ping-Pong 이득은 0');
 }
 {

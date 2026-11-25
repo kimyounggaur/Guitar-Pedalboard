@@ -2016,8 +2016,10 @@ const P30_LONG: P30Toggle[] = [
 const P30_LFO = new Set(['flanger', 'phaser', 'chorus', 'tremolo']);
 /** 쉴 때 상태(검출기·게이트·포락선)를 비우는 페달: 깨어난 직후가 조금 다르다. */
 const P30_STATEFUL = new Set(['auto-wah', 'compressor', 'fuzz', 'noise-gate']);
-const P30_CONFIGS: Array<{ key: string; id: string; params: Record<string, PedalParamValue>; toggles: P30Toggle[]; tail?: boolean }> = [
+const P30_CONFIGS: Array<{ key: string; id: string; params: Record<string, PedalParamValue>; toggles: P30Toggle[]; tail?: boolean; staticLfo?: boolean }> = [
   ...initialPedals.map((base) => ({ key: base.id, id: base.id, params: {} as Record<string, PedalParamValue>, toggles: P30_SHORT })),
+  // LFO 깊이를 0 으로 둔 변형: LFO 위상이 소리에 영향을 주지 않아 쉬었다 깨어난 소리가 표본까지 같아야 한다. 깨어나지 않는 워클릿(Flanger·Phaser)을 여기서 잡는다.
+  ...(['chorus', 'flanger', 'phaser', 'tremolo'] as const).map((id) => ({ key: `${id}.static`, id, params: { depth: 0 } as Record<string, PedalParamValue>, toggles: P30_SHORT, staticLfo: true })),
   { key: 'delay.long', id: 'delay', params: {}, toggles: P30_LONG, tail: true },
   { key: 'delay.tape', id: 'delay', params: { mode: 'tape' }, toggles: P30_SHORT },
   { key: 'delay.noTrails.long', id: 'delay', params: { trails: false }, toggles: P30_LONG },
@@ -2031,7 +2033,7 @@ const p30: ProbeDefinition = {
   describe:
     '페달 한 개(기본값)에 REF-PC 7초를 넣고 1초에 끄고 3초에 켜고 4.5초에 끄고 5.5초에 켠다(.long 구성은 1초에 끄고 5.5초에 켠다: 쉬는 시간이 길다. Delay·Reverb 의 Trails 꼬리·Tape·Trails 끔 변형 포함. Ping-Pong 은 렌더가 반복마다 달라 넣지 않았다 — 되먹임 차단은 test:idle-disconnect 가 본다). 기능 플래그 idleDisconnect 를 켠(쉬는 지금 앱) 렌더와 끈(쉬지 않는 옛 방식) 렌더를 견준다. ' +
     'diffDb = 두 렌더의 차이 RMS ÷ 끈 렌더 RMS(dB, −200 이면 표본까지 같다). 상태가 없는 페달은 −200 이어야 한다(maxDiffDb.stateless). 상태를 비우는 페달(Auto-Wah·Compressor·Fuzz·Noise Gate)은 깨어난 직후가 조금 달라 값이 있고(maxDiffDb.stateful), ' +
-    'LFO 를 가진 페달(Chorus·Flanger·Phaser·Tremolo)은 쉬는 동안 LFO 위상이 멈춰 깨어난 뒤 위상이 달라 값이 크다 — 이쪽은 levelAfterWakeDb 와 클릭으로 판정한다. ' +
+    'LFO 를 가진 페달(Chorus·Flanger·Phaser·Tremolo)은 쉬는 동안 LFO 위상이 멈춰 깨어난 뒤 위상이 달라 값이 크다 — 이쪽은 levelAfterWakeDb 와 클릭으로 보고, LFO 깊이를 0 으로 둔 .static 변형은 위상이 소리에 영향을 주지 않으므로 상태 없는 페달과 같이 표본 일치(maxDiffDb.stateless)를 요구한다. ' +
     'levelAfterWakeDb = 깨어난 0.5~1.0초 뒤 구간의 (켠 렌더 − 끈 렌더) 출력 RMS 차(dB) 중 절댓값이 큰 것 — 쉰 페달이 깨어나지 않으면(소리가 죽으면) 크게 나온다(maxAbsLevelAfterWakeDb). ' +
     'wakeClickDb.<구성>.on/off = 깨어나는 때 둘레 22 ms 의 최대 표본 간 변화가 앞·뒤보다 몇 dB 큰지(P-23 과 같은 방식)의 큰 쪽. maxWakeClickDeltaDb = on − off 의 최댓값. ' +
     'Trails 꼬리(tail 구성): tailDiffDb = 끈 뒤 꼬리가 울리는 구간(1.1~2.9초)의 상대 차이(−200 이면 꼬리가 그대로), postTailResidualDbfs = 꼬리 끝(−60 dB)에서 되먹임을 끊은 뒤(3.6~5.4초) 두 렌더의 차이 절대 수준(dBFS). repeatDiffDb = 같은 설정(끔)을 두 번 렌더한 차이(−200 이면 렌더가 반복마다 같다. −100 보다 크면 그 구성은 표본 일치 판정에서 뺀다).',
@@ -2093,7 +2095,7 @@ const p30: ProbeDefinition = {
         const repeatable = repeat <= -100;
         if (repeatable) {
           if (P30_STATEFUL.has(config.id)) worstStateful = Math.max(worstStateful, diff);
-          else if (!P30_LFO.has(config.id)) worstStateless = Math.max(worstStateless, diff);
+          else if (config.staticLfo || !P30_LFO.has(config.id)) worstStateless = Math.max(worstStateless, diff);
         }
         const wakes = config.toggles.filter((toggle) => toggle.active).map((toggle) => toggle.at);
         let level = 0;
