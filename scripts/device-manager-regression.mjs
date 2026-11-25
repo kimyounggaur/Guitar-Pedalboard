@@ -70,6 +70,8 @@ equal(labelOf([MIC1], 'id-9'), '', '없는 장치의 이름은 빈 문자열');
 deepEqual(makeRemembered([MIC1, MIC2], 'id-2'), REM2, 'makeRemembered: 목록에서 이름을 가져온다');
 equal(makeRemembered([MIC1], ''), null, 'makeRemembered: 기본 장치(빈 id)는 기억하지 않는다');
 deepEqual(makeRemembered([], 'id-9', '저장 이름'), { id: 'id-9', label: '저장 이름' }, 'makeRemembered: 목록에 없으면 넘겨 준 이름');
+deepEqual(makeRemembered([MIC1, MIC2], 'id-2', '옛 이름'), REM2, 'makeRemembered: 목록에 이름이 있으면 넘겨 준 이름보다 목록의 이름이 먼저다');
+deepEqual(makeRemembered([MIC1, dev('id-2', '')], 'id-2', '옛 이름'), { id: 'id-2', label: '옛 이름' }, 'makeRemembered: 목록의 이름이 비었을 때만 넘겨 준 이름을 쓴다');
 deepEqual(makeRemembered([], 'id-9'), { id: 'id-9', label: '' }, 'makeRemembered: 이름도 모르면 빈 이름');
 
 // 1-2. 기억한 장치 찾기
@@ -126,6 +128,11 @@ deepEqual(
   '연주 중에는 이름으로 갈아타지 않는다(이미 열린 입력은 그 장치가 아니다)',
 );
 deepEqual(reconcile({ list: [MIC1] }), { selectedDeviceId: '', remembered: REM2, lost: false }, '쉬는 중 사라졌고 이름도 없으면 기본 장치로 — 기억은 남긴다');
+deepEqual(
+  reconcile({ selectedDeviceId: 'id-9' }),
+  { selectedDeviceId: '', remembered: REM2, lost: false },
+  '기억해 둔 장치가 아닌 장치를 고른 채 사라졌으면 기억해 둔 다른 장치로 갈아타지 않는다(이름으로 찾는 것은 기억해 둔 그 장치만)',
+);
 deepEqual(
   reconcile({ selectedDeviceId: '', reappeared: true }),
   { selectedDeviceId: 'id-2', remembered: REM2, lost: false },
@@ -308,6 +315,10 @@ async function loadStore({ io, legacyOutput, inputs = [], outputs = [], sinkSupp
     outputSets: [],
     inputGate: null,
     outputFellBack: false,
+    /** (deviceId) => 던질 오류 또는 null. 장치로 연결할 때만 쓴다 */
+    startFailure: null,
+    fileStarts: [],
+    channelModes: [],
   };
   engine.invalidatePendingStart = () => {};
   engine.silenceOutput = async () => {};
@@ -317,9 +328,15 @@ async function loadStore({ io, legacyOutput, inputs = [], outputs = [], sinkSupp
   engine.closeContext = async () => {};
   engine.advanceGeneration = () => {};
   engine.getInputInfo = () => ({ deviceId: '', channelCount: 2, selectable: true });
-  engine.setInputChannelMode = () => {};
+  engine.setInputChannelMode = (mode) => { world.channelModes.push(mode); };
   engine.setRememberedChannelDecision = () => {};
-  engine.start = async (deviceId) => { world.startCalls.push(deviceId ?? null); };
+  engine.start = async (deviceId) => {
+    world.startCalls.push(deviceId ?? null);
+    const failure = world.startFailure ? world.startFailure(deviceId ?? null) : null;
+    if (failure) throw failure;
+  };
+  engine.startFile = async (file) => { world.fileStarts.push(file.name); };
+  engine.readFilePlayback = () => ({ currentTime: 0, duration: 1, isPaused: true });
   engine.listInputDevices = async () => {
     world.inputReads += 1;
     const snapshot = world.inputs;
@@ -601,6 +618,35 @@ for (const broken of [{ devices: 3 }, { devices: [] }, { devices: { input: 'x', 
   await app.state().start();
   ok(app.toasts().some((toast) => toast.key === 'output-fallback'), '목록에 없어도 연결할 때 안내한다');
   await app.state().stop();
+  await settle();
+  app.useToastStore.getState().clear();
+  await app.state().start();
+  ok(!app.toasts().some((toast) => toast.key === 'output-fallback'), '같은 출력 장치에 대해서는 다음 연결에서 다시 안내하지 않는다');
+  await app.state().stop();
+  await settle();
+  app.useToastStore.getState().clear();
+
+  // 기본 출력을 골랐다가 같은 장치를 다시 고르면 새로 안내한다(사용자가 다시 정한 것이다)
+  await app.state().setOutputDevice('');
+  await app.state().setOutputDevice('out-9');
+  await app.state().loadDevices();
+  equal(app.state().selectedOutputDeviceId, '', '다시 골랐지만 여전히 없는 출력 장치는 기본 출력으로');
+  await app.state().start();
+  ok(app.toasts().some((toast) => toast.key === 'output-fallback'), '출력 장치를 다시 고르면 안내도 새로 한다');
+  await app.state().stop();
+  await settle();
+  app.useToastStore.getState().clear();
+}
+{
+  // 음원 파일을 재생할 때도 같은 출력으로 나가므로 저장된 출력 장치를 못 쓰면 안내한다
+  const app = await loadStore({ io: { devices: { input: null, output: { id: 'out-9', label: 'Gone Speakers' } } }, legacyOutput: 'out-9', outputs: [dev('out-1', 'Phones')] });
+  await app.state().loadDevices();
+  await app.state().startFile({ name: 'riff.wav' });
+  deepEqual(app.world.fileStarts, ['riff.wav'], '파일 재생이 시작된다');
+  equal(app.state().inputMode, 'file', '파일 재생 중');
+  ok(app.toasts().some((toast) => toast.key === 'output-fallback'), '파일 재생에서도 출력 폴백을 안내한다');
+  await app.state().stop();
+  await settle();
   app.useToastStore.getState().clear();
 }
 
@@ -634,6 +680,80 @@ for (const broken of [{ devices: 3 }, { devices: [] }, { devices: { input: 'x', 
   app.target.fire();
   await delay(400);
   deepEqual(app.state().devices.map((device) => device.deviceId), ['id-1'], '장치가 빠지면 새로고침을 누르지 않아도 목록이 바뀐다');
+}
+
+// 2-12. 연결 단계에서 열지 못해 기본 장치로 내려온 선택은 목록 갱신(devicechange)이 뒤집지 않는다 — 장치를 다시 꽂을 때만 되돌린다
+{
+  const app = await loadStore({ io: { devices: { input: REM2, output: null } }, inputs: [MIC1, MIC2] });
+  await app.state().loadDevices();
+  app.world.startFailure = (id) => (id === 'id-2' ? new DOMException('Requested device not found', 'OverconstrainedError') : null);
+  await app.state().start();
+  deepEqual(app.world.startCalls, ['id-2', null], '기억한 장치를 열어 보고 안 되면 기본 장치로 다시 연결한다');
+  equal(app.state().isRunning, true, '기본 장치로 연결된다');
+  equal(app.state().selectedDeviceId, '', '선택이 기본 장치로 내려온다');
+  deepEqual(app.state().rememberedInput, REM2, '기억은 남긴다');
+  ok(app.toasts().some((toast) => toast.message === app.ko.connect.fellBackToDefault), '기본 장치로 연결했다고 안내한다');
+  await app.state().stop();
+  await settle();
+  app.useToastStore.getState().clear();
+
+  await app.state().loadDevices();
+  equal(app.state().selectedDeviceId, '', '장치가 목록에 계속 있어도 열지 못했던 장치로 되돌리지 않는다(연결이 또 실패한다)');
+  app.target.fire();
+  await delay(400);
+  equal(app.state().selectedDeviceId, '', 'devicechange 가 와도 마찬가지');
+
+  app.world.inputs = [MIC1];
+  await app.state().loadDevices();
+  app.world.inputs = [MIC1, MIC2];
+  await app.state().loadDevices();
+  equal(app.state().selectedDeviceId, 'id-2', '뽑았다가 다시 꽂으면 다시 고른다');
+  app.useToastStore.getState().clear();
+}
+
+// 2-13. 출력도 마찬가지: 엔진이 열지 못해 기본 출력으로 둔 장치는 목록에 계속 있어도 되돌리지 않고, 다시 꽂을 때 되돌린다
+{
+  const app = await loadStore({ io: { devices: { input: null, output: { id: 'out-2', label: 'Speakers' } } }, legacyOutput: 'out-2', inputs: [MIC1], outputs: [dev('out-2', 'Speakers')] });
+  await app.state().loadDevices();
+  app.world.outputFellBack = true;
+  await app.state().start();
+  equal(app.state().selectedOutputDeviceId, '', '열지 못한 출력은 기본 출력으로 내려온다');
+  await app.state().stop();
+  await settle();
+  app.useToastStore.getState().clear();
+  app.world.outputSets.length = 0;
+
+  await app.state().loadDevices();
+  equal(app.state().selectedOutputDeviceId, '', '출력 장치가 목록에 계속 있어도 열지 못했던 장치로 되돌리지 않는다');
+  deepEqual(app.world.outputSets, [], '엔진에도 다시 알리지 않는다');
+
+  app.world.outputs = [];
+  await app.state().loadDevices();
+  app.world.outputs = [dev('out-2', 'Speakers')];
+  await app.state().loadDevices();
+  equal(app.state().selectedOutputDeviceId, 'out-2', '뽑았다가 다시 꽂으면 다시 고른다');
+  deepEqual(app.world.outputSets, ['out-2'], '엔진에도 알린다');
+  app.useToastStore.getState().clear();
+}
+
+// 2-14. 쉬는 중 선택이 바뀌면 그 장치에 기억된 채널 설정을 올린다(이전 장치의 채널 선택이 남지 않는다)
+{
+  const app = await loadStore({ io: { devices: { input: REM2, output: null } }, inputs: [MIC1, MIC2] });
+  await app.state().loadDevices();
+  app.useAudioStore.setState({ inputChannelMode: 'ch2', inputChannelSelectable: true });
+  app.world.inputs = [MIC1, dev('new-id', 'Audio Interface')];
+  await app.state().loadDevices();
+  equal(app.state().selectedDeviceId, 'new-id', '이름으로 갈아탄다');
+  equal(app.state().inputChannelMode, 'auto', '갈아탄 장치의 채널 모드를 올린다(기억이 없으면 자동)');
+  equal(app.state().inputChannelSelectable, null, '연결 전이라 채널 수는 아직 모른다');
+  equal(app.world.channelModes.at(-1), 'auto', '엔진에도 알린다');
+
+  app.useAudioStore.setState({ inputChannelMode: 'ch2', inputChannelSelectable: true });
+  app.world.inputs = [MIC1];
+  await app.state().loadDevices();
+  equal(app.state().selectedDeviceId, '', '사라지면 기본 장치로');
+  equal(app.state().inputChannelMode, 'auto', '기본 장치의 채널 모드를 올린다');
+  equal(app.state().inputChannelSelectable, null, '채널 수는 다시 모른다');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -698,5 +818,9 @@ ok(design.includes(outputGuide), '설계서에 출력 미지원 안내 문구가
 ok(design.includes(inputFallback), '설계서에 입력 폴백 안내 문구가 있다');
 ok(koSource.includes(`'${outputGuide}.'`), '카탈로그의 출력 미지원 안내가 설계서 문구다');
 ok(koSource.includes(`'${inputFallback}.'`), '카탈로그의 입력 폴백 안내가 설계서 문구다');
+ok(
+  koSource.includes("outputFellBack: '저장된 출력 장치를 쓸 수 없어 시스템 기본 출력으로 연결했습니다.'"),
+  '출력 폴백 안내는 "저장된 장치를 쓸 수 없다"와 "시스템 기본 출력으로 연결했다"를 함께 말한다(e2e E-17 이 같은 문구를 따로 적어 둔다)',
+);
 
 console.log(`통과 ${checks}건 — S2.13 입출력 장치 자동 관리(DeviceManager·스토어·엔진 폴백) 시험`);

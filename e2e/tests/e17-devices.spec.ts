@@ -6,7 +6,7 @@
 //   ④ 저장해 둔 출력 장치가 사라졌으면 연결을 막지 않고 시스템 기본 출력으로 연결하며 안내한다. 이름이 같고 id 만 바뀐 장치는 이름으로 찾는다
 //   ⑤ Firefox·Safari(setSinkId 없음): 출력 메뉴를 숨기고 '출력 장치는 시스템 설정에서 바꿔 주세요.' 를 보인다. 연결은 된다
 //   ⑥ 고른 입력 장치를 기억한다(다음 방문에도 같은 장치로 연결). 이름이 같고 id 만 바뀌었으면 이름으로 찾고, 없으면 기본 장치로 연결하며 안내한다(되풀이하지 않는다)
-//   ⑦ 마이크 권한 전(장치 id·이름이 빈 목록)에는 기억해 둔 장치를 '없다'고 판단해 지우지 않는다
+//   ⑦ 마이크 권한 전(장치 id·이름이 빈 목록)에는 기억해 둔 입력·출력 장치를 '없다'고 판단해 지우지 않고, 이름으로 보여 주며, 고를 수 없는 빈 항목은 그리지 않는다
 //   ⑧ 휴대폰 화면에서 안내 문구가 가로로 넘치지 않는다
 // 문구는 설계서와 앱 카탈로그(src/i18n/ko.ts)가 아니라 이 파일에 따로 적었다 — 카탈로그가 실수로 바뀌면 이 시험이 알아채야 한다.
 import type { Page } from '@playwright/test';
@@ -248,19 +248,27 @@ test.describe('E-17 입출력 장치', () => {
   test('E-17 ⑦ 마이크 권한 전(id·이름이 빈 목록)에는 기억해 둔 입력 장치를 지우지 않는다', async ({ page }) => {
     const mock = await openAppWithMock(page);
     const id = await deviceId(inputSelect(page), INPUT_2);
+    const outputId = await deviceId(outputSelect(page), OUTPUT_2);
     await inputSelect(page).selectOption({ label: INPUT_2 });
+    await outputSelect(page).selectOption({ label: OUTPUT_2 });
 
     await mock.set({ blank: true });
     await page.reload();
     await openApp(page);
     await expect(inputSelect(page)).toHaveValue(id);
     await expect(inputSelect(page).locator(`option[value="${id}"]`)).toHaveText(INPUT_2);
+    await expect(outputSelect(page)).toHaveValue(outputId);
+    await expect(outputSelect(page).locator(`option[value="${outputId}"]`)).toHaveText(OUTPUT_2);
+    // 권한 전 목록의 빈 항목은 고를 수 없으므로 보이지 않는다: 기본 장치 + 기억해 둔 장치 두 개만 보인다.
+    await expect(inputSelect(page).locator('option')).toHaveCount(2);
+    await expect(outputSelect(page).locator('option')).toHaveCount(2);
 
     await mock.set({ blank: false });
     await connectButton(page).click();
     await expect(disconnectButton(page)).toBeVisible({ timeout: 15_000 });
     expect(await mock.userMediaRequests()).toEqual([`exact:${id}`]);
     await expect(toast(page, TEXT.inputFellBack)).toHaveCount(0);
+    await expect(toast(page, TEXT.outputFellBack)).toHaveCount(0);
   });
 
   test.describe('휴대폰', () => {
