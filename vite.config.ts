@@ -16,8 +16,11 @@ export default defineConfig(({ mode }) => {
     react(),
     ...(isProbeBuild ? [] : [VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo.webp', 'favicon.ico', 'apple-touch-icon.png'],
+      includeAssets: ['logo.webp', 'favicon.svg', 'favicon.ico', 'apple-touch-icon.png'],
       manifest: {
+        // 앱의 식별자와 언어(S2.14). id 는 start_url 과 같게 두어 이미 설치한 사용자의 앱 식별이 바뀌지 않게 한다.
+        id: baseUrl,
+        lang: 'ko',
         name: 'Guitar Pedalboard',
         short_name: 'Pedalboard',
         description: '브라우저에서 연주하고 녹음하는 웹 기타 멀티 이펙터',
@@ -39,6 +42,13 @@ export default defineConfig(({ mode }) => {
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any',
+          },
+          {
+            // 가운데 지름 80% 원 안에만 그림이 있다(docs/refactoring/tools/make-maskable-icon.mjs). 'any' 와 한 항목으로 묶지 않는다.
+            src: `${baseUrl}pwa-512x512-maskable.png`,
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
           },
         ],
       },
