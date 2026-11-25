@@ -5,6 +5,9 @@ import type { DriveParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 import { useKnobDrag } from '../../hooks/useKnobDrag';
 import { initialPedals } from '../../store/pedalStore';
+import { formatParamValue, getParamDef } from '../../audio/params';
+
+const biasDef = getParamDef('drive', 'bias')!;
 
 interface DrivePedalProps {
   params: DriveParams;
@@ -84,10 +87,10 @@ export function DrivePedal({ params, onChange }: DrivePedalProps) {
           label="Bias"
           value={params.bias}
           defaultValue={knobDefault('drive', 'bias')}
-          min={-1}
-          max={1}
-          step={0.01}
-          displayValue={params.bias.toFixed(2)}
+          min={biasDef.min}
+          max={biasDef.max}
+          step={biasDef.step}
+          displayValue={formatParamValue(biasDef, params.bias)}
           onChange={(value) => onChange('bias', value)}
         />
 

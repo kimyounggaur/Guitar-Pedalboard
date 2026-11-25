@@ -5,6 +5,9 @@ import { createDriveCurve } from '../utils/curves';
 import { createDcBlocker } from '../utils/dcBlocker';
 import { smoothParam } from '../utils/smoothing';
 
+/** 바이어스 슬라이더의 한 칸(0.01)의 절반. 이보다 작게 달라지면 곡선을 다시 만들지 않는다. */
+const BIAS_UPDATE_STEP = 0.005;
+
 export class DriveEffect extends BaseEffect {
   private readonly shaper: WaveShaperNode;
   private readonly dcBlocker: BiquadFilterNode;
@@ -41,7 +44,7 @@ export class DriveEffect extends BaseEffect {
     if (
       params.mode !== this.lastMode ||
       Math.abs(params.drive - this.lastDrive) > 0.5 ||
-      Math.abs(params.bias - this.lastBias) > 0.02
+      Math.abs(params.bias - this.lastBias) > BIAS_UPDATE_STEP
     ) {
       this.lastMode = params.mode;
       this.lastDrive = params.drive;
