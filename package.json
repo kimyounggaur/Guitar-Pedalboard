@@ -38,6 +38,7 @@
     "test:level-warning": "node scripts/level-warning-regression.mjs",
     "test": "node scripts/run-all-tests.mjs",
     "test:compressor-phase": "node scripts/compressor-phase-regression.mjs",
+    "test:compressor-v2": "node scripts/compressor-v2-regression.mjs",
     "test:crunch-curve": "node scripts/crunch-curve-regression.mjs",
     "test:audio-session": "node scripts/audio-session-regression.mjs",
     "test:input-stage": "node scripts/input-stage-regression.mjs",
