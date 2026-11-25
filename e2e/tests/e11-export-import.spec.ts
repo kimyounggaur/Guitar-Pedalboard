@@ -213,12 +213,30 @@ test.describe('E-11 프리셋 내보내기·가져오기', () => {
 
     await importThroughChooser(page, writeImportFile(download.suggestedFilename(), JSON.stringify(changed)));
     await expect(conflictDialog(page)).toBeVisible();
-    await expect(conflictDialog(page).getByRole('button', { name: '덮어쓰기', exact: true })).toBeFocused();
+    // 처음 포커스는 아무것도 잃지 않는 '사본으로 추가' 다(반사적으로 Enter 를 눌러도 기존 프리셋이 바뀌지 않는다).
+    await expect(conflictDialog(page).getByRole('button', { name: '사본으로 추가', exact: true })).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(conflictDialog(page)).toHaveCount(0);
     await expect(presetMessage(page)).toHaveText('가져오기를 취소했습니다.');
     expect(await readLocal(page, PRESETS_KEY), '취소하면 아무것도 저장하지 않는다').toBe(storedBefore);
     await expect(page.getByRole('button', { name: '파일 가져오기', exact: true })).toBeFocused();
+  });
+
+  test('충돌 대화상자가 열린 직후 Enter 를 눌러도 기존 프리셋은 바뀌지 않는다(사본으로 추가)', async ({ page }) => {
+    await openApp(page);
+    await saveUserPreset(page, 'E11 A');
+    const { download, text } = await exportToDownload(page);
+    const changed = JSON.parse(text) as { presets: StoredPreset[] };
+    changed.presets[0].trimDb = 6;
+
+    await importThroughChooser(page, writeImportFile(download.suggestedFilename(), JSON.stringify(changed)));
+    await expect(conflictDialog(page)).toBeVisible();
+    await page.keyboard.press('Enter');
+    await expect(conflictDialog(page)).toHaveCount(0);
+    await expect(presetMessage(page)).toHaveText('1개 가져옴 · 0개 건너뜀');
+    const stored = await storedPresets(page);
+    expect(stored.map((preset) => preset.name).sort()).toEqual(['E11 A', 'E11 A (가져옴)']);
+    expect(stored.find((preset) => preset.name === 'E11 A')?.trimDb, '원래 프리셋은 그대로').toBe(0);
   });
 
   test('텍스트로 붙여넣기: 대화상자가 열리고, 잘못된 글은 대화상자 안에서 알리며, 잘 붙이면 닫히고 가져온다', async ({ page }) => {

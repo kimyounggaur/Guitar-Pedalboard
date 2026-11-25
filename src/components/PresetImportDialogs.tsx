@@ -64,9 +64,12 @@ interface ImportConflictDialogProps {
   onCancel: () => void;
 }
 
-/** 같은 프리셋이 이미 있고 내용이 다를 때 묻는다(설계서 4.7절): 덮어쓰기 / 사본으로 추가 / 건너뛰기. */
+/**
+ * 같은 프리셋이 이미 있고 내용이 다를 때 묻는다(설계서 4.7절): 덮어쓰기 / 사본으로 추가 / 건너뛰기.
+ * 처음 포커스는 아무것도 잃지 않는 '사본으로 추가' 에 둔다 — 파일을 고르고 반사적으로 Enter 를 눌러도 기존 프리셋이 바뀌지 않게(L-142).
+ */
 export function ImportConflictDialog({ conflict, position, total, onResolve, onCancel }: ImportConflictDialogProps) {
-  const overwriteRef = useRef<HTMLButtonElement | null>(null);
+  const copyRef = useRef<HTMLButtonElement | null>(null);
   const [applyToRest, setApplyToRest] = useState(false);
   const remaining = total - position;
 
@@ -77,14 +80,14 @@ export function ImportConflictDialog({ conflict, position, total, onResolve, onC
       eyebrow={`프리셋 가져오기 · ${position}/${total}`}
       onClose={onCancel}
       closeLabel="가져오기 취소"
-      initialFocusRef={overwriteRef}
+      initialFocusRef={copyRef}
     >
       <p className="modal-description">
         {conflict.reason === 'id'
           ? `파일의 '${conflict.incoming.name}'은(는) 이미 가진 프리셋과 같은 프리셋(같은 id)이지만 내용이 다릅니다.`
           : `'${conflict.incoming.name}' 이름의 프리셋이 이미 있고 내용이 다릅니다.`}
       </p>
-      <p className="modal-hint">덮어쓰면 기존 프리셋의 내용이 파일의 내용으로 바뀝니다. 사본으로 추가하면 둘 다 남습니다.</p>
+      <p className="modal-hint">덮어쓰면 기존 프리셋의 내용이 파일의 내용으로 바뀝니다(되돌릴 수 없습니다). 사본으로 추가하면 둘 다 남습니다.</p>
       {remaining > 0 ? (
         <label className="modal-check">
           <input type="checkbox" checked={applyToRest} onChange={(event) => setApplyToRest(event.currentTarget.checked)} />
@@ -92,8 +95,8 @@ export function ImportConflictDialog({ conflict, position, total, onResolve, onC
         </label>
       ) : null}
       <div className="modal-actions modal-actions-wrap">
-        <button ref={overwriteRef} type="button" className="primary-button" onClick={() => onResolve('overwrite', applyToRest)}>덮어쓰기</button>
-        <button type="button" className="secondary-button" onClick={() => onResolve('copy', applyToRest)}>사본으로 추가</button>
+        <button type="button" className="secondary-button" onClick={() => onResolve('overwrite', applyToRest)}>덮어쓰기</button>
+        <button ref={copyRef} type="button" className="primary-button" onClick={() => onResolve('copy', applyToRest)}>사본으로 추가</button>
         <button type="button" className="secondary-button" onClick={() => onResolve('skip', applyToRest)}>건너뛰기</button>
         <button type="button" className="secondary-button" onClick={onCancel}>가져오기 취소</button>
       </div>
