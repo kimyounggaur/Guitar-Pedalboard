@@ -718,7 +718,7 @@
         "title": "Tape 음정 흔들림",
         "metrics": {
           "cycles": 600,
-          "minHz": 996.489,
+          "minHz": 996.52,
           "maxHz": 1004.154,
           "deviationPercent": 0.415
         }
@@ -1715,7 +1715,7 @@
         "title": "Tape 음정 흔들림",
         "metrics": {
           "cycles": 600,
-          "minHz": 996.447,
+          "minHz": 996.463,
           "maxHz": 1003.922,
           "deviationPercent": 0.392
         }
