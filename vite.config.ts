@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
     react(),
     ...(isProbeBuild ? [] : [VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo.webp', 'favicon.svg', 'favicon.ico', 'apple-touch-icon.png'],
+      includeAssets: ['logo-520.webp', 'logo-1040.webp', 'favicon.svg', 'favicon.ico', 'apple-touch-icon.png'],
       manifest: {
         // 앱의 식별자와 언어(S2.14). id 는 start_url 과 같게 두어 이미 설치한 사용자의 앱 식별이 바뀌지 않게 한다.
         id: baseUrl,

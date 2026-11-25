@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { BASE_PATH, repoRoot } from './env';
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -24,9 +25,33 @@ function contentTypeOf(relativePath: string): string {
   return CONTENT_TYPES[extension] ?? 'application/octet-stream';
 }
 
+/** 서버가 내려 준 응답 한 건(첫 방문 전송량 시험용, S4.1) */
+export interface ServedRequest {
+  /** base 경로를 뺀 파일 경로(`index.html`, `assets/index-….js`, `logo-520.webp` …) */
+  path: string;
+  /** 회선으로 나간 본문 크기(압축했으면 압축 뒤) */
+  bytes: number;
+  /** 압축 전 파일 크기 */
+  rawBytes: number;
+}
+
+export interface DistServerOptions {
+  /**
+   * true 면 GitHub Pages 처럼 내려 준다: 글자 파일(html·js·css·svg·json)은 gzip, 응답에 `Cache-Control: max-age=600`.
+   * 서비스 워커가 방금 받은 파일을 다시 받을 때 브라우저 캐시를 쓰는지까지 배포와 같게 만들려는 것이다. 기본 false(항상 `no-cache`, 압축 없음 — `vite preview` 와 비슷)
+   */
+  pagesLike?: boolean;
+  /** 서비스할 폴더. 기본은 이 저장소의 `dist/`. 옛 코드와 비교할 때만 바꾼다(E2E_DIST_DIR) */
+  distDir?: string;
+}
+
+const COMPRESSIBLE = new Set(['html', 'js', 'css', 'json', 'svg', 'webmanifest', 'map']);
+
 export interface DistServer {
   /** `http://127.0.0.1:<포트>/Guitar-Pedalboard/` */
   url: string;
+  /** 지금까지 내려 준 응답(페이지와 서비스 워커의 요청 모두). 먼저 온 것부터 */
+  requests: ServedRequest[];
   /**
    * 이제부터 sw.js 를 바이트가 다른 새 서비스 워커로 내려 준다(맨 끝에 주석 한 줄을 덧붙인다).
    * 앱 파일은 그대로이고 서비스 워커 스크립트만 달라지므로, 브라우저에게는 '새 버전이 배포된' 것과 같다.
@@ -35,8 +60,9 @@ export interface DistServer {
   close(): Promise<void>;
 }
 
-export async function startDistServer(): Promise<DistServer> {
-  const distDir = join(repoRoot, 'dist');
+export async function startDistServer(options: DistServerOptions = {}): Promise<DistServer> {
+  const distDir = options.distDir ?? join(repoRoot, 'dist');
+  const requests: ServedRequest[] = [];
   if (!existsSync(join(distDir, 'sw.js'))) throw new Error('dist/sw.js 가 없다. 먼저 npm run build 를 해야 한다.');
   let serviceWorkerVariant = 0;
 
@@ -56,13 +82,23 @@ export async function startDistServer(): Promise<DistServer> {
       return;
     }
     response.setHeader('Content-Type', contentTypeOf(relativePath));
-    response.setHeader('Cache-Control', 'no-cache');
+    response.setHeader('Cache-Control', options.pagesLike === true ? 'max-age=600' : 'no-cache');
+    const extension = relativePath.includes('.') ? relativePath.slice(relativePath.lastIndexOf('.') + 1).toLowerCase() : '';
+    let body: Uint8Array;
     if (relativePath === 'sw.js') {
       const script = readFileSync(file, 'utf8');
-      response.end(serviceWorkerVariant === 0 ? script : `${script}\n// e2e: 새 서비스 워커 #${serviceWorkerVariant}\n`);
-      return;
+      body = new TextEncoder().encode(serviceWorkerVariant === 0 ? script : `${script}\n// e2e: 새 서비스 워커 #${serviceWorkerVariant}\n`);
+    } else {
+      body = readFileSync(file);
     }
-    response.end(readFileSync(file));
+    const rawBytes = body.length;
+    if (options.pagesLike === true && COMPRESSIBLE.has(extension)) {
+      body = gzipSync(body, { level: 6 });
+      response.setHeader('Content-Encoding', 'gzip');
+    }
+    response.setHeader('Content-Length', String(body.length));
+    requests.push({ path: relativePath, bytes: body.length, rawBytes });
+    response.end(body);
   });
 
   await new Promise<void>((resolve) => {
@@ -73,6 +109,7 @@ export async function startDistServer(): Promise<DistServer> {
 
   return {
     url: `http://127.0.0.1:${address.port}${BASE_PATH}`,
+    requests,
     publishNewServiceWorker() {
       serviceWorkerVariant += 1;
     },
