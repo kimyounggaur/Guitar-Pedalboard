@@ -3,6 +3,7 @@ import { BaseEffect } from './BaseEffect';
 import type { DriveParams, PedalState } from '../types';
 import { createDriveCurve } from '../utils/curves';
 import { createDcBlocker } from '../utils/dcBlocker';
+import { oversampleModeFor } from '../utils/oversample';
 import { smoothParam } from '../utils/smoothing';
 
 /** 바이어스 슬라이더의 한 칸(0.01)의 절반. 이보다 작게 달라지면 곡선을 다시 만들지 않는다. */
@@ -10,6 +11,8 @@ const BIAS_UPDATE_STEP = 0.005;
 
 export class DriveEffect extends BaseEffect {
   private readonly shaper: WaveShaperNode;
+  /** 이 이펙트의 WaveShaper 오버샘플링(기능 플래그 oversample2x*, S3.7). 만들 때 한 번 정한다. */
+  private readonly oversampleMode = oversampleModeFor('drive');
   private readonly dcBlocker: BiquadFilterNode;
   private readonly tone: BiquadFilterNode;
   private lastMode: DriveParams['mode'] | null = null;
@@ -19,7 +22,7 @@ export class DriveEffect extends BaseEffect {
   constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, pedal);
     this.shaper = context.createWaveShaper();
-    this.shaper.oversample = '2x';
+    this.shaper.oversample = this.oversampleMode;
     this.dcBlocker = createDcBlocker(context);
     this.tone = context.createBiquadFilter();
     this.tone.type = 'lowpass';
@@ -32,9 +35,9 @@ export class DriveEffect extends BaseEffect {
     this.update(pedal);
   }
 
-  /** WaveShaper 2배 오버샘플링 필터가 더하는 지연. P-16 이 잰 값이다(params/latency.json). */
+  /** WaveShaper 오버샘플링 필터가 더하는 지연. P-16(2배)·P-29(4배)가 잰 값이다(params/latency.json). */
   protected override processingLatencySeconds(): number {
-    return fixedLatencySeconds('oversample2x', this.context.sampleRate);
+    return fixedLatencySeconds(this.oversampleMode === '2x' ? 'oversample2x' : 'oversample4x', this.context.sampleRate);
   }
 
   override update(pedal: PedalState): void {

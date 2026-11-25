@@ -372,6 +372,35 @@ export function thdPercent(
 }
 
 // ---------------------------------------------------------------------------------------------
+// 배음이 아닌 성분(에일리어싱) — 기본음이 FFT bin 에 딱 맞는 사인으로 잰다(S3.7)
+// ---------------------------------------------------------------------------------------------
+/**
+ * 기본음이 정확히 `fundamentalBin` 번째 bin(= bin × 샘플레이트 ÷ size Hz)인 사인이 비선형 처리를 거친 신호에서,
+ * **기본음과 그 배음(h × bin) 둘레 ±guard bin 과 직류 둘레를 뺀 모든 bin** 의 전력을 기본음 전력(±1 bin) 대비 dB 로 돌려준다.
+ * 나이퀴스트를 넘는 배음이 접혀 들어온 에일리어스는 배음 자리가 아닌 곳에 떨어지므로 이 값에 잡힌다(접힌 자리가 우연히 배음 자리와 겹치면 가려진다).
+ * 기본음이 bin 에 딱 맞으면 Hann 창 누설은 ±1 bin 뿐이라 배음 둘레만 가리면 된다. size 는 2의 거듭제곱이다.
+ */
+export function nonHarmonicDb(signal: Samples, size: number, fundamentalBin: number, start: number, guard = 2): number {
+  const window = hannWindow(size);
+  const re = new Float64Array(size);
+  const im = new Float64Array(size);
+  for (let i = 0; i < size; i += 1) re[i] = signal[start + i] * window[i];
+  fft(re, im);
+  const half = size / 2;
+  const masked = new Uint8Array(half + 1);
+  for (let j = 0; j <= Math.min(guard, half); j += 1) masked[j] = 1;
+  for (let harmonic = 1; harmonic * fundamentalBin <= half + guard; harmonic += 1) {
+    const center = harmonic * fundamentalBin;
+    for (let j = Math.max(0, center - guard); j <= Math.min(half, center + guard); j += 1) masked[j] = 1;
+  }
+  let fundamental = 0;
+  for (let j = Math.max(0, fundamentalBin - 1); j <= Math.min(half, fundamentalBin + 1); j += 1) fundamental += re[j] * re[j] + im[j] * im[j];
+  let other = 0;
+  for (let j = 0; j <= half; j += 1) if (!masked[j]) other += re[j] * re[j] + im[j] * im[j];
+  return dbOf(Math.sqrt(Math.max(other, 1e-30) / Math.max(fundamental, 1e-30)));
+}
+
+// ---------------------------------------------------------------------------------------------
 // 영점 통과로 본 순간 주파수(음정 흔들림)
 // ---------------------------------------------------------------------------------------------
 export interface CycleFrequencies {

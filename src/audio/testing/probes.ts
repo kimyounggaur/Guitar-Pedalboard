@@ -1911,8 +1911,85 @@ const p28: ProbeDefinition = {
   },
 };
 
+// ---------------------------------------------------------------------------------------------
+// P-29 — 왜곡 페달 오버샘플링 2배 vs 4배(기능 플래그 oversample2x, S3.7)
+// ---------------------------------------------------------------------------------------------
+const P29_PEDALS: ReadonlyArray<[string, string, Record<string, PedalParamValue>]> = [
+  ['drive', 'drive', { drive: 100, mix: 100 }],
+  ['crunch', 'crunch', { gain: 100, mix: 100 }],
+  ['fuzz', 'fuzz', { fuzz: 100, mix: 100 }],
+];
+// 설계서 S3.7 의 시험 대역은 2~5 kHz(0.5 kHz 간격 7점)다. 앞의 1·1.5 kHz 는 실제 기타 음(24프렛 1번 줄 ≈ 1.3 kHz)에 가까운 참고 점이라
+// maxDiffDb·worst*Db 에는 넣지 않는다.
+const P29_FREQUENCIES_KHZ = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5] as const;
+const P29_BAND_MIN_KHZ = 2;
+const P29_FFT_SIZE = 32768;
+
+const p29: ProbeDefinition = {
+  id: 'P-29',
+  title: '왜곡 페달 오버샘플링 2배 vs 4배',
+  describe:
+    '기능 플래그 oversample2x 를 켠(2배 — 지금 앱) 경우와 끈(4배 — 설계서의 옛 값) 경우를 한 번에 잰다. ' +
+    '① 지연: REF-NOISE 상호상관으로 Drive·Crunch·Fuzz 한 개와 빈 체인의 지연 차(latencyMs.extra.<페달>.<배수>, ms). 4배 값이 params/latency.json 의 oversample 4x 표가 된다. ' +
+    '② 에일리어싱: 페달을 최대(Drive 100·Crunch Gain 100·Fuzz 100, Mix 100%)로 두고 사인(−12 dBFS)을 넣어(설계서 대역 2~5 kHz 0.5 kHz 간격 7점 + 실제 기타 음에 가까운 참고 점 1·1.5 kHz), ' +
+    '출력의 배음이 아닌 성분 전력을 기본음 대비 dB 로 잰다(alias.<페달>.<kHz>.<배수>, dBc — 기본음을 FFT bin 에 딱 맞춰(32768점) 배음 자리를 정확히 가린다). ' +
+    '차(diffDb = 2배 − 4배)가 설계서 S3.7 의 "고조파가 아닌 성분의 증가 ≤ 6 dB(4배 대비)" 다. maxDiffDb·worst2xDb·worst4xDb 는 설계서 대역 7점 중 가장 나쁜 값이다(1·1.5 kHz 는 넣지 않는다).',
+  steps: 'S3.7',
+  async run(ctx) {
+    const rate = ctx.sampleRate;
+    const values: Record<string, MetricValue> = {};
+    const noise = signals.refNoise(rate, 1.5, -20);
+    const lagMs = async (pedals: PedalState[]): Promise<number> => {
+      const render = await ctx.render({ input: [noise], pedals, alignOutput: false });
+      const { lagSamples } = m.crossCorrelationLag(render.input[0], render.output[0], Math.round(rate * 0.02), seconds(render, 0.3), seconds(render, 1.3));
+      return (lagSamples / rate) * 1000;
+    };
+    const modes = ['2x', '4x'] as const;
+    try {
+      const empty: Record<string, number> = {};
+      for (const mode of modes) {
+        setFeatureFlagOverride('oversample2x', mode === '2x');
+        empty[mode] = await lagMs([]);
+      }
+      values['latencyMs.empty'] = empty['2x'];
+      for (const [name, id, params] of P29_PEDALS) {
+        for (const mode of modes) {
+          setFeatureFlagOverride('oversample2x', mode === '2x');
+          values[`latencyMs.extra.${name}.${mode}`] = (await lagMs([pedal(id, params)])) - empty[mode];
+        }
+        const diffs: number[] = [];
+        const worst: Record<string, number> = { '2x': Number.NEGATIVE_INFINITY, '4x': Number.NEGATIVE_INFINITY };
+        for (const khz of P29_FREQUENCIES_KHZ) {
+          // 기본음이 FFT bin 에 딱 맞도록 bin 번호를 정수로 잡는다. 홀수 bin 이라 배음이 접혀도 다른 배음 자리에 겹치지 않는다.
+          let bin = Math.round((khz * 1000 * P29_FFT_SIZE) / rate);
+          if (bin % 2 === 0) bin += 1;
+          const frequency = (bin * rate) / P29_FFT_SIZE;
+          const tone = signals.refSine(rate, 1.6, frequency, -12);
+          const measured: Record<string, number> = {};
+          for (const mode of modes) {
+            setFeatureFlagOverride('oversample2x', mode === '2x');
+            const render = await ctx.render({ input: [tone], pedals: [pedal(id, params)], limiter: false });
+            measured[mode] = m.nonHarmonicDb(render.output[0], P29_FFT_SIZE, bin, seconds(render, 0.5));
+            values[`alias.${name}.${khz}.${mode}`] = measured[mode];
+            if (khz >= P29_BAND_MIN_KHZ) worst[mode] = Math.max(worst[mode], measured[mode]);
+          }
+          const diff = measured['2x'] - measured['4x'];
+          values[`alias.${name}.${khz}.diffDb`] = diff;
+          if (khz >= P29_BAND_MIN_KHZ) diffs.push(diff);
+        }
+        values[`alias.${name}.maxDiffDb`] = Math.max(...diffs);
+        values[`alias.${name}.worst2xDb`] = worst['2x'];
+        values[`alias.${name}.worst4xDb`] = worst['4x'];
+      }
+    } finally {
+      setFeatureFlagOverride('oversample2x', null);
+    }
+    return { metrics: metrics(values) };
+  },
+};
+
 export const probes: ProbeDefinition[] = [
-  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25, p26, p27, p28,
+  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25, p26, p27, p28, p29,
 ];
 
 // ---------------------------------------------------------------------------------------------

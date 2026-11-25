@@ -88,10 +88,12 @@ export function readOutputLatency(context: ContextLike): { base: number | null; 
   return { base, device };
 }
 
-export type FixedLatencyKind = 'oversample2x' | 'convolver';
+export type FixedLatencyKind = 'oversample2x' | 'oversample4x' | 'convolver';
 
 function tableFor(kind: FixedLatencyKind): Record<string, number> {
-  return kind === 'oversample2x' ? latencyTable.oversample['2x'] : latencyTable.convolver;
+  if (kind === 'oversample2x') return latencyTable.oversample['2x'];
+  if (kind === 'oversample4x') return latencyTable.oversample['4x'];
+  return latencyTable.convolver;
 }
 
 /**
