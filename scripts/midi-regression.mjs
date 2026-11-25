@@ -2,12 +2,16 @@ import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
 import { readFile } from 'node:fs/promises';
+import { performance } from 'node:perf_hooks';
 import { clearTimeout, setTimeout } from 'node:timers';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
 import { workerUrlStub } from './lib/esbuild-plugins.mjs';
 
-const midiSource = await readFile(new URL('../src/audio/midi.ts', import.meta.url), 'utf8');
+// S2.9: 해석·매핑은 src/audio/midi/mapping.ts, 연결은 MidiService.ts, 메시지 처리는 MidiRouter.ts 로 나뉘었다.
+const midiSource = await readFile(new URL('../src/audio/midi/mapping.ts', import.meta.url), 'utf8');
+const midiServiceSource = await readFile(new URL('../src/audio/midi/MidiService.ts', import.meta.url), 'utf8');
+const midiRouterSource = await readFile(new URL('../src/audio/midi/MidiRouter.ts', import.meta.url), 'utf8');
 const keysSource = await readFile(new URL('../src/persistence/keys.ts', import.meta.url), 'utf8');
 const audioStoreSource = await readFile(
   new URL('../src/store/audioStore.ts', import.meta.url),
@@ -31,34 +35,40 @@ assert.match(keysSource, /midi: 'guitar-pedalboard:midi'/, 'MIDI storage key');
 assert.match(audioStoreSource, /STORAGE_KEYS\.midi/);
 assert.doesNotMatch(midiSource, /localStorage|guitar-pedalboard:midi/, 'MIDI 해석 모듈은 저장소와 키 문자열을 모른다');
 assert.equal(
-  [...audioStoreSource.matchAll(/navigator\.requestMIDIAccess\s*\(/g)].length,
+  [...midiServiceSource.matchAll(/navigator\.requestMIDIAccess\s*\(/g)].length,
   1,
-  'requestMIDIAccess 호출 지점은 MIDI Learn 경로 하나여야 합니다.',
+  'requestMIDIAccess 호출 지점은 MidiService.connect 하나여야 합니다.',
 );
-const requestHelperStart = audioStoreSource.indexOf('async function requestMidiAccessForLearn');
-const disposeRuntimeStart = audioStoreSource.indexOf('function disposeMidiRuntime');
-assert.ok(requestHelperStart >= 0 && disposeRuntimeStart > requestHelperStart);
+assert.equal(
+  [...audioStoreSource.matchAll(/requestMIDIAccess\s*\(/g)].length,
+  0,
+  '저장소는 MIDI 접근을 직접 요청하지 않는다(MidiService 만 요청한다).',
+);
+const connectStart = midiServiceSource.indexOf('async connect()');
+const disposeStart = midiServiceSource.indexOf('dispose(): void');
+assert.ok(connectStart >= 0 && disposeStart > connectStart);
 assert.match(
-  audioStoreSource.slice(requestHelperStart, disposeRuntimeStart),
+  midiServiceSource.slice(connectStart, disposeStart),
   /navigator\.requestMIDIAccess\(\{ sysex: false \}\)/,
-  'MIDI 권한 요청이 Learn helper 밖에 있습니다.',
+  'MIDI 권한 요청이 connect(사용자 동작 길) 밖에 있습니다.',
 );
-const messageHandlerStart = audioStoreSource.indexOf('function handleMidiMessage');
-const syncInputsStart = audioStoreSource.indexOf('function syncMidiInputs');
-const messageHandlerSource = audioStoreSource.slice(messageHandlerStart, syncInputsStart);
-assert.match(messageHandlerSource, /if \(learningPedalId\)/);
-assert.match(messageHandlerSource, /createMidiMapping\(message\)/);
+const routerHandleStart = midiRouterSource.indexOf('handle(message');
+const routerLearnStart = midiRouterSource.indexOf('private learn(');
+const routerHandleSource = midiRouterSource.slice(routerHandleStart, routerLearnStart);
+assert.match(routerHandleSource, /if \(learningPedalId\)/);
+assert.match(midiRouterSource, /createMidiMapping\(message\)/);
 assert.ok(
-  messageHandlerSource.indexOf('return;\n  }') < messageHandlerSource.indexOf('Object.entries'),
+  routerHandleSource.indexOf('return;\n    }') < routerHandleSource.indexOf('Object.entries'),
   '학습 이벤트가 일반 매핑 적용 경로로 이어집니다.',
 );
-// 켜고 끄는 입구는 하나(setPedalActive, S2.4)다. 핸들러가 저장소나 엔진을 직접 건드리지 않는다.
-assert.ok(messageHandlerSource.includes('setPedalActive(pedalId, active)'));
-assert.ok(!messageHandlerSource.includes('setPedalBypass'));
-assert.match(audioStoreSource, /midiAccess\.onstatechange = handleMidiStateChange/);
-assert.match(audioStoreSource, /input\.onmidimessage = handleMidiMessage/);
-assert.match(audioStoreSource, /input\.onmidimessage = null/);
-assert.match(audioStoreSource, /midiAccess\.onstatechange = null/);
+// 켜고 끄는 입구는 하나(setPedalActive, S2.4)다. 라우터는 포트로만 켜고 끄고, 저장소의 포트가 그 입구를 부른다.
+assert.ok(midiRouterSource.includes('this.ports.setPedalActive(pedalId, active)'));
+assert.ok(!midiRouterSource.includes('setPedalBypass'));
+assert.match(audioStoreSource, /setPedalActive: \(pedalId, active\) => \{\s*setPedalActive\(pedalId, active\);/);
+assert.match(midiServiceSource, /access\.onstatechange = this\.stateChangeHandler/);
+assert.match(midiServiceSource, /input\.onmidimessage = this\.messageHandler/);
+assert.match(midiServiceSource, /input\.onmidimessage = null/);
+assert.match(midiServiceSource, /this\.access\.onstatechange = null/);
 
 assert.match(toggleSource, /onContextMenu\?: MouseEventHandler<HTMLLabelElement>/);
 assert.match(toggleSource, /<label className="toggle-switch" onContextMenu=\{onContextMenu\}>/);
@@ -75,7 +85,7 @@ assert.match(appShellSource, /connectSavedMidi\(\)/);
 
 const midiBundle = await build({
   plugins: [workerUrlStub],
-  entryPoints: [fileURLToPath(new URL('../src/audio/midi.ts', import.meta.url))],
+  entryPoints: [fileURLToPath(new URL('../src/audio/midi/mapping.ts', import.meta.url))],
   bundle: true,
   format: 'esm',
   platform: 'node',
@@ -186,8 +196,9 @@ class MockMidiInput {
     this._onmidimessage = handler;
   }
 
-  emit(bytes) {
-    this._onmidimessage?.({ data: Uint8Array.from(bytes) });
+  /** `afterMs`: 이 메시지가 지금보다 몇 ms 뒤에 받은 것처럼 시각을 붙인다(학습 직후 1초 판정을 시계 없이 시험하려고). */
+  emit(bytes, afterMs = 0) {
+    this._onmidimessage?.({ data: Uint8Array.from(bytes), timeStamp: performance.now() + afterMs });
   }
 }
 
@@ -310,7 +321,8 @@ assert.equal(
   true,
 );
 assert.deepEqual(activeCalls.at(-1), ['drive', true]);
-inputOne.emit([0xb1, 20, 63]);
+// 학습 직후 1초 안의 뗌은 '토글로 지정'으로 읽힌다(S2.9). 이 시험은 래치의 값 따르기를 보므로 1초가 지난 뒤의 뗌을 보낸다.
+inputOne.emit([0xb1, 20, 63], 5000);
 assert.equal(
   usePedalStore.getState().pedals.find((pedal) => pedal.id === 'drive').active,
   false,
@@ -330,7 +342,7 @@ usePedalStore.getState().setActive('compressor', false);
 const callsAfterNoteLearn = activeCalls.length;
 inputOne.emit([0x9f, 60, 100]);
 assert.deepEqual(activeCalls.at(-1), ['compressor', true]);
-inputOne.emit([0x8f, 60, 64]);
+inputOne.emit([0x8f, 60, 64], 5000);
 assert.deepEqual(activeCalls.at(-1), ['compressor', false]);
 assert.equal(activeCalls.length, callsAfterNoteLearn + 2);
 
