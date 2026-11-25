@@ -114,19 +114,22 @@ effect.update({ ...pedal, params: { ...pedal.params, stages: 12, feedback: 90 } 
 assert.equal(processorNode.parameters.get('stages').value, 12);
 assert.equal(processorNode.parameters.get('feedback').value, .9);
 assert.deepEqual(processorNode.options.parameterData, { stages: 6, active: 1 }, 'a pedal built switched on starts the processor running');
+assert.deepEqual(processorNode.parameters.get('active').events, [], 'construction schedules nothing: parameterData already carries the initial state');
 const bypass = [...effect.input.connections].find((node) => node.connections.has(effect.output));
 const activeParam = processorNode.parameters.get('active');
 effect.update({ ...pedal, active: false });
 assert.equal(bypass.gain.value, 1);
 // 끄면 게이트가 닫힐 때까지(ROUTING_FADE_SECONDS) 기다렸다가 워클릿을 멈춘다. 그 전에 멈추면 꼬리가 뚝 끊겨 딸깍 소리가 난다.
 assert.deepEqual(activeParam.events, [{ value: 0, time: ROUTING_FADE_SECONDS + 0.02 }], 'switching off stops the processor after the gate has closed');
+context.currentTime = 0.002;
 effect.update({ ...pedal, active: false, params: { ...pedal.params, rate: 2 } });
-assert.equal(activeParam.events.length, 1, 'repeating the same on/off state schedules nothing new');
+assert.deepEqual(activeParam.events, [{ value: 0, time: ROUTING_FADE_SECONDS + 0.02 }], 'repeating the same on/off state leaves the schedule alone (the stop time does not slide)');
 context.currentTime = 0.005;
 effect.update({ ...pedal, active: true });
 assert.deepEqual(activeParam.events, [{ value: 1, time: 0.005 }], 'switching back on cancels the pending stop and restarts the processor at once');
 const offPedal = new PhaserEffect(context, { ...pedal, active: false });
 assert.deepEqual(graph.at(-1).options.parameterData, { stages: 6, active: 0 }, 'a pedal built switched off never starts the processor');
+assert.deepEqual(graph.at(-1).parameters.get('active').events, [], 'and schedules no stop either');
 offPedal.dispose();
 context.currentTime = 0;
 effect.dispose(); effect.dispose();
@@ -282,8 +285,7 @@ for (const stages of PHASER_STAGE_OPTIONS) {
 }
 
 // ---- 단수를 바꿀 때: 가중치 합 1 을 지키며 20 ms 에 걸쳐 옮긴다 ---------------------------------------------
-{
-  const sampleRate = 48000;
+for (const sampleRate of [48000, 44100]) {
   let ProcessorClass;
   vm.runInNewContext(phaserProcessorSource, {
     sampleRate, AudioWorkletProcessor: MockProcessor,
@@ -308,9 +310,10 @@ for (const stages of PHASER_STAGE_OPTIONS) {
   for (const { weights } of rise) assert.ok(Math.abs(weights.reduce((a, b) => a + b, 0) - 1) < 1e-9, 'tap weights must always sum to 1');
   assert.ok(rise[0].weights[0] < 1 && rise[0].weights[0] > 0, 'the old tap fades instead of cutting off');
   assert.equal(rise[0].count, 12, 'the new, longer cascade is computed from the first block of the change');
-  assert.ok(rise[6].weights[0] > 0, 'the old tap is still fading before 20 ms are over (7 blocks = 18.7 ms)');
-  assert.equal(rise[7].weights[0], 0, 'after 20 ms (8 blocks of 128 at 48 kHz) the old tap is gone');
-  assert.equal(rise[7].weights[3], 1, 'and the new tap carries the whole signal');
+  const done = Math.ceil((sampleRate * 0.02) / 128) - 1; // 20 ms 가 지나 가중치가 다 옮겨지는 블록(48 kHz: 8번째, 44.1 kHz: 7번째)
+  assert.ok(rise[done - 1].weights[0] > 0, `${sampleRate} Hz: the old tap is still fading before 20 ms are over`);
+  assert.equal(rise[done].weights[0], 0, `${sampleRate} Hz: after 20 ms the old tap is gone`);
+  assert.equal(rise[done].weights[3], 1, `${sampleRate} Hz: and the new tap carries the whole signal`);
   // 단을 줄일 때는 가중치가 다 옮겨진 뒤에야 계산을 줄이고, 줄어든 단의 상태는 0 으로 비운다.
   const fall = run(4, 12, 32);
   assert.equal(fall[0].count, 12, 'the longer cascade keeps running while its tap fades out');
@@ -324,6 +327,43 @@ for (const stages of PHASER_STAGE_OPTIONS) {
   run(12, 3, 44);
   const midway = run(6, 2, 47);
   for (const { weights } of midway) assert.ok(Math.abs(weights.reduce((a, b) => a + b, 0) - 1) < 1e-9, 'retargeting mid-fade keeps the sum at 1');
+}
+
+// ---- a-rate 파라미터는 샘플마다 읽는다(길이 128 배열) ----------------------------------------------------
+{
+  const sampleRate = 48000;
+  const loadProcessor = () => {
+    let ProcessorClass;
+    vm.runInNewContext(phaserProcessorSource, {
+      sampleRate, AudioWorkletProcessor: MockProcessor,
+      registerProcessor(name, klass) { ProcessorClass = klass; },
+    });
+    return new ProcessorClass({ processorOptions: { stages: 6 } });
+  };
+  const renderBlock = (params) => {
+    const processor = loadProcessor();
+    const l = new Float32Array(128);
+    for (let i = 0; i < 128; i++) l[i] = .5 * Math.sin(2 * Math.PI * 440 * i / sampleRate);
+    const out = [new Float32Array(128), new Float32Array(128)];
+    processor.process([[l]], [out], params);
+    return out[0];
+  };
+  const constant = (value) => new Float32Array(128).fill(value);
+  const base = { rate: [.5], depth: [0], feedback: [0], stages: [6], active: [1] };
+  assert.deepEqual(
+    renderBlock({ ...base, feedback: constant(.5) }),
+    renderBlock({ ...base, feedback: [.5] }),
+    'a constant 128-sample array behaves like a single value',
+  );
+  const half = new Float32Array(128); half.fill(.9, 64);
+  const stepped = renderBlock({ ...base, feedback: half });
+  const none = renderBlock(base);
+  assert.deepEqual(stepped.slice(0, 64), none.slice(0, 64), 'feedback is still 0 for the first 64 samples of the block');
+  assert.ok(stepped.slice(64).some((value, index) => Math.abs(value - none[64 + index]) > 1e-4), 'and takes effect from sample 64');
+  const rising = new Float32Array(128).map((_, i) => i / 127 * 100);
+  const sweptDepth = renderBlock({ ...base, depth: rising, rate: [8] });
+  assert.ok(sweptDepth.slice(0, 8).every((value, index) => Math.abs(value - none[index]) < 1e-4), 'depth 0 at the start of the block changes nothing');
+  assert.ok(sweptDepth.slice(100).some((value, index) => Math.abs(value - none[100 + index]) > 1e-3), 'a rising depth array moves the all-pass frequency within the block');
 }
 
 // ---- 꺼진 동안: 출력 0 을 직접 쓰고, 상태를 비우고, LFO 위상은 시간에 맞춰 흐른다 ---------------------------
