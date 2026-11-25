@@ -717,10 +717,10 @@
       "P-10": {
         "title": "Tape 음정 흔들림",
         "metrics": {
-          "cycles": 598,
-          "minHz": 994.61,
-          "maxHz": 1005.46,
-          "deviationPercent": 0.546
+          "cycles": 600,
+          "minHz": 996.489,
+          "maxHz": 1004.154,
+          "deviationPercent": 0.415
         }
       },
       "P-11": {
@@ -982,6 +982,19 @@
           "clickRatioDb.660.micDrag": 0.204,
           "clickRatioDb.660.distanceDrag": 0.695,
           "maxClickRatioDb": 3.662
+        }
+      },
+      "P-26": {
+        "title": "Delay 핑퐁 반복음 타이밍",
+        "metrics": {
+          "tap1.ms": 250,
+          "tap1.side": -1,
+          "tap2.ms": 750.023,
+          "tap2.side": 1,
+          "tap3.ms": 1250.045,
+          "tap3.side": -1,
+          "tap4.ms": 1752.971,
+          "tap4.side": 1
         }
       }
     },
@@ -1701,10 +1714,10 @@
       "P-10": {
         "title": "Tape 음정 흔들림",
         "metrics": {
-          "cycles": 598,
-          "minHz": 994.497,
-          "maxHz": 1005.479,
-          "deviationPercent": 0.55
+          "cycles": 600,
+          "minHz": 996.447,
+          "maxHz": 1003.922,
+          "deviationPercent": 0.392
         }
       },
       "P-11": {
@@ -1966,6 +1979,19 @@
           "clickRatioDb.660.micDrag": 0.021,
           "clickRatioDb.660.distanceDrag": 1.172,
           "maxClickRatioDb": 2.283
+        }
+      },
+      "P-26": {
+        "title": "Delay 핑퐁 반복음 타이밍",
+        "metrics": {
+          "tap1.ms": 250,
+          "tap1.side": -1,
+          "tap2.ms": 750.021,
+          "tap2.side": 1,
+          "tap3.ms": 1250.042,
+          "tap3.side": -1,
+          "tap4.ms": 1752.729,
+          "tap4.side": 1
         }
       }
     }
