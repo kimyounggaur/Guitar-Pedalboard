@@ -27,13 +27,13 @@ export function VerticalFader({
 }: VerticalFaderProps) {
   const progress = max === min ? 0 : (value - min) / (max - min);
   const clampedProgress = Math.min(Math.max(progress, 0), 1);
-  const dragHandlers = useKnobDrag(value, min, max, step, onChange, defaultValue);
+  const dragHandlers = useKnobDrag(value, min, max, step, onChange, defaultValue, { touchAxis: 'y' });
 
   return (
     <div className="vertical-fader">
       <span className="vertical-fader-label">{label}</span>
       <span
-        className="vertical-fader-rail"
+        className="vertical-fader-rail" {...dragHandlers}
         style={{ '--vertical-fader-position': `${(1 - clampedProgress) * 100}%` } as CSSProperties}
       >
         <span className="vertical-fader-ticks" aria-hidden="true" />
@@ -44,7 +44,6 @@ export function VerticalFader({
           max={max}
           step={step}
           value={value}
-          {...dragHandlers}
           aria-label={label}
           aria-orientation="vertical"
           aria-valuetext={`${label} ${ariaValueText}`}

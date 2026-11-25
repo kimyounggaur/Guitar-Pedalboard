@@ -35,7 +35,7 @@ function ReverbKnob({ label, value, min, max, step, displayValue, ariaValueText,
     <div className="reverb-knob">
       <span>{label}</span>
       <span
-        className="reverb-knob-shell"
+        className="reverb-knob-shell" {...dragHandlers}
         style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}
       >
         <i aria-hidden="true" />
@@ -45,7 +45,6 @@ function ReverbKnob({ label, value, min, max, step, displayValue, ariaValueText,
           max={max}
           step={step}
           value={value}
-          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${ariaValueText ?? displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}

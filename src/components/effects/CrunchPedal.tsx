@@ -30,7 +30,7 @@ function CrunchKnob({ label, value, min, max, step, onChange }: CrunchKnobProps)
   return (
     <div className={`crunch-knob crunch-knob-${label.toLowerCase().replace('.', '')}`}>
       <span
-        className="crunch-knob-shell"
+        className="crunch-knob-shell" {...dragHandlers}
         style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}
       >
         <i aria-hidden="true" />
@@ -40,7 +40,6 @@ function CrunchKnob({ label, value, min, max, step, onChange }: CrunchKnobProps)
           max={max}
           step={step}
           value={value}
-          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${Math.round(value)}%`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}

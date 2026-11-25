@@ -41,7 +41,7 @@ function CompressorKnob({
     <div className="compressor-knob">
       <span>{label}</span>
       <span
-        className="compressor-knob-shell"
+        className="compressor-knob-shell" {...dragHandlers}
         style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}
       >
         <i aria-hidden="true" />
@@ -51,7 +51,6 @@ function CompressorKnob({
           max={max}
           step={step}
           value={value}
-          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}

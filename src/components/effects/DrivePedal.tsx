@@ -124,14 +124,13 @@ function DriveKnob({ label, value, min, max, size = 'large', onChange }: DriveKn
 
   return (
     <div className={`tube-knob tube-knob-${size}`}>
-      <span className="tube-knob-shell" style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}>
+      <span className="tube-knob-shell" {...dragHandlers} style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}>
         <input
           type="range"
           min={min}
           max={max}
           step={1}
           value={value}
-          {...dragHandlers}
           aria-label={label}
           aria-valuetext={`${label} ${Math.round(value)}%`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
