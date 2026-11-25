@@ -87,7 +87,7 @@
 
 | 항목 | 판정 | 근거 (파일:줄) | 남은 것 → Step |
 |---|---|---|---|
-| R4-1 로고 1.6 MB | 해결 | `public/logo.webp`(36 KB), `index.html:11` preload, `PedalBoard.tsx:22`, `vite.config.ts:17` | E-19 측정 → S4.1 축소 |
+| R4-1 로고 1.6 MB | 해결 | `public/logo-520.webp`(22 KB)·`logo-1040.webp`(46 KB), `index.html` preload(`imagesrcset`), `PedalBoard.tsx` srcSet, `vite.config.ts` includeAssets | S4.1 완료(E-19) |
 | R4-2 Phaser CPU | 부분 | Phaser가 워클릿으로 바뀜 | 꺼진 페달의 유휴 처리 없음(`sleep` 메시지는 튜너에만 있음), `noise-gate-processor.ts:93,106,109`가 샘플마다 `Math.log10`·`Math.pow`·`Math.exp`를 부름 → S4.2 |
 | R4-3 노브 한 칸마다 15개 다시 그림 | 부분 | `updatePedalParam`은 바뀐 페달만 복제(`pedalStore.ts:959-`) | `togglePedal`·`setPedalBypass`는 15개 전부 `clonePedal`(`:941-957`) → S4.3 |
 | R4-4 노브 조작 방식 | 해결 | `useKnobDrag.ts`, `KnobNumberInput.tsx`(숫자 입력), 값 표시 `<output>`(`SliderControl.tsx:30-33`); 투명 range는 남아 있으나(`controls.css:102-110`) 드래그 핸들러가 붙음 | E-20 확인 → S4.4 축소 |
@@ -172,7 +172,7 @@
 
 | Step | 설계서의 대상 | 실제 경로·함수·줄 | 위치 | 진행 |
 |---|---|---|---|---|
-| S4.1 | `public/logo.png`, `index.html` 11행, `PedalBoard.tsx` 83~90행, `vite.config.ts` | `public/logo.webp`(36 KB), `index.html:11`, `PedalBoard.tsx:22` | 위치 다름 | 이미 구현 |
+| S4.1 | `public/logo.png`, `index.html` 11행, `PedalBoard.tsx` 83~90행, `vite.config.ts` | `public/logo-520.webp`·`logo-1040.webp`, `index.html` preload, `PedalBoard.tsx` | 위치 다름 | 완료(L-263~L-265) |
 | S4.2 | `BaseEffect.ts`, `ChorusEffect.ts` 134~146행, `noise-gate-processor.ts` 76~110행, 워클릿 `idle` | `noise-gate-processor.ts:93,106,109` 그대로(샘플마다 `log10`·`pow`·`exp`), 유휴 메시지 없음 | 확인됨 | 미착수 |
 | S4.3 | `pedalStore.ts` 901~950행, `PedalCard.tsx`, `PedalBoard.tsx` | `pedalStore.ts:941-975`(`updatePedalParam`은 바뀐 것만 복제, 토글·바이패스는 전부 복제) | 위치 다름 | 부분 |
 | S4.4 | `SliderControl.tsx` 48~57행 → `KnobControl.tsx`, `controls.css` 102~110행 | `SliderControl.tsx:1-41`, `useKnobDrag.ts`, `KnobNumberInput.tsx`, `controls.css:102-110` | 위치 다름 | 이미 구현 |
