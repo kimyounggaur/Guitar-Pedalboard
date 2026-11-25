@@ -365,7 +365,7 @@ const [engineSource, storeSource, playerSource, panelSource, shortcutSource] = a
   read('src/store/audioStore.ts'),
   read('src/components/FilePlayer.tsx'),
   read('src/components/ConnectGuitarPanel.tsx'),
-  read('src/components/GlobalKeyboardShortcuts.tsx'),
+  read('src/input/ShortcutService.ts'),
 ]);
 const count = (text, needle) => text.split(needle).length - 1;
 ok(engineSource.includes('private fileLoop = true;'), '엔진: 반복 재생 기본 켜짐');

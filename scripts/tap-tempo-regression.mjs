@@ -86,10 +86,13 @@ assert.doesNotMatch(applySource, /rebuildChain/);
 assert.match(audioStoreSource, /setGlobalBpm:[\s\S]*applyGlobalBpmToSyncedPedals\(bpm\)/);
 assert.match(audioStoreSource, /setTempoSync:[\s\S]*applyTempoSyncToPedal/);
 
-const [keyboardSource, shortcutRoutingSource] = await Promise.all([
+// S2.11: 키 해석은 input/shortcutKeys.ts, 포커스 규칙·실행은 input/ShortcutService.ts, 리스너는 컴포넌트에 있다.
+const [keyboardComponentSource, keyboardServiceSource, shortcutRoutingSource] = await Promise.all([
   readFile(new URL('../src/components/GlobalKeyboardShortcuts.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/keyboardShortcuts.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/input/ShortcutService.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/input/shortcutKeys.ts', import.meta.url), 'utf8'),
 ]);
+const keyboardSource = `${keyboardComponentSource}\n${keyboardServiceSource}`;
 assert.match(shortcutRoutingSource, /key === 't'/);
 assert.match(shortcutRoutingSource, /event\.repeat/);
 assert.match(shortcutRoutingSource, /event\.isComposing/);
