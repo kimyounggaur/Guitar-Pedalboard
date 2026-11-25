@@ -230,10 +230,10 @@
 
 | 줄 | 종류 | 검사 대상 | 패턴(앞 70자) |
 |---:|---|---|---|
-| 39 | match | `builtIndex` | `/manifest\.webmanifest/` |
-| 40 | match | `builtIndex` | `/registerSW\.js/` |
-| 43 | match | `serviceWorker` | `/NetworkFirst/` |
-| 44 | match | `serviceWorker` | `/guitar-pedalboard-runtime/` |
+| 170 | match | `builtIndex` | `/manifest\.webmanifest/` |
+| 171 | match | `builtIndex` | `/registerSW\.js/` |
+| 174 | match | `serviceWorker` | `/NetworkFirst/` |
+| 175 | match | `serviceWorker` | `/guitar-pedalboard-runtime/` |
 
 ### recording-regression.mjs
 
