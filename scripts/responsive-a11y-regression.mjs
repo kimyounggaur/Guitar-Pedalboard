@@ -27,6 +27,7 @@ const [
   shortcutsSource,
   dockHeightSource,
   keysSource,
+  tunerDisplaySource,
 ] = await Promise.all([
   readFile(new URL('../src/components/AppShell.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/PedalBoard.tsx', import.meta.url), 'utf8'),
@@ -47,6 +48,7 @@ const [
   readFile(new URL('../src/components/GlobalKeyboardShortcuts.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/hooks/useDockHeight.ts', import.meta.url), 'utf8'),
   readFile(new URL('../src/persistence/keys.ts', import.meta.url), 'utf8'),
+  readFile(new URL('../src/audio/utils/tunerDisplay.ts', import.meta.url), 'utf8'),
 ]);
 
 assert.match(appShellSource, /MOBILE_LAYOUT_QUERY = '\(max-width: 767px\)'/);
@@ -128,11 +130,13 @@ assert.equal(
 assert.match(meterSource, /\}, \[active, isRunning\]\);/);
 assert.match(meterSource, /window\.setInterval\(update, STORE_REFRESH_INTERVAL_MS\)/);
 assert.match(meterSource, /\}, \[isRunning, refreshMeters\]\);/);
-assert.match(meterSource, /tunerStatus === 'in-tune'[\s\S]*'정확함'/);
-assert.match(meterSource, /roundedCents > 0 \? '높음' : '낮음'/);
-assert.match(meterSource, /const boundedCents = Math\.round\(Math\.min\(50, Math\.max\(-50, hasPitch \? pitch\.cents : 0\)\)\);/);
-assert.match(meterSource, /aria-valuenow=\{boundedCents\}/);
-assert.match(meterSource, /aria-valuetext=\{tuningStatusLabel\}[\s\S]{0,120}role="meter"/);
+// S2.12: 튜너 문구와 센트 막대 값은 Meter 안의 계산이 아니라 describeTuner(tunerDisplay.ts)가 만든다. 값 하나하나는 test:tuner-reading 이 본다.
+assert.ok(tunerDisplaySource.includes("status === 'in-tune' ? '정확함'"));
+assert.ok(tunerDisplaySource.includes("rounded > 0 ? '높음' : '낮음'"));
+assert.ok(tunerDisplaySource.includes('const boundedCents = Math.round(Math.min(50, Math.max(-50, pitch.cents)));'));
+assert.match(meterSource, /const tuner = describeTuner\(pitch, isTunerActive\);/);
+assert.match(meterSource, /aria-valuenow=\{tuner\.boundedCents\}/);
+assert.match(meterSource, /aria-valuetext=\{tuner\.statusText\}[\s\S]{0,120}role="meter"/);
 
 assert.match(connectSource, /STORAGE_KEYS\.mobileAudioNotice/);
 assert.match(keysSource, /mobileAudioNotice: 'guitar-pedalboard:mobile-audio-notice-dismissed'/);

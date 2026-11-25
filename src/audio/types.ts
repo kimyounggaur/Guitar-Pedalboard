@@ -247,11 +247,17 @@ export interface LatencyReading {
 
 export interface PitchReading {
   frequency: number | null;
+  /** 들린 음의 이름과 옥타브('D2'). 가장 가까운 반음 기준이라 줄과는 상관없다 */
   note: string | null;
+  /** 목표(가장 가까운 줄, 옥타브 위 음이면 그 음)와의 차이. 크로매틱은 가장 가까운 반음과의 차이 */
   cents: number;
+  /** 기타 모드에서 가장 가까운 줄의 음('E2'). 어느 줄인지 알 수 없으면 없다 */
   targetNote?: string;
   stringNumber?: number;
-  octaveMismatch?: boolean;
+  /** 그 줄의 음이 아니라 몇 옥타브 위의 같은 음(양수). 이때 cents 는 그 옥타브 위 음과의 차이다 */
+  octavesAbove?: number;
+  /** 가장 가까운 줄과도 너무 멀어서(600센트 초과) 어느 줄인지 알 수 없다 */
+  checkString?: boolean;
 }
 
 export type TuningPresetId = 'standard' | 'drop-d' | 'half-step-down' | 'open-g' | 'chromatic';

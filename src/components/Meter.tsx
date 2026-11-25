@@ -10,7 +10,8 @@ import { AudioEngine } from '../audio/AudioEngine';
 import { formatLatency, UNDERRUN_UNAVAILABLE_REASON } from '../audio/engine/latency';
 import { createRecordingFilename } from '../audio/recording';
 import type { LevelReading, TuningPresetId } from '../audio/types';
-import { TUNING_PRESETS, TUNING_PRESET_OPTIONS } from '../audio/utils/tunings';
+import { describeTuner } from '../audio/utils/tunerDisplay';
+import { GUITAR_TUNING_OPTIONS, TUNING_PRESETS } from '../audio/utils/tunings';
 import { useAudioStore } from '../store/audioStore';
 import { readInputLevel, readOutputLevel, useMonitorStore } from '../store/monitorStore';
 import { InputLevelNotice } from './InputLevelNotice';
@@ -68,32 +69,13 @@ export function Meter({ active = true }: MeterProps) {
   const clipIndicatorRef = useRef<HTMLDivElement>(null);
   const outputWarningRef = useRef<HTMLParagraphElement>(null);
   const latencyDisplay = formatLatency(latency);
-  const hasPitch = isTunerActive && pitch.frequency !== null && pitch.note !== null;
-  const absoluteCents = Math.abs(pitch.cents);
-  const tunerStatus = !hasPitch
-    ? 'idle'
-    : pitch.octaveMismatch
-      ? 'far'
-    : absoluteCents <= 5
-      ? 'in-tune'
-      : absoluteCents <= 15
-        ? 'near'
-        : 'far';
-  const roundedCents = Math.round(pitch.cents);
-  const centsLabel = hasPitch
-    ? `${roundedCents > 0 ? '+' : ''}${roundedCents} ¢`
-    : '-- ¢';
-  const tuningStatusLabel = !isTunerActive
-    ? '튜너 꺼짐'
-    : !hasPitch
-      ? '신호 대기'
-      : pitch.octaveMismatch
-        ? `옥타브 확인 · 목표 ${pitch.targetNote}`
-      : tunerStatus === 'in-tune'
-        ? '정확함'
-        : `${Math.abs(roundedCents)}센트 ${roundedCents > 0 ? '높음' : '낮음'}`;
-  const boundedCents = Math.round(Math.min(50, Math.max(-50, hasPitch ? pitch.cents : 0)));
-  const centPosition = hasPitch ? Math.min(100, Math.max(0, 50 + pitch.cents)) : 50;
+  const tuner = describeTuner(pitch, isTunerActive);
+  const hasPitch = tuner.hasPitch;
+  const tunerStatus = tuner.status;
+  const isChromatic = tuningPreset === 'chromatic';
+  // 크로매틱에서 기타로 돌아올 때 직전에 쓰던 기타 튜닝으로 간다(처음엔 표준)
+  const lastGuitarPresetRef = useRef<TuningPresetId>('standard');
+  if (!isChromatic) lastGuitarPresetRef.current = tuningPreset;
   const tuningTargets = TUNING_PRESETS[tuningPreset].targets;
 
   useEffect(() => {
@@ -318,15 +300,28 @@ export function Meter({ active = true }: MeterProps) {
       <div className="tuner-display">
         <div className="tuner-toolbar">
           <ToggleSwitch label="튜너" checked={isTunerActive} onChange={setTunerActive} />
+          <div className="tuner-mode-switch" role="group" aria-label="튜너 방식">
+            <button
+              type="button"
+              aria-pressed={!isChromatic}
+              onClick={() => setTuningPreset(lastGuitarPresetRef.current)}
+            >
+              기타
+            </button>
+            <button type="button" aria-pressed={isChromatic} onClick={() => setTuningPreset('chromatic')}>
+              크로매틱
+            </button>
+          </div>
           <label className="tuner-preset-control">
             <span>튜닝</span>
             <select
-              value={tuningPreset}
+              value={isChromatic ? lastGuitarPresetRef.current : tuningPreset}
+              disabled={isChromatic}
               onChange={(event) =>
                 setTuningPreset(event.currentTarget.value as TuningPresetId)
               }
             >
-              {TUNING_PRESET_OPTIONS.map((preset) => (
+              {GUITAR_TUNING_OPTIONS.map((preset) => (
                 <option key={preset.id} value={preset.id}>
                   {preset.label}
                 </option>
@@ -341,7 +336,7 @@ export function Meter({ active = true }: MeterProps) {
           </label>
         </div>
 
-        <div className="tuner-targets" role="group" aria-label="현재 튜닝 목표음">
+        <div className="tuner-targets" role="group" aria-label="현재 튜닝 목표음" hidden={isChromatic}>
           {tuningTargets.map((target) => {
             const isTarget = hasPitch && pitch.targetNote === target.note;
             return (
@@ -357,25 +352,23 @@ export function Meter({ active = true }: MeterProps) {
         </div>
 
         <div className={`tuner-reading is-${tunerStatus}`} aria-live="polite">
-          <span className="tuner-note">{hasPitch ? pitch.note : '--'}</span>
-          {hasPitch && pitch.stringNumber ? <span>{pitch.stringNumber}번 줄 · 목표 {pitch.targetNote}</span> : null}
+          <span className="tuner-note">{tuner.note}</span>
           <span className="tuner-pitch-detail">
-            <span className="tuner-frequency">
-              {hasPitch && pitch.frequency ? `${pitch.frequency.toFixed(1)} Hz` : '주파수 --'}
-            </span>
-            <strong className="tuner-status-text">{tuningStatusLabel}</strong>
+            {tuner.stringLabel ? <span className="tuner-string">{tuner.stringLabel}</span> : null}
+            <span className="tuner-frequency">{tuner.frequencyText}</span>
+            <strong className="tuner-status-text">{tuner.statusText}</strong>
           </span>
-          <output className="tuner-cents">{centsLabel}</output>
+          <output className="tuner-cents">{tuner.centsText}</output>
         </div>
 
         <div
           className={`cent-strip is-${tunerStatus}`}
-          style={{ '--cent-position': `${centPosition}%` } as CSSProperties}
+          style={{ '--cent-position': `${tuner.needlePercent}%` } as CSSProperties}
           aria-label="튜닝 센트"
           aria-valuemax={50}
           aria-valuemin={-50}
-          aria-valuenow={boundedCents}
-          aria-valuetext={tuningStatusLabel}
+          aria-valuenow={tuner.boundedCents}
+          aria-valuetext={tuner.statusText}
           role="meter"
         >
           <span />
