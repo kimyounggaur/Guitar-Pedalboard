@@ -25,6 +25,12 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
     this.holdSamples = 0;
     this.framesUntilStatePost = 0;
     this.state = startOpen ? 'Open' : 'Closed';
+    // Exponent math (Math.pow / Math.exp) is redone only when its inputs change, not per sample (S4.2). NaN never equals
+    // a number, so the first sample always computes.
+    this.cachedReductionDb = Number.NaN;
+    this.cachedClosedGain = 0;
+    this.cachedTimeSeconds = Number.NaN;
+    this.cachedCoeff = 0;
   }
 
   getParam(parameters, name, index) {
@@ -94,10 +100,18 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
         }
       }
 
-      const closedGain = Math.pow(10, reductionDb / 20);
+      if (reductionDb !== this.cachedReductionDb) {
+        this.cachedReductionDb = reductionDb;
+        this.cachedClosedGain = Math.pow(10, reductionDb / 20);
+      }
+      const closedGain = this.cachedClosedGain;
       const targetGain = this.targetOpen ? 1 : closedGain;
       const timeSeconds = this.targetOpen ? attackMs / 1000 : releaseMs / 1000;
-      const coeff = Math.exp(-1 / (sampleRate * timeSeconds));
+      if (timeSeconds !== this.cachedTimeSeconds) {
+        this.cachedTimeSeconds = timeSeconds;
+        this.cachedCoeff = Math.exp(-1 / (sampleRate * timeSeconds));
+      }
+      const coeff = this.cachedCoeff;
       this.gateGain = targetGain + (this.gateGain - targetGain) * coeff;
 
       if (this.targetOpen || this.gateGain > 0.85) {

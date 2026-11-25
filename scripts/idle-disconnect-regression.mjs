@@ -422,4 +422,58 @@ for (const [label, exportName, processorName] of processors) {
   assert.equal(processor.port.messages.length, before + 1, '다시 알리지 않는다');
 }
 
+// ---------------------------------------------------------------------------------------------
+// 5. 노이즈 게이트: 지수 계산(pow·exp)을 값이 바뀔 때만 해도 출력이 옛 구현과 비트까지 같다(S4.2)
+// ---------------------------------------------------------------------------------------------
+{
+  // 옛 구현(f456cc0, 샘플마다 pow·exp)이 같은 시나리오에서 낸 출력의 해시. 문턱·감소량·어택·홀드·릴리스·히스테리시스가 블록마다 바뀌고
+  // 열림·닫힘이 오가서 캐시가 무효가 되는 길을 모두 지난다(상태 메시지 47번).
+  const GOLDEN = { hash: '98a8b784', states: 'COCCOOCOCCOOOO', messages: 47 };
+  const module = await bundle("export * from './audio/worklets/noise-gate-processor.ts';", 'noise-gate-golden.ts');
+  let Processor = null;
+  class MockProcessor {
+    constructor() { this.port = { messages: [], postMessage(message) { this.messages.push(message); }, onmessage: null }; }
+  }
+  vm.runInNewContext(module.noiseGateProcessorSource, {
+    sampleRate: 48000, AudioWorkletProcessor: MockProcessor, registerProcessor(_name, klass) { Processor = klass; }, Math, Float32Array, Array, Object, Number,
+  });
+  const processor = new Processor({});
+  let seed = 12345;
+  const rand = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 2 ** 31 - 1; };
+  let hash = 2166136261;
+  const thresholds = [-55, -40, -62, -48];
+  const reductions = [-80, -40, -20, -80, -60];
+  const attacks = [6, 1, 20, 6];
+  const releases = [180, 40, 600, 180];
+  const holds = [70, 0, 200, 70];
+  const hysteresis = [4, 0, 8, 4];
+  let states = '';
+  for (let block = 0; block < 700; block += 1) {
+    const position = block % 140;
+    const amplitude = position >= 40 && position < 90 ? 0.3 * (1 - (position - 40) / 80) : 2e-4;
+    const left = Float32Array.from({ length: BLOCK }, () => amplitude * rand());
+    const right = Float32Array.from({ length: BLOCK }, () => amplitude * rand());
+    const parameters = {
+      thresholdDb: [thresholds[Math.floor(block / 97) % 4]],
+      reductionDb: [reductions[Math.floor(block / 83) % 5]],
+      attackMs: [attacks[Math.floor(block / 61) % 4]],
+      holdMs: [holds[Math.floor(block / 71) % 4]],
+      releaseMs: [releases[Math.floor(block / 53) % 4]],
+      hysteresisDb: [hysteresis[Math.floor(block / 89) % 4]],
+    };
+    const outputs = [[new Float32Array(BLOCK), new Float32Array(BLOCK)]];
+    assert.equal(processor.process([[left, right]], outputs, parameters), true);
+    for (const channel of outputs[0]) {
+      const words = new Uint32Array(channel.buffer);
+      for (let index = 0; index < words.length; index += 1) {
+        hash = Math.imul(hash ^ words[index], 16777619) >>> 0;
+      }
+    }
+    if (block % 50 === 0) states += processor.state[0];
+  }
+  assert.equal(hash.toString(16), GOLDEN.hash, '출력이 옛 구현과 비트까지 같다');
+  assert.equal(states, GOLDEN.states, '열림·닫힘 순서가 같다');
+  assert.equal(processor.port.messages.length, GOLDEN.messages, '상태 메시지 수가 같다');
+}
+
 console.log('idle-disconnect: 모든 시험 통과');
