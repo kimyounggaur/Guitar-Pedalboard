@@ -167,6 +167,16 @@ for (const [index, target] of TUNING_PRESETS.standard.targets.entries()) {
   assert.equal(e2.statusText, '200센트 높음');
 }
 
+{
+  // 두 줄에서 센트 거리가 똑같은 음(두 줄 목표음의 기하평균)에서는 헤르츠로 더 가까운 낮은 줄이 이긴다. 표준 튜닝의 E2(40)-A2(45) 사이가 그 예다.
+  const middle = Math.sqrt(hz('E2') * hz('A2'));
+  const reading = getPitchReading(middle, 'standard');
+  assert.equal(reading.stringNumber, 6, '동률이면 헤르츠로 가까운 낮은 줄');
+  near(reading.cents, 250, '동률 지점은 E2 보다 250센트 높다', 1e-6);
+  assert.equal(reading.octavesAbove, undefined);
+  assert.equal(reading.checkString, undefined);
+}
+
 // ── 모든 기타 튜닝의 개방현 ───────────────────────────────────────
 for (const { id, targets } of GUITAR_TUNING_OPTIONS) {
   for (const [index, target] of targets.entries()) {
@@ -304,9 +314,15 @@ for (const bad of [null, 0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
     [0, '정확함', 'in-tune', '0 ¢'],
     [4.9, '정확함', 'in-tune', '+5 ¢'],
     [-4.9, '정확함', 'in-tune', '-5 ¢'],
+    [5.1, '5센트 높음', 'near', '+5 ¢'],
+    [-5.1, '5센트 낮음', 'near', '-5 ¢'],
+    [5.6, '6센트 높음', 'near', '+6 ¢'],
     [6, '6센트 높음', 'near', '+6 ¢'],
     [-6, '6센트 낮음', 'near', '-6 ¢'],
-    [15, '15센트 높음', 'near', '+15 ¢'],
+    [14.9, '15센트 높음', 'near', '+15 ¢'],
+    [-14.9, '15센트 낮음', 'near', '-15 ¢'],
+    [15.1, '15센트 높음', 'far', '+15 ¢'],
+    [-15.6, '16센트 낮음', 'far', '-16 ¢'],
     [-16, '16센트 낮음', 'far', '-16 ¢'],
     [30, '30센트 높음', 'far', '+30 ¢'],
   ];

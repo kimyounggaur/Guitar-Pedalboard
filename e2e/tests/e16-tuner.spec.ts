@@ -167,13 +167,18 @@ test.describe('E-16 튜너: 줄·옥타브·크로매틱', () => {
     await expect(modeButton(page, '기타')).toHaveAttribute('aria-pressed', 'false');
     await expect(tuningSelect(page)).toBeDisabled();
     await expect(tuningSelect(page)).toHaveValue('open-g');
+    // 크로매틱에는 목표음이 없다: 칸이 비어 눈에는 안 보이지만, 이름 붙은 빈 그룹이 화면 낭독기에 읽히지 않도록 hidden 이어야 한다
     await expect(page.locator('.tuner-targets')).toBeHidden();
+    await expect(page.locator('.tuner-targets')).toHaveAttribute('hidden', '');
+    await expect(page.locator('.tuner-targets span')).toHaveCount(0);
 
     await modeButton(page, '기타').click();
     await expect(modeButton(page, '기타')).toHaveAttribute('aria-pressed', 'true');
     await expect(tuningSelect(page)).toBeEnabled();
     await expect(tuningSelect(page)).toHaveValue('open-g');
     await expect(page.locator('.tuner-targets')).toBeVisible();
+    await expect(page.locator('.tuner-targets')).not.toHaveAttribute('hidden', '');
+    await expect(page.locator('.tuner-targets span')).toHaveCount(6);
     await expect(page.locator('.tuner-targets span').first()).toHaveText('6번 D2');
   });
 
