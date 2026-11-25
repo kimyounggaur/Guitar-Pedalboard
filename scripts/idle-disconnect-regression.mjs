@@ -41,7 +41,7 @@ const harness = await bundle(
 );
 const {
   FEATURE_FLAG_DEFAULTS, FEATURE_FLAG_NAMES, parseFeatureFlags, isFeatureEnabled, setFeatureFlagOverride, resetFeatureFlagOverrides,
-  setContextTimers, timersFor, windowTimers, DriveEffect, DelayEffect, initialPedals,
+  setContextTimers, clearContextTimers, timersFor, windowTimers, DriveEffect, DelayEffect, initialPedals,
 } = harness;
 
 // ---------------------------------------------------------------------------------------------
@@ -132,6 +132,9 @@ assert.equal(timersFor({}), windowTimers, '등록이 없으면 창 타이머');
   const timers = fakeTimers();
   setContextTimers(context, timers);
   assert.equal(timersFor(context), timers, '등록한 시계를 돌려준다');
+  // 렌더가 끝나면 등록을 지운다: 남겨 두면 컨텍스트가 수거되지 않아 프로브가 멈춘다(L-268)
+  clearContextTimers(context);
+  assert.equal(timersFor(context), windowTimers, '등록을 지우면 다시 창 타이머');
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -13,7 +13,7 @@ import { dbToGain } from '../utils/db';
 import { ImpulseCache } from '../utils/impulseCache';
 import { clampTrimDb } from './loudnessSpec';
 import { createContextTimers } from './contextTimers';
-import { setContextTimers } from '../utils/timers';
+import { clearContextTimers, setContextTimers } from '../utils/timers';
 import { createOfflineEffect } from './effectFactory';
 import { registerWorklets } from './workletModules';
 
@@ -332,6 +332,8 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
     }
     inputStage.dispose();
     effects.forEach((effect) => effect.dispose());
+    // 이펙트를 모두 정리한 뒤에 등록을 지운다(정리하며 쉬기 타이머를 이 시계로 취소한다). 지우지 않으면 컨텍스트가 수거되지 않는다(L-268).
+    clearContextTimers(context);
     if (ownsImpulseCache) impulseCache.dispose();
   }
 }

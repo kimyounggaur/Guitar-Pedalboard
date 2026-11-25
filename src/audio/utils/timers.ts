@@ -24,6 +24,14 @@ export function setContextTimers(context: object, timers: Timers): void {
   contextTimers.set(context, timers);
 }
 
+/**
+ * 등록을 지운다. 오프라인 렌더는 끝나면 반드시 불러야 한다: 등록된 시계는 컨텍스트를 붙잡고 있어서(렌더 시계가 context 를 읽는다)
+ * 지우지 않으면 브라우저가 컨텍스트와 워클릿 영역을 거두지 못하고, 렌더를 수백 번 돌리는 프로브에서 어느 순간 렌더가 끝나지 않고 멈춘다(L-268).
+ */
+export function clearContextTimers(context: object): void {
+  contextTimers.delete(context);
+}
+
 export function timersFor(context: object): Timers {
   return contextTimers.get(context) ?? windowTimers;
 }
