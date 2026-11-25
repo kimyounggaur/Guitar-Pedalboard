@@ -2021,3 +2021,50 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - `sizes` 문자열이 `index.html` 과 `PedalBoard.tsx` 에 따로 있다. 고칠 때는 두 곳을 함께 고친다(E-19 가 어긋남을 잡는다).
 
 ---
+
+## S4.2 꺼진 페달과 상시 동작 노드의 CPU
+
+- 브랜치·병합: `refactor/s4-2-idle` → `phase/4`. 커밋: 2085509(쉬기 구현·P-30·P-17 확장), a244225(변이 시험 보강), 4a02f55(렌더 시계 등록 해제 L-268), e4136b9(러너 샘플레이트마다 새 문서), 0bad13e(기준선 baseline:), 68d64f4(E-24), f55a84f(노이즈 게이트 캐시·Chorus LFO)
+- 해결 항목: R4-2(Phaser 외 나머지 상시 부하). 설계서의 워클릿 `idle` 메시지는 만들지 않고 **입력을 끊는 방식**으로 같은 효과를 냈다(L-266).
+- 변경 파일(`git diff --shortstat <phase/4 시작> HEAD`, 이 문서 커밋 전): 22 files changed, 1711 insertions(+), 89 deletions(-). 제품 — `BaseEffect.ts`(쉬기 관리)·`DelayEffect.ts`(꼬리·되먹임)·`ChorusEffect.ts`(LFO 보이스 수)·워클릿 6개(`compressor`·`envelope-follower`·`flanger`·`noise-gate`·`phaser`, 노이즈 게이트는 지수 캐시 포함)·`utils/timers.ts`·`offline/renderChain.ts`·`config/flags.ts`. 시험 — 새 `scripts/idle-disconnect-regression.mjs`(`npm run test:idle-disconnect`)·`scripts/chorus-regression.mjs` 개정·`e2e/tests/e24-idle-pedals.spec.ts`(E-24, 3개)·`e2e/helpers/mocks.ts`·프로브 `src/audio/testing/probes.ts`(P-30 신규, P-17 확장)·`scripts/audio-render-probe.mjs`(샘플레이트마다 새 문서).
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| P-17: 15개 모두 꺼짐이 현재의 50% 이하 ★ | **충족** | 모두 꺼짐 ÷ 모두 켬 0.629 / 0.593 → 0.229 / 0.227(44.1 / 48 kHz). 절대 기준 ≤ 0.29 (L-276) |
+| 켜고 끌 때 클릭 없음 | **충족** | P-30 `maxWakeClickDeltaDb` 0.93 / 0.88 dB(≤ 2.0), E-24 레벨 차 ≤ 0.87 dB |
+| 딜레이·리버브 잔향이 끝까지 이어진다 | **충족** | P-30 `maxTailDiffDb` −200 dB, 꼬리 뒤 잔여 −130.4 dBFS(L-269) |
+| (보조) 쉬었다 깬 소리 = 쉬지 않은 소리 | **충족** | P-30 상태 없는 페달 −108.8 dB(수치 잡음 바닥), 상태 있는 페달(컴프레서·노이즈 게이트) −25.2 dB, 깨운 뒤 레벨 차 ≤ 0.62 dB(LFO 위상, L-270) |
+
+**전후**
+
+| 항목 | 전(`phase/4` 시작) | 후 |
+|---|---|---|
+| 모두 꺼짐 ÷ 모두 켬(렌더 시간) | 0.629 / 0.593 | 0.229 / 0.227 |
+| `cpuShare.allOff`(코어 몫) | 0.113 / 0.135 | 0.040 / 0.043 |
+| 페달 하나를 꺼 둔 비용(`offContribution.*`) | (측정 없음) | −0.001 ~ 0.027 |
+| 노이즈 게이트 6초 렌더 비용(빈 체인 대비) | +83 ms | +60 ms |
+| Chorus(4보이스) 6초 렌더 비용 | +95~101 ms | +63 ms |
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| `npm test` | 50개 통과(552.7초) | 51개 통과(532.7초) |
+| `npm run e2e` | 277개 통과(11.5분) | 280개 통과(12.0분 — 새 시험 3개) |
+| 프로브 | 29개, 값 2,118개 | 30개, 값 2,468개(P-30 260개 신규, P-17 90개 늘었다. 나머지는 허용 오차 안), 최종 코드의 전체 비교(503.4초)가 기준선과 일치 |
+
+- 검증
+  - `npx tsc -b --noEmit`·`npx tsc -p tsconfig.e2e.json --noEmit`·`npx eslint e2e`·`npm run build` 오류 0, `npm run lint`(전체 e2e 뒤), 정규식 단언 목록은 `chorus-regression` 가드가 바뀌어 `regex-assertions.md` 를 다시 만들었다(L-274).
+  - **새 시험이 정말 잡는지**(L-275): 단위 변이 25개·E-24 변이 5개·Chorus 변이 10개를 넣어 모두 시험이 실패하는 것을 확인했다. 프로브 수준 변이는 P-30 이 잡았고 M11 만 단위 시험만 잡는다.
+  - **이전 코드 비교**: 플래그 `?ff=-idleDisconnect` 로 끈 렌더(쉬지 않음)와 켠 렌더를 P-30 이 견준다. 노이즈 게이트 캐시는 f456cc0 과 출력 해시가 같다(`98a8b784`).
+- 만난 문제
+  - 워클릿이 `process()` 에서 `false` 를 돌려주면 Chromium 이 입력을 다시 이어도 그 처리기를 다시 부르지 않아 소리가 영영 죽었다(오프라인·실시간 모두, E-24 가 잡았다) → 계속 `true`(L-267).
+  - 프로브 전체 실행이 멈췄다 — 렌더 시계 등록이 컨텍스트를 붙잡았다(L-268). 처음 가설(P-17 의 렌더가 너무 많다)은 틀렸고 되돌렸다.
+  - Chorus 보이스 수 변경 시 LFO 위상이 새로 시작해 클릭 비율이 옛 2.36 dB → 새 2.45 dB(L-274). 받아들였다.
+- 사람 확인 필요
+  - 쉬었다 깨어나는 소리를 귀로 들어 보는 것(상태가 있는 페달의 켠 직후, Trails 딜레이·리버브 꼬리). 수치로는 같지만 청취 확인은 사람이 한다(`docs/listening/`).
+  - 실제 기기(휴대폰)에서 CPU 감소 — 렌더 시간 비율은 이 기계의 값이다.
+- 남은 위험
+  - 처리를 건너뛰어도 워클릿의 `process()` 호출은 남아(L-267) 꺼진 페달이 0 은 아니다(≤ 0.027).
+  - Ping-Pong 렌더가 반복 불가(L-271)인 이월 항목은 그대로다.
+  - 플래그 `idleDisconnect` 는 다음 릴리스에서 정리한다(설계서 7.2).
+
+---
