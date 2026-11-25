@@ -33,7 +33,7 @@ export class ReverbEffect extends BaseEffect {
     pedal: PedalState,
     private readonly impulseCache: ImpulseCache,
   ) {
-    super(context, pedal);
+    super(context, pedal, { mixLaw: 'additive' });
     this.preDelay = context.createDelay(0.25);
     this.convolver = context.createConvolver();
     this.lowCut = context.createBiquadFilter();

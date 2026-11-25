@@ -47,6 +47,7 @@
     "test:cabinet-ir": "node scripts/cabinet-ir-regression.mjs",
     "test:knob": "node scripts/knob-regression.mjs",
     "test:latency": "node scripts/latency-regression.mjs",
+    "test:mix-law": "node scripts/mix-law-regression.mjs",
     "test:peak-limiter": "node scripts/peak-limiter-regression.mjs",
     "test:preset-loudness": "node scripts/preset-loudness-regression.mjs",
     "test:preset-normalize": "node scripts/preset-normalize-regression.mjs",

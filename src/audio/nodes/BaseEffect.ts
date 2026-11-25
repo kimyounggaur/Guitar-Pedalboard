@@ -1,9 +1,15 @@
 import type { BasePedalParams, EffectType, PedalState } from '../types';
 import { clamp } from '../utils/db';
 import { smoothParam } from '../utils/smoothing';
+import { mixGains, type MixLaw } from './mixLaw';
 
 const ROUTING_FADE_SECONDS = 0.012;
 const WET_CUT_FADE_SECONDS = 0.003;
+
+export interface BaseEffectOptions {
+  /** 원음과 효과음을 섞는 방식(S3.1). 정하지 않으면 crossfade — 딜레이·리버브만 additive 를 고른다. */
+  mixLaw?: MixLaw;
+}
 
 export class BaseEffect {
   readonly id: string;
@@ -28,9 +34,12 @@ export class BaseEffect {
   /** 소리에 걸리는가(S2.4: 옛 enabled·bypassed 두 값의 곱을 하나로 합쳤다). 켜고 끄는 크로스페이드가 이 값 하나로 움직인다. */
   private active = true;
   private trails = false;
+  /** 원음·효과음을 섞는 방식. 처음 라우팅을 맞추기 전에 정해져야 해서 생성자 인자로만 받는다. */
+  protected readonly mixLaw: MixLaw;
 
-  constructor(context: BaseAudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState, options: BaseEffectOptions = {}) {
     this.context = context;
+    this.mixLaw = options.mixLaw ?? 'crossfade';
     this.id = pedal.id;
     this.type = pedal.type;
 
@@ -129,12 +138,10 @@ export class BaseEffect {
   }
 
   private applyRouting(immediate = false): void {
-    const mix = clamp(this.commonParams.mix / 100, 0, 1);
     const active = this.active;
-    const preserveTrails = !active && this.trails;
-    // Time-based effects add repeats/ambience without attenuating the direct guitar.
-    const dry = active ? (this.type === 'delay' || this.type === 'reverb' ? 1 : 1 - mix) : 0;
-    this.wetTarget = active || preserveTrails ? mix : 0;
+    // 딜레이·리버브(additive)는 원음을 줄이지 않고 반복·공간만 얹는다. 나머지는 Mix 만큼 원음과 맞바꾼다(S3.1).
+    const { dry, wet } = mixGains(this.mixLaw, this.commonParams.mix / 100, active, this.trails);
+    this.wetTarget = wet;
 
     this.setRoutingParam(
       this.bypassAll.gain,
