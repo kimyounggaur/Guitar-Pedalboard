@@ -50,6 +50,66 @@
       "match": "P-26.tap*.ms",
       "abs": 3.2,
       "why": "핑퐁 반복음의 시각(ms). 되먹임 루프를 한 바퀴 돌 때 Chrome 이 렌더 퀀텀 하나(128 샘플: 44.1 kHz 에서 2.90 ms, 48 kHz 에서 2.67 ms)를 더하는데, 이것이 실행마다 있거나 없다(셋째 반복음은 같은 코드·같은 입력으로 6번 중 3번이 1,250 ms, 3번이 1,250 + 1 퀀텀이었고 넷째는 6번 모두 1,750 + 1 퀀텀: F-6). 그래서 퀀텀 하나(2.90 ms)보다 조금 넓은 ±3.2 ms 로 본다. 첫째·둘째 반복음은 영향이 없어 수용 기준(±1 ms)이 따로 잡는다."
+    },
+    {
+      "match": "P-30.diffDb.*",
+      "ignore": true,
+      "why": "꺼진 페달을 켠 뒤 소리를 '쉬기 끔(idleDisconnect=false)' 렌더와 견준 차이(상대 dB). 상태가 없는 페달은 수치 잡음 바닥(−109~−200 dB)이라 값끼리 견주면 잡음이 흔들려 불안정하다. 최악값만 maxDiffDb.* 로 두고 수용 기준(criteria)으로 본다."
+    },
+    {
+      "match": "P-30.repeatDiffDb.*",
+      "atMost": -120,
+      "why": "같은 구성을 두 번 렌더한 차이(상대 dB). 같으면 −200, Chorus 는 −157 dB 안팎의 수치 잡음이 남는다. 값 대신 상한만 본다."
+    },
+    {
+      "match": "P-30.maxDiffDb.stateless",
+      "atMost": -90,
+      "why": "상태 없는 페달(드라이브·EQ·캐비닛 등)의 켠 뒤 소리가 쉬기 끔 렌더와 같아야 한다(수치 잡음 바닥이라 상한만 본다)."
+    },
+    {
+      "match": "P-30.maxDiffDb.stateful",
+      "abs": 3,
+      "why": "상태가 있는 페달(컴프레서·노이즈 게이트)은 쉬는 동안 상태를 비우므로 쉬기 끔(상태가 계속 흐른 것)과 소리가 조금 다르다. 실제 신호 크기의 차이라 ±3 dB 로 본다."
+    },
+    {
+      "match": "P-30.tailDiffDb.*",
+      "atMost": -90,
+      "why": "Trails 딜레이·리버브가 꺼진 뒤 꼬리가 끊기기 전까지 쉬기 켬·끔 렌더의 차이(상대 dB). 같으면 −200 이라 상한만 본다."
+    },
+    {
+      "match": "P-30.maxTailDiffDb",
+      "atMost": -90,
+      "why": "위 tailDiffDb 의 최악값."
+    },
+    {
+      "match": "P-30.postTailResidualDbfs.*",
+      "atMost": -60,
+      "why": "꼬리 시간이 지나 입력을 끊은 뒤 남는 출력(dBFS). 거의 −130 이라 −60 이하만 본다(들리지 않는 크기)."
+    },
+    {
+      "match": "P-30.maxPostTailResidualDbfs",
+      "atMost": -60,
+      "why": "위 postTailResidualDbfs 의 최악값."
+    },
+    {
+      "match": "P-30.levelAfterWakeDb.*",
+      "abs": 0.3,
+      "why": "깨운 뒤 출력 레벨이 쉬기 끔 렌더와 얼마나 다른지(dB). LFO 위상이 다르게 흐른 효과가 0.6 dB 안쪽으로 남는다(L-270)."
+    },
+    {
+      "match": "P-30.maxAbsLevelAfterWakeDb",
+      "abs": 0.3,
+      "why": "위 levelAfterWakeDb 의 절댓값 최악."
+    },
+    {
+      "match": "P-30.wakeClickDb.*",
+      "abs": 0.5,
+      "why": "깨우는 순간 클릭 창(다른 창 대비 dB). 쉬기 켬·끔 둘 다 적는다. 렌더가 같은 코드·같은 Chrome 이면 같지만 기계 차이를 감안해 ±0.5 dB."
+    },
+    {
+      "match": "P-30.maxWakeClickDeltaDb",
+      "abs": 0.3,
+      "why": "쉬기 켬이 끔보다 클릭 창을 키운 정도의 최악값(dB)."
     }
   ],
   "criteria": [
@@ -514,6 +574,54 @@
       "atLeast": 3.9,
       "step": "S3.7",
       "why": "같은 값을 기능 플래그 oversample2x 를 끈 오버샘플링 4배로 잰 것(ms). 설계서의 옛 값 '각 약 4 ms' 다(실측 44.1 kHz 4.39 ms·48 kHz 4.04 ms). 이 값이 params/latency.json 의 4x 표이므로 3.9 ms 보다 작아지면 플래그를 꺼도 4배가 아닌 것이다."
+    },
+    {
+      "match": "P-17.ratio.allOffOverAllOn",
+      "atMost": 0.29,
+      "step": "S4.2",
+      "why": "15개를 모두 끈 체인의 렌더 시간 ÷ 모두 켠 체인. 설계서 S4.2 수용 기준 '모두 꺼짐이 현재의 50% 이하'. S4.2 이전 기준선은 0.629(44.1 kHz)·0.593(48 kHz)라 절반은 0.31·0.30 이다. 실측 0.19~0.24(기계 잡음 ±0.04)."
+    },
+    {
+      "match": "P-17.ratio.offContribution.*",
+      "atMost": 0.05,
+      "step": "S4.2",
+      "why": "페달 하나만 끈 상태로 둔 체인의 렌더 시간 − 빈 체인(모두 켠 체인 대비 비율). 꺼진 페달의 기여가 0 에 가까워야 한다. 실측 0.001~0.027(워클릿·노드 최소 비용 포함)."
+    },
+    {
+      "match": "P-30.maxDiffDb.stateless",
+      "atMost": -90,
+      "step": "S4.2",
+      "why": "쉬기 켬·끔 렌더의 차이. 상태 없는 페달에서는 소리가 같아야 한다(수치 잡음 바닥, 실측 약 −109 dB)."
+    },
+    {
+      "match": "P-30.maxDiffDb.stateful",
+      "atMost": -15,
+      "step": "S4.2",
+      "why": "상태가 있는 페달(컴프레서·노이즈 게이트)의 차이. 쉬는 동안 엔벨로프가 풀려 켠 직후 소리가 조금 다르다(실측 −25 dB). −15 dB 를 넘으면 소리가 달라진 것이다."
+    },
+    {
+      "match": "P-30.maxAbsLevelAfterWakeDb",
+      "atMost": 1.0,
+      "step": "S4.2",
+      "why": "깨운 뒤 출력 레벨이 쉬기 끔과 다른 정도(dB). 죽은 페달(소리 안 남)이면 크게 벌어진다. 실측 0.62 는 LFO 위상 차이뿐."
+    },
+    {
+      "match": "P-30.maxWakeClickDeltaDb",
+      "atMost": 2.0,
+      "step": "S4.2",
+      "why": "깨우는 순간 클릭 창이 쉬기 끔보다 커진 정도의 최악값(dB). 실측 0.93. 설계서의 '켜고 끌 때 클릭 없음'."
+    },
+    {
+      "match": "P-30.maxTailDiffDb",
+      "atMost": -90,
+      "step": "S4.2",
+      "why": "Trails 딜레이·리버브가 꺼진 뒤 꼬리가 끊기기 전의 소리가 쉬기 끔과 같아야 한다(설계서 '잔향이 끝까지 이어진다'). 실측 −200 dB."
+    },
+    {
+      "match": "P-30.maxPostTailResidualDbfs",
+      "atMost": -60,
+      "step": "S4.2",
+      "why": "꼬리 시간 뒤 입력을 끊은 다음 남는 출력(dBFS). 실측 약 −130 dBFS."
     }
   ]
 }
