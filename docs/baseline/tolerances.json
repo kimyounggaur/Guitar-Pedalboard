@@ -39,7 +39,7 @@
     {
       "match": "P-17.ratio.phaserStages12Over4",
       "ignore": true,
-      "why": "켠 Phaser 가 더 쓰는 렌더 시간(꺼진 Phaser 대비)의 12단 ÷ 4단. 렌더 시간 두 개의 차를 다시 나눈 값이라 기계 잡음에 크게 흔들리고(1.1~1.4), 샘플마다 드는 고정 비용(입출력·파라미터 읽기)이 단 계산보다 커서 3 에 가까워지지도 않는다. 참고용으로만 남기고 비교하지 않는다. '고른 단수만 계산한다'는 시간이 아니라 scripts/phaser-regression.mjs 가 단 상태로 직접 확인한다."
+      "why": "켠 Phaser 가 더 쓰는 렌더 시간(꺼진 Phaser 대비)의 12단 ÷ 4단. 렌더 시간 두 개의 차를 다시 나눈 값이라 기계 잡음에 크게 흔들리고(1.1~1.5), 샘플마다 드는 고정 비용(입출력·파라미터 읽기)이 단 계산보다 커서 3 에 가까워지지도 않는다. 참고용으로만 남기고 비교하지 않는다. '고른 단수만 계산한다'는 시간이 아니라 scripts/phaser-regression.mjs 가 단 상태로 직접 확인한다."
     },
     {
       "match": "P-17.ratio.*",
@@ -435,6 +435,48 @@
       "atMost": 0.04,
       "step": "S3.4",
       "why": "꺼진 Phaser 만 있는 체인의 렌더 시간 − 빈 체인(15개 전체 켠 체인 대비 비율). 설계서 S3.4 '꺼진 상태의 기여 0(현재 코어의 약 10%)'. 옛 값 0.088(44.1 kHz)·0.073(48 kHz)에서 0.010~0.013 으로 줄었다. 0.01 은 워클릿 노드가 렌더 퀀텀마다 불리는 최소 비용이라 0 이 될 수는 없고, 기계 잡음(±0.01)을 고려해 0.04 로 둔다."
+    },
+    {
+      "match": "P-13.distortion.at30MinusOverdriveAt30",
+      "atLeast": 0,
+      "step": "S3.5",
+      "why": "노브 30% 에서 Distortion THD − Overdrive THD(REF-SINE 220 Hz −18 dBFS, Bias 기본값). 설계서 S3.5 수용 기준 '30%에서 같은 위치 Overdrive 의 THD 이상'. 옛 값 −3.3%p(Distortion 22.2% < Overdrive 25.5%), 지금 +6.9%p (L-240)."
+    },
+    {
+      "match": "P-13.distortion.minAheadOfOverdrive",
+      "atLeast": 0,
+      "step": "S3.5",
+      "why": "노브 10~100% 의 모든 자리에서 Distortion THD − Overdrive THD 의 가장 작은 값. 설계서의 '같은 노브 위치에서 Distortion ≥ Overdrive' 목표를 30% 한 점이 아니라 10% 이상 전 구간으로 넓혀 건다. 옛 값 −18.2%p(노브 20%: 0% 대 18.2%), 지금 +1.9%p(노브 10%)."
+    },
+    {
+      "match": "P-13.distortion.minStepPercent",
+      "atLeast": 0,
+      "step": "S3.5",
+      "why": "노브를 10 올릴 때 Distortion THD 가 늘어난 폭의 가장 작은 값(= 단조 증가). 맨 위(90→100%)는 하드 클립 THD 의 한계(약 48%)에 가까워 0.16%p 만 늘지만 줄어들지는 않는다."
+    },
+    {
+      "match": "P-14.smallestStepPercent",
+      "atLeast": 1,
+      "step": "S3.5",
+      "why": "Crunch Gain 노브를 10 올릴 때 THD 가 늘어난 폭의 가장 작은 값. 설계서 S3.5 수용 기준 '구간당 증가 ≥ 1%p'(★). 설계서가 말한 '20~30% 에서 최대'는 이 측정(−18 dBFS)에서 처음부터 재현되지 않았다: 옛 값도 1.47%p 로 이미 충족(L-241)."
+    },
+    {
+      "match": "P-27.minRmsDb",
+      "atLeast": -30,
+      "step": "S3.5",
+      "why": "Drive 의 네 모드 × 노브 42·100% × Bias −1~+1 로 REF-PC 를 넣었을 때 출력 RMS(dBFS)의 가장 작은 값. 설계서 S3.5 수용 기준 'Bias 전 범위에서 무음 없음(출력 RMS ≥ −30 dBFS)'. 옛 곡선은 Bias ±1 에서 −142 ~ −200 dBFS(무음), ±0.3 에서도 −23 dBFS 였다. 지금 −19.8 dBFS."
+    },
+    {
+      "match": "P-27.clampDiffDb",
+      "atMost": 0.1,
+      "step": "S3.5",
+      "why": "Bias ±1(저장값 한도 밖) 과 ±0.3(한도)의 출력 RMS 차의 최댓값(dB). 엔진이 한도 밖을 한도로 잘라 쓰므로 0 이어야 한다."
+    },
+    {
+      "match": "P-27.factoryBiasMaxAbs",
+      "atMost": 0.3,
+      "step": "S3.5",
+      "why": "팩토리 프리셋 Drive 페달의 |Bias| 최댓값. 새 한도 ±0.3 안이라 프리셋 값은 바뀌지 않는다(설계서 S3.5 '프리셋 값은 바꾸지 않되')."
     }
   ]
 }

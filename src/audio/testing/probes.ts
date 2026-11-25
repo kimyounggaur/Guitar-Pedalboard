@@ -928,9 +928,10 @@ const KNOB_STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 async function thdAtKnobs(
   ctx: ProbeContext,
   build: (knob: number) => PedalState,
+  levelDb = -18,
 ): Promise<number[]> {
   const rate = ctx.sampleRate;
-  const input = signals.refSine(rate, 3, 220, -18);
+  const input = signals.refSine(rate, 3, 220, levelDb);
   const result: number[] = [];
   for (const knob of KNOB_STEPS) {
     const render = await ctx.render({ input: [input], pedals: [build(knob)] });
@@ -943,7 +944,7 @@ const p13: ProbeDefinition = {
   id: 'P-13',
   title: 'Drive Distortion THD-노브 곡선',
   describe:
-    'REF-SINE 220 Hz(−18 dBFS)를 Drive(Mix 100%)로 통과시켜 drive 노브 0~100(10 단위)의 THD(2~10배음, %)를 Distortion·Overdrive 모드에서 잰다.',
+    'REF-SINE 220 Hz(−18 dBFS)를 Drive(Mix 100%, Bias 기본값)로 통과시켜 drive 노브 0~100(10 단위)의 THD(2~10배음, %)를 Distortion·Overdrive 모드에서 잰다. minAheadOfOverdrive 는 노브 10~100 에서 Distortion − Overdrive 의 가장 작은 값, minStepPercent 는 노브를 10 올릴 때 Distortion THD 가 가장 적게(또는 음수로) 늘어난 폭이다.',
   steps: 'S3.5',
   async run(ctx) {
     const distortion = await thdAtKnobs(ctx, (knob) => pedal('drive', { mode: 'distortion', drive: knob, mix: 100 }));
@@ -955,6 +956,9 @@ const p13: ProbeDefinition = {
     });
     values['distortion.monotonic'] = distortion.every((value, index) => index === 0 || value >= distortion[index - 1] - 0.05);
     values['distortion.at30MinusOverdriveAt30'] = distortion[3] - overdrive[3];
+    // S3.5: 노브 10~100 어디서나 Distortion 이 같은 위치의 Overdrive 이상인지(가장 모자란 자리), 노브를 올릴 때 가장 크게 줄어든 폭.
+    values['distortion.minAheadOfOverdrive'] = Math.min(...distortion.slice(1).map((value, index) => value - overdrive[index + 1]));
+    values['distortion.minStepPercent'] = Math.min(...distortion.slice(1).map((value, index) => value - distortion[index]));
     return { metrics: metrics(values) };
   },
 };
@@ -962,7 +966,8 @@ const p13: ProbeDefinition = {
 const p14: ProbeDefinition = {
   id: 'P-14',
   title: 'Crunch THD-노브 곡선',
-  describe: 'REF-SINE 220 Hz(−18 dBFS)를 Crunch(Mix 100%)로 통과시켜 gain 노브 0~100(10 단위)의 THD(%)를 잰다.',
+  describe:
+    'REF-SINE 220 Hz(−18 dBFS)를 Crunch(Mix 100%)로 통과시켜 gain 노브 0~100(10 단위)의 THD(%)를 잰다. smallestStepPercent 는 노브를 10 올릴 때 THD 가 가장 적게 늘어난 폭이다. normal.* 은 같은 측정을 보통 세기 연주에 가까운 −12 dBFS 로 한 값이다(참고).',
   steps: 'S3.5',
   async run(ctx) {
     const thd = await thdAtKnobs(ctx, (knob) => pedal('crunch', { gain: knob, mix: 100 }));
@@ -973,6 +978,14 @@ const p14: ProbeDefinition = {
     let smallestStep = Number.POSITIVE_INFINITY;
     for (let index = 1; index < thd.length; index += 1) smallestStep = Math.min(smallestStep, thd[index] - thd[index - 1]);
     values.smallestStepPercent = smallestStep;
+    // S3.5: 보통 세기 연주(−12 dBFS 사인)에서도 노브를 따라 THD 가 늘어나는지. 신호가 클수록 THD 는 하드 클립의 한계(약 40%)에 일찍 가까워진다.
+    const normal = await thdAtKnobs(ctx, (knob) => pedal('crunch', { gain: knob, mix: 100 }), -12);
+    KNOB_STEPS.forEach((knob, index) => {
+      values[`normal.gain.${knob}`] = normal[index];
+    });
+    let smallestNormalStep = Number.POSITIVE_INFINITY;
+    for (let index = 1; index < normal.length; index += 1) smallestNormalStep = Math.min(smallestNormalStep, normal[index] - normal[index - 1]);
+    values['normal.smallestStepPercent'] = smallestNormalStep;
     return { metrics: metrics(values) };
   },
 };
@@ -1767,8 +1780,47 @@ const p25: ProbeDefinition = {
   },
 };
 
+// ---------------------------------------------------------------------------------------------
+// P-27 — Drive Bias 전 범위에서 소리가 사라지지 않는다
+// ---------------------------------------------------------------------------------------------
+const p27: ProbeDefinition = {
+  id: 'P-27',
+  title: 'Drive Bias 전 범위 출력',
+  describe:
+    'Drive(Mix 100%)의 네 모드 × 노브 42·100% × Bias −1·−0.3·0·0.3·1 로 REF-PC(2초) 를 렌더해 신호 구간 RMS(dBFS)를 잰다. minRmsDb 는 그 40개 중 가장 작은 값이고 설계서 S3.5 의 수용 기준은 −30 dBFS 이상이다. 화면 범위(±0.3) 밖의 ±1 은 엔진이 한도로 잘라 ±0.3 과 같아야 한다(clampDiffDb). factoryBiasMaxAbs 는 팩토리 프리셋 Drive 페달의 |Bias| 최댓값이다.',
+  steps: 'S3.5',
+  async run(ctx) {
+    const rate = ctx.sampleRate;
+    const input = signals.refPc(rate, 2);
+    const values: Record<string, MetricValue> = {};
+    let minimum = Number.POSITIVE_INFINITY;
+    let clampDiff = 0;
+    for (const mode of ['overdrive', 'crunch', 'distortion', 'fuzz'] as const) {
+      for (const drive of [42, 100]) {
+        const levels: Record<string, number> = {};
+        for (const bias of [-1, -0.3, 0, 0.3, 1]) {
+          const render = await ctx.render({ input: [input], pedals: [pedal('drive', { mode, drive, bias, mix: 100 })] });
+          levels[String(bias)] = bodyLevelDb(render, 0.3);
+          minimum = Math.min(minimum, levels[String(bias)]);
+        }
+        clampDiff = Math.max(clampDiff, Math.abs(levels['1'] - levels['0.3']), Math.abs(levels['-1'] - levels['-0.3']));
+        if (drive === 100) {
+          for (const bias of [-1, -0.3, 0, 0.3, 1]) values[`rmsDb.${mode}.${bias}`] = levels[String(bias)];
+        }
+      }
+    }
+    values.minRmsDb = minimum;
+    values.clampDiffDb = clampDiff;
+    const driveBiases = defaultPresets.flatMap((preset) =>
+      preset.pedals.filter((candidate) => candidate.type === 'drive').map((candidate) => Math.abs((candidate.params as { bias: number }).bias)),
+    );
+    values.factoryBiasMaxAbs = driveBiases.length === 0 ? 0 : Math.max(...driveBiases);
+    return { metrics: metrics(values) };
+  },
+};
+
 export const probes: ProbeDefinition[] = [
-  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25, p26,
+  p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21, p22, p23, p24, p25, p26, p27,
 ];
 
 // ---------------------------------------------------------------------------------------------
