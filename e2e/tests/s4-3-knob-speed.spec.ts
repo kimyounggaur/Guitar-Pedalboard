@@ -4,6 +4,7 @@
 //   ② 노브를 끄는 동안 해당 카드만 다시 그려진다 — 카드마다 다시 그려진 횟수를 센다(렌더 카운터, 아래 설명)
 //   ③ 끌기 한 번에 저장 한 번 — 끄는 동안(마지막 변경 300 ms 뒤까지) 보드 저장 키에 쓰는 횟수
 //   ④ 페달을 켜고 끌 때도 그 카드(와 '꺼짐' 표시가 있는 체인 패널)만 다시 그려진다
+//   ⑤ 페달을 끌어 옮기는 동안 움직이지 않는 카드는 다시 그려지지 않는다(PedalCard memo)
 // 렌더 카운터: 앱 코드(src/testing/renderCount.ts)는 페이지가 `window.__GPB_RENDER_COUNTS__` 를 먼저 만들어 둔 때만 센다.
 // 이 시험이 addInitScript 로 만들어 준다. 제품 화면에서는 만들어지지 않으므로 아무것도 세지 않는다.
 // 옛 코드와 비교하려면 옛 코드를 빌드한 폴더를 E2E_DIST_DIR 로 넘긴다(① 은 값만 출력하고 ②④ 는 카운터가 없어 실패한다).
@@ -215,4 +216,37 @@ test.describe('S4.3 노브 반응 속도', () => {
     expect(others, `Chorus 카드·발스위치 줄·체인 패널 밖에서 다시 그려진 것: ${JSON.stringify(others)}`).toEqual([]);
     await page.close();
   });
+  test('S4.3 ⑤ 페달을 끌어 옮기는 동안 움직이지 않는 카드는 다시 그려지지 않는다', async ({ browser }) => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    await openInstrumented(page);
+    const driveIndex = PEDALS.findIndex((pedal) => pedal.name === 'Drive');
+    const handle = pedalCards(page).nth(driveIndex).locator('.drag-handle');
+    await handle.scrollIntoViewIfNeeded();
+    const from = await handle.boundingBox();
+    const target = await pedalCards(page).nth(driveIndex + 1).boundingBox();
+    if (!from || !target) throw new Error('끌 자리를 알 수 없습니다');
+    await resetRenderCounts(page);
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    const steps = 20;
+    for (let i = 1; i <= steps; i += 1) {
+      await page.mouse.move(
+        from.x + from.width / 2 + ((target.x + target.width / 2 - from.x - from.width / 2) * i) / steps,
+        from.y + from.height / 2 + ((target.y + target.height / 2 - from.y - from.height / 2) * i) / steps,
+      );
+      await page.waitForTimeout(16);
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    const counts = await renderCounts(page);
+    // 끄는 동안 카드는 위치만 바뀌고 내용(페달·끌기 손잡이 속성)은 그대로라서 PedalCard 의 memo 가 다시 그리기를 막는다.
+    // 놓는 순간 손잡이 속성이 한 번 바뀌어 한두 번은 그려질 수 있다. memo 가 없으면 끄는 내내 카드마다 십수 번, 끄는 카드는 수십 번 그려진다.
+    const dragged = counts[`PedalCard:${idOfPedal('Drive')}`] ?? 0;
+    expect(dragged, 'Drive 카드는 끌기가 시작·끝날 때만 그려집니다(카운터가 없으면 0)').toBeGreaterThan(0);
+    expect(dragged, 'Drive 카드가 끄는 동안 거듭 그려졌습니다').toBeLessThanOrEqual(6);
+    const busy = Object.entries(counts).filter(([name, count]) => name.startsWith('PedalCard:') && name !== `PedalCard:${idOfPedal('Drive')}` && count > 2);
+    expect(busy, `끄는 동안 움직이지 않는 카드가 3번 이상 그려졌습니다: ${JSON.stringify(busy)}`).toEqual([]);
+    await page.close();
+  });
+
 });
