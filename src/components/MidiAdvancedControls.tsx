@@ -31,7 +31,7 @@ export function MidiAdvancedControls() {
     configRef.current = checked;
     setConfig(checked);
     safeStorage.set(STORAGE_KEYS.midiAdvanced, checked);
-    if (checked.volumeCc !== null || checked.wahCc !== null || Object.keys(checked.programs).length) void useAudioStore.getState().connectSavedMidi(true);
+    if (checked.volumeCc !== null || checked.wahCc !== null || Object.keys(checked.programs).length) void useAudioStore.getState().connectSavedMidi({ force: true, userAction: true });
   };
 
   useEffect(() => {
@@ -65,7 +65,7 @@ export function MidiAdvancedControls() {
       },
     });
     registerMidiAdvancedHandler(handle, match);
-    if (configRef.current.volumeCc !== null || configRef.current.wahCc !== null || Object.keys(configRef.current.programs).length) void useAudioStore.getState().connectSavedMidi(true);
+    if (configRef.current.volumeCc !== null || configRef.current.wahCc !== null || Object.keys(configRef.current.programs).length) void useAudioStore.getState().connectSavedMidi({ force: true });
     return () => { clearTimeout(volumeSaveTimer); registerMidiAdvancedHandler(null, null); };
   }, []);
 
@@ -76,7 +76,7 @@ export function MidiAdvancedControls() {
     <details className="midi-advanced-controls">
       <summary>MIDI 프리셋·익스프레션 설정</summary>
       <p>Program Change 번호는 0–127 기준입니다. 와우 CC 입력 시 와우가 수동 모드로 전환됩니다. 페달을 켜야 소리가 바뀝니다.</p>
-      <button type="button" className="secondary-button" onClick={() => void useAudioStore.getState().connectSavedMidi(true)}>MIDI 연결</button>
+      <button type="button" className="secondary-button" onClick={() => void useAudioStore.getState().connectSavedMidi({ force: true, userAction: true })}>MIDI 연결</button>
       <label>채널 <select value={config.channel} onChange={(event) => save({ ...config, channel: Number(event.currentTarget.value) })}>
         {Array.from({ length: 16 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
       </select></label>

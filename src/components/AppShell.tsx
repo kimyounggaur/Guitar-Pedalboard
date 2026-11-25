@@ -5,6 +5,7 @@ import { ChainText } from './ChainText';
 import { ConnectGuitarPanel } from './ConnectGuitarPanel';
 import { GlobalKeyboardShortcuts } from './GlobalKeyboardShortcuts';
 import { Meter } from './Meter';
+import { MidiReconnectBanner } from './MidiReconnectBanner';
 import { PedalBoard } from './PedalBoard';
 import { PresetPanel } from './PresetPanel';
 import { useDockHeight } from '../hooks/useDockHeight';
@@ -126,6 +127,7 @@ export function AppShell() {
           </button>
         )}
       </div>
+      <MidiReconnectBanner />
       {!isOnline ? (
         <div className="offline-notice" role="status" aria-live="polite">
           <strong>오프라인 상태입니다.</strong>

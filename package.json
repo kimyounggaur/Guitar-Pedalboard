@@ -24,6 +24,7 @@
     "test:app-notices": "node scripts/app-notices-regression.mjs",
     "test:shortcuts": "node scripts/shortcuts-regression.mjs",
     "test:midi": "node scripts/midi-regression.mjs",
+    "test:midi-reconnect": "node scripts/midi-reconnect-regression.mjs",
     "test:recording": "node scripts/recording-regression.mjs",
     "test:responsive-a11y": "node scripts/responsive-a11y-regression.mjs",
     "test:pwa": "node scripts/pwa-regression.mjs",
