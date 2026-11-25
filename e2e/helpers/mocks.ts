@@ -518,7 +518,23 @@ export async function trackAudioGraph(page: Page): Promise<void> {
       configurable: true,
       value: () => edges.map((edge) => ({ ...edge })),
     });
+    // 끊은 연결도 기록한다(S4.2: 꺼진 페달은 이펙트 입력을 끊어 쉰다). 도착 노드를 준 `disconnect(destination)` 만 센다.
+    const disconnects: Array<{ from: string; to: string }> = [];
+    const nativeDisconnect = AudioNode.prototype.disconnect as (this: AudioNode, ...args: unknown[]) => unknown;
+    AudioNode.prototype.disconnect = function disconnect(this: AudioNode, ...args: unknown[]): unknown {
+      if (args[0] instanceof AudioNode) disconnects.push({ from: label(this), to: label(args[0]) });
+      return nativeDisconnect.apply(this, args);
+    } as typeof AudioNode.prototype.disconnect;
+    Object.defineProperty(window, '__audioDisconnects', {
+      configurable: true,
+      value: () => disconnects.map((entry) => ({ ...entry })),
+    });
   });
+}
+
+/** `trackAudioGraph` 를 심은 페이지에서 지금까지 끊긴 연결(도착 노드를 준 `disconnect` 호출)의 출발·도착 노드 이름 목록 */
+export async function readAudioDisconnects(page: Page): Promise<Array<{ from: string; to: string }>> {
+  return page.evaluate(() => (window as unknown as { __audioDisconnects: () => Array<{ from: string; to: string }> }).__audioDisconnects());
 }
 
 export async function readAudioEdges(page: Page): Promise<GraphEdge[]> {
