@@ -4,7 +4,7 @@
 
 | 파일 | 내용 |
 |---|---|
-| `audio-probe.json` | 기준선. 프로브 24개 × 샘플레이트 2개(44.1·48 kHz), 측정값 1,696개 |
+| `audio-probe.json` | 기준선. 프로브 25개 × 샘플레이트 2개(44.1·48 kHz), 측정값 1,714개 |
 | `tolerances.json` | 항목별 허용 오차. 넓히거나 `ignore` 를 늘리려면 사람 승인이 필요하다(설계서 6.4절) |
 | `e2e.json`, `screenshots/` | 브라우저 시나리오(E-04·E-06) 기준선. 설명은 `README-e2e.md` |
 
@@ -19,7 +19,7 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 ```
 
 - 기준선을 갱신하는 커밋의 메시지는 `baseline: {Step ID} {이유}` 로 쓴다. 이유 없이 갱신하지 않는다.
-- `tolerances.json` 의 `criteria` 는 기준선과 상관없는 **절대 수용 기준**(하한 `atLeast`·상한 `atMost`)이다. 매번 비교할 때 함께 검사하고, 어기는 값은 `--update` 로도 기준선이 되지 못한다. 지금 걸린 것(Step 별): S1.1 P-01 `differenceDb ≥ 30`·P-02 `outputDropDb ≥ 25`, S1.3 P-06 `auto.*` 5개, S1.4a P-03 `peakWithLimiterDb`·`defaultCabOffPeakDb ≤ −0.9`, S1.4b P-04 `maxAbsDiffDb ≤ 1.5`, S1.4c P-05 음량 정렬·리미터 감소량·'음량 맞추기' 오차 10여 개, S1.5 P-07 `hits ≥ 4`·`maxMutedSeconds ≤ 1.5`·`minMutedSeconds ≥ 1.0`·`falseCuts ≤ 0`·`silentFailures ≤ 0`·`disabledModeCuts ≤ 0`·`disabledModeSoundDb ≥ −30` 와 P-17 `ratio.monitorOverheadOverPedals ≤ 0.05`, S2.1 P-18 3개(`unchangedUnexpected ≤ 0`·`loadNullDb ≤ −90`·`loadUntouchedOffPedals ≤ 0`), S2.2 P-20 3개(`nullDb.* ≤ −90`·`convertedDecayError ≤ 0`·`maxFactoryDecay ≤ 6`)·P-21 `displayedSilenceDb` −0.5 ~ 0·P-24 6개(잡음 감소 ≤ −30 dB 둘, 워클릿 정확 일치 둘, 레벨 차 ≤ 0.01 dB, 첫 음 손실 ≥ −1 dB), S2.4 P-19 7개(`nullDb.* ≤ −80` — 이것이 설계서의 기준이고, 판정 규칙은 −90 dB 로 더 엄격하다 — 와 `activeMismatch ≤ 0`·`presetMissing ≤ 0`·`visit1.legacy ≤ 0`·`visit2.v2 ≥ 6`·`boardsChecked ≥ 6`·`presetsChecked ≥ 3`). 전체 목록과 이유는 `tolerances.json` 의 `criteria` 에 있다. Step 이 수용 기준을 맞출 때마다 여기에 더한다.
+- `tolerances.json` 의 `criteria` 는 기준선과 상관없는 **절대 수용 기준**(하한 `atLeast`·상한 `atMost`)이다. 매번 비교할 때 함께 검사하고, 어기는 값은 `--update` 로도 기준선이 되지 못한다. 지금 걸린 것(Step 별): S1.1 P-01 `differenceDb ≥ 30`·P-02 `outputDropDb ≥ 25`, S1.3 P-06 `auto.*` 5개, S1.4a P-03 `peakWithLimiterDb`·`defaultCabOffPeakDb ≤ −0.9`, S1.4b P-04 `maxAbsDiffDb ≤ 1.5`, S1.4c P-05 음량 정렬·리미터 감소량·'음량 맞추기' 오차 10여 개, S1.5 P-07 `hits ≥ 4`·`maxMutedSeconds ≤ 1.5`·`minMutedSeconds ≥ 1.0`·`falseCuts ≤ 0`·`silentFailures ≤ 0`·`disabledModeCuts ≤ 0`·`disabledModeSoundDb ≥ −30` 와 P-17 `ratio.monitorOverheadOverPedals ≤ 0.05`, S2.1 P-18 3개(`unchangedUnexpected ≤ 0`·`loadNullDb ≤ −90`·`loadUntouchedOffPedals ≤ 0`), S2.2 P-20 3개(`nullDb.* ≤ −90`·`convertedDecayError ≤ 0`·`maxFactoryDecay ≤ 6`)·P-21 `displayedSilenceDb` −0.5 ~ 0·P-24 6개(잡음 감소 ≤ −30 dB 둘, 워클릿 정확 일치 둘, 레벨 차 ≤ 0.01 dB, 첫 음 손실 ≥ −1 dB), S2.4 P-19 7개(`nullDb.* ≤ −80` — 이것이 설계서의 기준이고, 판정 규칙은 −90 dB 로 더 엄격하다 — 와 `activeMismatch ≤ 0`·`presetMissing ≤ 0`·`visit1.legacy ≤ 0`·`visit2.v2 ≥ 6`·`boardsChecked ≥ 6`·`presetsChecked ≥ 3`), S3.2 P-25 `maxClickRatioDb ≤ 6`. 전체 목록과 이유는 `tolerances.json` 의 `criteria` 에 있다. Step 이 수용 기준을 맞출 때마다 여기에 더한다.
 - `npm test` 가 `test:probe` 로 이 비교를 함께 돈다. 시험 제한 시간만 900초로 늘려 두었다(`scripts/run-all-tests.mjs`).
 - Chrome 이 없으면 로컬에서는 건너뛰고(종료 코드 0, 경고 출력) CI(`CI=true`)에서는 실패한다. `CHROME_PATH` 로 Chrome 을 지정할 수 있다.
 - 기준선을 만든 환경: Chrome/153.0.8010.12, Linux x64, Node v22. 브라우저 버전이 다르면 비교 때 경고가 나온다. 값이 흔들리면 Chrome 버전을 고정하고 별도 PR 로 기준선을 갱신한다(설계서 6.4절).
@@ -44,7 +44,7 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 | P-06 | 오른쪽 무음, 왼쪽 −20 dB | 시작 시점: 모드 `1` 좌우 차 0 dB, 모드 `2` 는 왼쪽만 있는 입력에서 무음, 모드 `stereo` 는 오른쪽 무음·왼쪽 −3.01 dB. **S1.3 이후**: 자동 판정(왼쪽만·오른쪽만·양쪽 같은 소리) 좌우 차 0 dB·손실 0 dB, 판정까지 0.3초, 판정 전 손실 6.02 dB(한쪽만 신호) / 0 dB(양쪽 같음). 정의가 바뀌어 기준선을 갱신했다(L-28) | 좌우 차 ≤ 1 dB, 손실 ≤ 0.5 dB | ✔ S1.3 에서 해결 (시작 시점엔 ✖ `stereo` 모드) |
 | P-07 | (코드 지도) 출력 쪽 −22 dBFS 기준 판정 | **S1.5 에서 처음 잼**(장치 모드 가드를 오프라인 렌더로, 44.1 / 48 kHz). 신호 시작부터 무음이 완성될 때까지: H-1 1.041 / 1.023초, H-2 1.32 / 1.30초, H-3 1.041 / 1.023초, H-4 1.041 / 1.023초, 차단 뒤 출력은 완전한 무음(−200 dB). G-1 줄어드는 리드·G-2 스트러밍·G-3 잡음 바닥은 60초 동안 차단 0(판정 후보 `suspectCount` 6·90·0 / 45·90·0). 파일 모드와 '하울링 보호' 끔의 H-1 은 차단 없음(출력 −23.9 dBFS 유지). 부록 B 수치에 보강 셋(L-44)을 더한 판정이다 | H 4개 모두 차단 ≤ 1.5초(≥ 1.0초), G 3개 오차단 0 | ✔ S1.5 에서 새로 확인. H-2 는 한도까지 여유 약 0.2초 |
 | P-08 | Mix 75% 2.2 dB | 0.006 / 0.007 dB (Mix 45%: 0.004 dB) | ≤ ±0.5 dB | ✔ |
-| P-09 | 최대 14 dB | 0 dB | ≤ 0.5 dB | ✔ |
+| P-09 | 최대 14 dB | 0 dB. **S3.2 이후**: 같은 0 dB — 좌우 IR 이 비트 단위로 같음을 Node 시험이 지킨다(REFACTOR_LOG L-220) | ≤ 0.5 dB | ✔ |
 | P-10 | 842 ~ 1,159 Hz | 994.6 ~ 1,005.5 Hz (±0.55%) | ≤ ±0.6% | ✔ (여유 작음) |
 | P-11 | 반복 4.7 ms 간격 | 지연 2 ms 로 고정하면 노치 간격이 환산한 지연 2.02 / 1.98 ms(설정과 1% 안). 기본값으로 한 주기 스윕하면 첫 노치가 150 ~ 452 Hz(44.1 kHz) 사이를 움직임 | 설정 지연 그대로, 스윕 동작 | ✔ |
 | P-12 | 25 dB 빗살 | 빗살 리플 17.1 / 16.6 dB, 노치 6개 | ≤ 3 dB | ✖ |
@@ -60,6 +60,12 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 | P-22 | 개방현 0센트 | 개방현 최대 0.03 / 0.04 센트, B1·C2 도 0.00 센트 | ±2센트 | ✔ |
 | P-23 | 클릭 없음, 새 노드 0 | 켜고 끄는 3번에서 새 노드 0개, 클릭 비율 −4.5 ~ +1.0 dB(44.1 kHz. 48 kHz 는 −9.7 ~ +1.2 dB). 시작 시점은 최대 +3.5 / +4.1 dB 였다. 이 프로브는 리미터를 지난 출력으로 재므로 S1.4a 의 리미터 교체로 값이 달라졌다(클릭 판정 기준은 0 dB 에 가까울수록 좋다, 새 노드 0개는 그대로) | 유지 | ✔ (값 자체가 회귀 기준) |
 | P-24 | (보고서에 없음 — S2.2 에서 새로 잼) | Fuzz Gate. 무연주 잡음(−70 dBFS)에서 Gate 50 이 Gate 0 보다 Mix 90% 에서 −62.7 / −62.4 dB, Mix 100% 에서 −78.2 dB 줄임. 열린 게이트(문턱 −80 dBFS): 출력 레벨 차 0 dB, 게이트 워클릿 출력이 입력과 다른 샘플 0개(Gate 0 설정도 0개), 열리는 데 약 17 ms. 쉬었다 시작하는 음의 처음 10 ms 손실 −0.075 / −0.074 dB | 잡음 ≥ 30 dB 감소, Gate 0 소리 변화 0 | ✔ |
+| P-25 | (보고서에 없음 — S3.2 에서 새로 잼) | Cab 노브·모델을 바꿀 때 클릭. 일정한 사인파(220·660 Hz)에서 마이크 위치 한 번 점프·모델 변경·마이크 위치 드래그·거리 드래그의 출력 1차 차분 피크가 고른 구간보다 큰 정도: 44.1 kHz 최대 +3.66 dB, 48 kHz 최대 +2.28 dB. 이전 코드(IR 즉시 교체)는 +23 dB, 첫 구현(`rampParam` 페이드)은 +20 dB 였다(L-222~L-224) | +6 dB 이하 | ✔ |
+
+### P-25 (S3.2) 읽는 법
+
+- P-25: Cab 의 IR 이 바뀔 때 생기는 클릭을 잰다. 신호가 일정한 사인파(220 Hz·660 Hz)라 소리가 부드럽게 바뀌면 출력의 1차 차분(이웃 표본 사이 변화)의 최대값이 동작 앞뒤의 고른 구간과 같다. 동작 구간의 최대값이 앞·뒤 고른 구간 중 큰 쪽보다 몇 dB 큰지가 `clickRatioDb.주파수.동작` 이고 그중 가장 큰 값이 `maxClickRatioDb` 다(수용 기준 +6 dB 이하). 동작 네 가지: `mic`(마이크 위치 한 번 55→85), `model`(V30→Blue), `micDrag`(마이크 위치를 20 ms 마다 1씩 31번), `distanceDrag`(거리). 신호의 크기에 비례하므로 큰 점프가 크게 나오고, 같은 코드면 두 번 돌려도 같은 값이다.
+- 이 프로브는 이펙트가 거는 타이머를 렌더 시각으로 재야 하므로 `renderChain` 이 `createContextTimers` 를 이펙트에 넘긴다. 창 타이머를 쓰는 이펙트(리버브)는 렌더 도중에 바뀌지 않는다.
 
 ### 이 표에서 읽을 점
 
@@ -88,7 +94,7 @@ npm run probe -- --update              # 기준선 갱신 (의도한 변화일 �
 
 - P-20: 옛 저장값(공장 프리셋 6.2·7.5초, 옛 최댓값 10초)으로 렌더한 Reverb 출력과, 앱이 불러올 때 쓰는 함수(`clampPedalsToSchema`)로 맞춘 6.0 초의 출력을 견준다. 엔진은 처음부터 6 초에서 임펄스를 잘라 써서 널은 −200 dB(완전히 같음)이고, 변환이 정확한지는 `convertedDecayError`(바뀐 값과 6.0 의 최대 차이, 초)가, 공장 데이터가 6 초를 넘지 않는지는 `maxFactoryDecay` 가 맡는다.
 - P-24: Fuzz 의 Gate 를 잰다. **체인 전체의 파형 널은 쓰지 않는다** — 같은 체인을 두 번 렌더하면 입력이 1 ppm 만 달라도 약 −80 dB 의 수치 잡음이 남는다(REFACTOR_LOG L-90). 대신 게이트 워클릿만 따로 돌려 입력과 다른 샘플 수(`gate0.workletDiffSamples`·`open.workletDiffSamples`)와 체인 출력 레벨 차(`open.levelDiffDb`)를 본다. `noise.*` 는 앱 기본 Mix(90%)라 게이트를 지나지 않는 원음이 섞여 있고, `noiseMix100.*` 은 Mix 100% 다. `onset.lossDb` 는 쉬었다 시작하는 음(110 Hz)의 처음 10 ms 가 Gate 50 때문에 줄어든 양이다.
-- 기준선이 달라진 프로브는 P-03(최악 조합의 리미터 앞 피크 +0.7 / +0.6 dB — 44.1 / 48 kHz)·P-05(Fuzz 프리셋 5개의 raw·trim)·P-20(지표 재정의)·P-24(신규) 넷이다. 나머지는 허용 오차 안이다.
+- 기준선이 달라진 프로브는 P-03(최악 조합의 리미터 앞 피크 +0.7 / +0.6 dB — 44.1 / 48 kHz)·P-05(Fuzz 프리셋 5개의 raw·trim)·P-20(지표 재정의)·P-24(신규)·P-25(신규) 다섯이다. 나머지는 허용 오차 안이다.
 
 ### P-19 (S2.4) 읽는 법
 
