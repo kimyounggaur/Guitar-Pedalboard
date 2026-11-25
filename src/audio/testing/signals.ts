@@ -284,6 +284,19 @@ export function levelStop(sampleRate: number, seconds = 14): Samples {
 // ---------------------------------------------------------------------------------------------
 export const OPEN_STRINGS_HZ = [82.41, 110, 146.83, 196, 246.94, 329.63] as const;
 
+/**
+ * 개방현이 아닌 튜너 시험 음(E-16, S2.12). 값은 모두 평균율 정확한 음이다.
+ *  D2: 6번 줄 E2 보다 200센트 낮음 / C3: 4번 줄 D3 보다 200센트 낮음 / B1: 7현 기타의 낮은 B(61.74 Hz)
+ *  E3: 6번 줄 E2 의 한 옥타브 위 / C5: 어느 줄과도 600센트 넘게 멀다
+ */
+export const TUNER_EXTRA_NOTES = [
+  { file: 'tuner-d2', note: 'D2', frequency: 73.416 },
+  { file: 'tuner-c3', note: 'C3', frequency: 130.813 },
+  { file: 'tuner-b1', note: 'B1', frequency: 61.735 },
+  { file: 'tuner-e3', note: 'E3', frequency: 164.814 },
+  { file: 'tuner-c5', note: 'C5', frequency: 523.251 },
+] as const;
+
 export function pluckedNote(sampleRate: number, frequency: number, seconds = 3): Samples {
   const out = allocate(sampleRate, seconds);
   addSawtoothVoice(out, sampleRate, frequency, 7, (time) => Math.min(1, time / 0.003) * Math.exp(-time / 2));
@@ -329,6 +342,12 @@ export const fixtureSignals: FixtureSignal[] = [
     file: `tuner-string-${index + 1}`,
     id: 'TUNER',
     description: `튜너 시험 ${frequency} Hz`,
+    create: mono((sr) => pluckedNote(sr, frequency)),
+  })),
+  ...TUNER_EXTRA_NOTES.map(({ file, note, frequency }): FixtureSignal => ({
+    file,
+    id: 'TUNER',
+    description: `튜너 시험 ${note} ${frequency} Hz`,
     create: mono((sr) => pluckedNote(sr, frequency)),
   })),
 ];
