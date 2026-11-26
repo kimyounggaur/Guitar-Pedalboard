@@ -554,6 +554,11 @@ assert.equal(savedWavIo.recordingFormat, 'wav', '고른 녹음 형식이 저장�
 assert.equal(savedWavIo.wavMaxSeconds, 60, '고른 최대 길이가 저장된다');
 assert.equal(savedWavIo.wavBitDepth, 24, '고른 비트 깊이가 저장된다');
 assert.equal(savedWavIo.tuningReferenceHz, 442, '다른 설정은 그대로 남는다');
+// 다른 설정을 저장해도 녹음 설정이 지워지지 않는다(저장은 항상 전체 설정을 다시 쓴다).
+useAudioStore.getState().setTuningReferenceHz(444);
+const afterOtherSave = JSON.parse(storage.get('guitar-pedalboard:io'));
+assert.equal(afterOtherSave.tuningReferenceHz, 444);
+assert.deepEqual([afterOtherSave.recordingFormat, afterOtherSave.wavBitDepth, afterOtherSave.wavMaxSeconds], ['wav', 24, 60], '다른 설정을 저장해도 녹음 설정이 남는다');
 useAudioStore.getState().setWavMaxSeconds(45); // 선택지에 없는 값은 5분으로 본다
 assert.equal(useAudioStore.getState().wavMaxSeconds, 300);
 useAudioStore.getState().setWavMaxSeconds(60);
