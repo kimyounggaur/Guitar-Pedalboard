@@ -253,6 +253,16 @@ const engine = AudioEngine.getInstance();
 
 // A fresh module instance represents a page reload using the same browser storage.
 assert.equal(useAudioStore.getState().tuningReferenceHz, 440);
+// 기준음을 바꾸면 이전 기준으로 읽은 판독을 지운다(옛 센트가 화면에 남지 않게).
+useAudioStore.setState({ pitch: { frequency: 442, note: 'A4', cents: 8 } });
+useAudioStore.getState().setTuningReferenceHz(442);
+assert.equal(useAudioStore.getState().pitch.frequency, null, '기준음을 바꾸면 이전 판독이 지워진다');
+assert.equal(useAudioStore.getState().pitch.note, null);
+// 허용 범위 밖의 값은 가까운 끝으로 잘라 쓰고(400~480), 소수는 반올림한다. 숫자가 아니면 아무 일도 없다.
+useAudioStore.getState().setTuningReferenceHz(442.4);
+assert.equal(useAudioStore.getState().tuningReferenceHz, 442);
+useAudioStore.getState().setTuningReferenceHz(Number.NaN);
+assert.equal(useAudioStore.getState().tuningReferenceHz, 442);
 useAudioStore.getState().setTuningReferenceHz(442);
 useAudioStore.getState().setInputGainDb(3);
 useAudioStore.getState().setMasterVolume(0.5);

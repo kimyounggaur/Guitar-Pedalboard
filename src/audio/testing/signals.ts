@@ -297,6 +297,15 @@ export const TUNER_EXTRA_NOTES = [
   { file: 'tuner-c5', note: 'C5', frequency: 523.251 },
 ] as const;
 
+/**
+ * 기준음 A4 = 442 Hz 로 맞춘 튜너 시험 음(E-5.5, S5.5). 442 Hz 의 A4 는 기준음을 442 로 두면 0센트, 440 으로 두면 약 +7.85센트다.
+ * 110.5 Hz(=442/4)는 같은 기준에서 5번 줄(A2)의 목표음이다.
+ */
+export const TUNER_A442_NOTES = [
+  { file: 'tuner-a4-442', note: 'A4', frequency: 442 },
+  { file: 'tuner-a2-442', note: 'A2', frequency: 110.5 },
+] as const;
+
 export function pluckedNote(sampleRate: number, frequency: number, seconds = 3): Samples {
   const out = allocate(sampleRate, seconds);
   addSawtoothVoice(out, sampleRate, frequency, 7, (time) => Math.min(1, time / 0.003) * Math.exp(-time / 2));
@@ -348,6 +357,12 @@ export const fixtureSignals: FixtureSignal[] = [
     file,
     id: 'TUNER',
     description: `튜너 시험 ${note} ${frequency} Hz`,
+    create: mono((sr) => pluckedNote(sr, frequency)),
+  })),
+  ...TUNER_A442_NOTES.map(({ file, note, frequency }): FixtureSignal => ({
+    file,
+    id: 'TUNER',
+    description: `튜너 시험 ${note} ${frequency} Hz (기준음 A4=442)`,
     create: mono((sr) => pluckedNote(sr, frequency)),
   })),
 ];
