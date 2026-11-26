@@ -4,6 +4,7 @@
 //   ② 같은 화면·상태에서 글자·배경 대비 4.5:1 미만(큰 글자 3:1 미만) 0개 — 화면을 찍어 픽셀 표본으로 잰다
 //   ③ 상태 표시(LED): 켜진 LED 는 둘레와 3:1 이상, 꺼진 LED 와 3:1 이상 차이, 글자(ON/OFF)·aria-pressed 로도 구분
 //   ④ 페달 카드는 이름 있는 region(section), 모바일 안내는 중첩 aside 가 아닌 note
+//   ⑤ 글자 크기 토큰(--fs-min·--fs-label·--fs-value)이 11·12·13 px 이상
 // axe-core 는 의존성에 없으므로(설계서 D16) 같은 기준을 e2e/helpers/text-metrics.ts 로 직접 계산한다.
 import type { Page } from '@playwright/test';
 import { connectGuitar, openApp, pedalCards, pedalSwitches, selectMobileTab, setSidebar } from '../helpers/app';
@@ -84,7 +85,10 @@ for (const profile of SCREEN_PROFILES) {
         // 값 글자: 숫자 입력 칸과 노브 머리의 값 표시는 13 px 이상, 라벨: 노브·페이더 이름은 12 px 이상
         for (const item of items) {
           const leaf = item.where.split('›').pop() ?? '';
-          const isValue = leaf.includes('knob-number-input') || leaf.includes('knob-control-head > output');
+          const isValue =
+            leaf.includes('knob-number-input') ||
+            leaf.includes('knob-control-head > output') ||
+            leaf.trim().endsWith('tremolo-division-control > select');
           const isLabel = LABEL_LEAVES.some((name) => leaf.includes(name));
           if (isValue && item.fontPx < VALUE_PX - 0.01) values.push(`${label}: ${describeItem(item)}`);
           if (isLabel && item.fontPx < LABEL_PX - 0.01) values.push(`${label}: ${describeItem(item)}`);
@@ -188,6 +192,19 @@ for (const size of [
     });
   });
 }
+
+// ⑤ 크기 토큰(tokens.css): 11 px 바닥·12 px 라벨·13 px 값. 화면에 11 px 글자가 마침 없어도 토큰 값이 줄어들면 잡아낸다.
+test('E-21 ⑤ 글자 크기 토큰이 설계 수치(11·12·13 px) 이상이다', async ({ page }) => {
+  await openApp(page);
+  const tokens = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const px = (name: string) => parseFloat(root.getPropertyValue(name));
+    return { min: px('--fs-min'), label: px('--fs-label'), value: px('--fs-value') };
+  });
+  expect(tokens.min, '--fs-min').toBeGreaterThanOrEqual(MIN_PX);
+  expect(tokens.label, '--fs-label').toBeGreaterThanOrEqual(LABEL_PX);
+  expect(tokens.value, '--fs-value').toBeGreaterThanOrEqual(VALUE_PX);
+});
 
 // ④ 카드 이름과 안내 상자의 의미
 test.describe('E-21 의미 구조', () => {
