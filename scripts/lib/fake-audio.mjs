@@ -180,6 +180,10 @@ export function createFakeAudio() {
   classes.AnalyserNode.prototype.getByteTimeDomainData = function getByteTimeDomainData(array) { array.fill(128); };
   classes.AnalyserNode.prototype.getFloatFrequencyData = function getFloatFrequencyData(array) { array.fill(-120); };
   classes.AnalyserNode.prototype.getByteFrequencyData = function getByteFrequencyData(array) { array.fill(0); };
+  define('MediaStreamAudioDestinationNode', function build() {
+    const tracks = [{ stopped: false, stop() { this.stopped = true; } }];
+    this.stream = { getTracks: () => tracks, getAudioTracks: () => tracks };
+  });
   define('ConvolverNode', function build(options) {
     this.buffer = options.buffer ?? null;
     this.normalize = options.disableNormalization === undefined ? true : !options.disableNormalization;
@@ -252,6 +256,7 @@ export function createFakeAudio() {
       context.createDynamicsCompressor = factory('DynamicsCompressorNode');
       context.createConvolver = factory('ConvolverNode');
       context.createAnalyser = factory('AnalyserNode');
+      context.createMediaStreamDestination = factory('MediaStreamAudioDestinationNode');
       context.createPeriodicWave = (real, imag, constraints) => ({ real, imag, constraints });
       return context;
     },
