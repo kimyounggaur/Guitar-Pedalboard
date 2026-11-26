@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
 import { formatLatency, UNDERRUN_UNAVAILABLE_REASON } from '../audio/engine/latency';
-import { createRecordingFilename } from '../audio/recording';
+import { createRecordingFilename, WAV_BIT_DEPTHS, WAV_MAX_SECONDS_OPTIONS, type WavBitDepth } from '../audio/recording';
 import type { LevelReading, TuningPresetId } from '../audio/types';
 import { describeTuner } from '../audio/utils/tunerDisplay';
 import { GUITAR_TUNING_OPTIONS, TUNING_PRESETS } from '../audio/utils/tunings';
@@ -56,6 +56,11 @@ export function Meter({ active = true }: MeterProps) {
   const recordingFormat = useAudioStore((state) => state.recordingFormat);
   const recordedFormat = useAudioStore((state) => state.recordedFormat);
   const setRecordingFormat = useAudioStore((state) => state.setRecordingFormat);
+  const wavBitDepth = useAudioStore((state) => state.wavBitDepth);
+  const setWavBitDepth = useAudioStore((state) => state.setWavBitDepth);
+  const wavMaxSeconds = useAudioStore((state) => state.wavMaxSeconds);
+  const setWavMaxSeconds = useAudioStore((state) => state.setWavMaxSeconds);
+  const recordingLimitSeconds = useAudioStore((state) => state.recordingLimitSeconds);
   const wavSupported = typeof AudioContext !== 'undefined' && !!AudioContext.prototype.createScriptProcessor;
   const webmSupported = useAudioStore((state) => state.recordingSupported);
   const selectedRecordingSupported = recordingFormat === 'wav' ? wavSupported : webmSupported;
@@ -215,12 +220,26 @@ export function Meter({ active = true }: MeterProps) {
       <div className="recording-panel">
         <label>녹음 형식
           <select value={recordingFormat} disabled={recordingStatus === 'recording'} onChange={(event) => setRecordingFormat(event.currentTarget.value as 'webm' | 'wav')}>
-            <option value="webm">압축 녹음 (브라우저 지원 형식)</option>
-            <option value="wav">WAV (16-bit PCM)</option>
+            <option value="wav">WAV (원본 음질, 길이 정확)</option>
+            <option value="webm">작은 파일 (브라우저 지원 압축 형식)</option>
           </select>
         </label>
+        {recordingFormat === 'wav' ? (
+          <div className="recording-wav-options">
+            <label>비트 깊이
+              <select value={wavBitDepth} disabled={recordingStatus === 'recording'} onChange={(event) => setWavBitDepth(Number(event.currentTarget.value) as WavBitDepth)}>
+                {WAV_BIT_DEPTHS.map((depth) => <option key={depth} value={depth}>{depth}비트</option>)}
+              </select>
+            </label>
+            <label>최대 길이
+              <select value={wavMaxSeconds} disabled={recordingStatus === 'recording'} onChange={(event) => setWavMaxSeconds(Number(event.currentTarget.value))}>
+                {WAV_MAX_SECONDS_OPTIONS.map((seconds) => <option key={seconds} value={seconds}>{seconds / 60}분</option>)}
+              </select>
+            </label>
+          </div>
+        ) : null}
         {recordingFormat === 'webm' ? <p>압축 녹음 형식은 브라우저에 따라 WebM, MP4 또는 기타 형식으로 저장됩니다.</p> : null}
-        {recordingFormat === 'wav' ? <p>WAV 녹음은 최대 2분이며 메모리 제한에 도달하면 자동 저장됩니다. 녹음 중에는 화면을 열어 두세요. 기기가 바쁘거나 백그라운드 상태일 때 소리가 끊길 수 있습니다.</p> : null}
+        {recordingFormat === 'wav' ? <p>WAV 녹음은 고른 최대 길이나 메모리 제한에 도달하면 자동 저장됩니다. 길수록 메모리를 많이 씁니다. 녹음 중에는 화면을 열어 두세요. 기기가 바쁘거나 백그라운드 상태일 때 소리가 끊길 수 있습니다.</p> : null}
         <div className="recording-actions" role="group" aria-label="마스터 출력 녹음">
           <button
             className="secondary-button recording-start-button"
@@ -257,7 +276,7 @@ export function Meter({ active = true }: MeterProps) {
           {!selectedRecordingSupported
             ? ko.meter.recordingUnsupported
             : recordingStatus === 'recording'
-              ? `녹음 중 ${formatElapsed(recordingElapsed)}`
+              ? `녹음 중 ${formatElapsed(recordingElapsed)}${recordingFormat === 'wav' ? ` · 남은 시간 ${formatElapsed(recordingLimitSeconds - recordingElapsed)}` : ''}`
               : recordingStatus === 'ready'
                 ? `녹음 완료 ${formatElapsed(recordingElapsed)} · ${recordedFormat === 'unknown' ? '파일 형식 확인 불가 (확장자 없음)' : recordedFormat.toUpperCase()}`
                 : '녹음 대기'}
