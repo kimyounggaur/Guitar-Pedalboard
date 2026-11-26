@@ -13,16 +13,31 @@ export const CAB_IR_SWAP_FADE_SECONDS = 0.02;
 /** 페이드 인이 끝난 뒤 한 번 더 기다리는 여유. 타이머 시계와 오디오 시계가 조금 어긋나도 진행 중인 램프를 끊지 않게 한다. */
 const FADE_SETTLE_MARGIN_MS = 10;
 
-type CabinetModel = Exclude<CabParams['model'], 'off'>;
+type CabinetModel = Exclude<CabParams['model'], 'off' | 'my-ir'>;
+
+/** '내 IR' 을 고르고도 저장된 IR 이 없을 때(다른 기기에서 온 프리셋, 지운 뒤) 대신 쓰는 캐비닛 모델. */
+export const MISSING_USER_IR_FALLBACK_MODEL: CabinetModel = 'v30-4x12';
+
+/**
+ * 사용자가 불러온 IR(설계서 S5.4). 시료는 이미 이 컨텍스트의 샘플레이트로 맞추고 에너지 정규화까지 마친 것이다.
+ * `makeupDb` 는 피크 상한 때문에 IR 에 곱하지 못한 음량 부족분으로, 만든 IR 과 같은 방식으로 합성 경로 이득에 더한다.
+ */
+export interface UserCabinetImpulse {
+  buffer: AudioBuffer;
+  makeupDb: number;
+}
+
+/** 지금 쓸 사용자 IR 을 돌려주는 함수. 이펙트가 `update` 마다 읽으므로, IR 이 바뀐 뒤 `update` 만 부르면 새 IR 이 반영된다. */
+export type UserImpulseSource = () => UserCabinetImpulse | null;
 
 /** 컨볼버에 들어갈 IR 의 출처. 같은 값이면 같은 소리다(만든 IR 은 설정으로 정해지는 결정적 값). */
 type IrSource =
-  | { kind: 'custom'; buffer: AudioBuffer }
+  | { kind: 'custom'; impulse: UserCabinetImpulse }
   | { kind: 'cabinet'; model: CabinetModel; micPosition: number; distance: number };
 
 function sameSource(a: IrSource | null, b: IrSource | null): boolean {
   if (a === null || b === null) return a === b;
-  if (a.kind === 'custom') return b.kind === 'custom' && a.buffer === b.buffer;
+  if (a.kind === 'custom') return b.kind === 'custom' && a.impulse.buffer === b.impulse.buffer;
   return b.kind === 'cabinet' && a.model === b.model && a.micPosition === b.micPosition && a.distance === b.distance;
 }
 
@@ -40,7 +55,6 @@ export class CabEffect extends BaseEffect {
   private readonly bypassGain: GainNode;
   private readonly highCut: BiquadFilterNode;
   private readonly presence: BiquadFilterNode;
-  private customImpulse: AudioBuffer | null = null;
   private currentPedal: PedalState;
   /** 노브가 가리키는 IR. 캐비닛이 꺼져 있으면 null. */
   private wanted: IrSource | null = null;
@@ -50,13 +64,14 @@ export class CabEffect extends BaseEffect {
   private debounceTimer: number | null = null;
   private swapTimer: number | null = null;
   private settleTimer: number | null = null;
-  /** 만든 IR 의 켬/끔 음량 보정(선형 배율, S1.4b). 사용자 IR 에는 쓰지 않는다. */
+  /** 컨볼버에 든 IR 의 켬/끔 음량 보정(선형 배율). 만든 IR 은 S1.4b 의 모델별 표, 사용자 IR 은 정규화 때 못 채운 부족분이다. */
   private cabinetMakeup = 1;
 
   constructor(
     context: BaseAudioContext,
     pedal: PedalState,
     private readonly timers: Timers = windowTimers,
+    private readonly userImpulse: UserImpulseSource = () => null,
   ) {
     super(context, pedal);
     this.currentPedal = pedal;
@@ -92,7 +107,7 @@ export class CabEffect extends BaseEffect {
 
   /** ConvolverNode 가 더하는 지연. P-16 이 잰 값이다(params/latency.json). 캐비닛이 꺼져 있으면(IR 없음) 컨볼버를 거치지 않는다. */
   protected override processingLatencySeconds(): number {
-    const bypassed = this.customImpulse === null && (this.currentPedal.params as CabParams).model === 'off';
+    const bypassed = (this.currentPedal.params as CabParams).model === 'off';
     return bypassed ? 0 : fixedLatencySeconds('convolver', this.context.sampleRate);
   }
 
@@ -107,11 +122,7 @@ export class CabEffect extends BaseEffect {
     smoothParam(this.highCut.frequency, finiteParam(params.highCut, 5400, 3000, 12000), this.context);
     smoothParam(this.presence.gain, finiteParam(params.presence, 1.5, -6, 6), this.context);
 
-    this.wanted = this.customImpulse
-      ? { kind: 'custom', buffer: this.customImpulse }
-      : params.model === 'off'
-        ? null
-        : { kind: 'cabinet', model: params.model, micPosition, distance };
+    this.wanted = this.wantedSource(params, micPosition, distance);
 
     if (this.wanted === null) {
       this.switchOff();
@@ -119,6 +130,17 @@ export class CabEffect extends BaseEffect {
     }
     smoothParam(this.bypassGain.gain, 0, this.context);
     this.reconcile();
+  }
+
+  /** 모델 값이 가리키는 IR. '내 IR' 인데 저장된 IR 이 없으면 기본 캐비닛으로 대신한다(소리가 사라지거나 날것이 되지 않게). */
+  private wantedSource(params: CabParams, micPosition: number, distance: number): IrSource | null {
+    if (params.model === 'off') return null;
+    if (params.model === 'my-ir') {
+      const impulse = this.userImpulse();
+      if (impulse) return { kind: 'custom', impulse };
+      return { kind: 'cabinet', model: MISSING_USER_IR_FALLBACK_MODEL, micPosition, distance };
+    }
+    return { kind: 'cabinet', model: params.model, micPosition, distance };
   }
 
   /** 캐비닛 끔: 진행 중인 교체를 접고 컨볼버 가지를 내린 뒤 우회 경로로 흘린다. 컨볼버에는 마지막 IR 이 남는다. */
@@ -193,9 +215,10 @@ export class CabEffect extends BaseEffect {
   /** 컨볼버 버퍼를 바꾸는 유일한 자리. normalize 는 버퍼를 넣기 전에 정해야 적용된다. */
   private load(source: IrSource): void {
     if (source.kind === 'custom') {
-      this.convolver.normalize = true;
-      this.convolver.buffer = source.buffer;
-      this.cabinetMakeup = 1;
+      // 정규화는 앱이 이미 했다(에너지 정규화, GS-3). 컨볼버의 자체 정규화는 끄고 같은 방식으로 보정한다.
+      this.convolver.normalize = false;
+      this.convolver.buffer = source.impulse.buffer;
+      this.cabinetMakeup = 10 ** (source.impulse.makeupDb / 20);
     } else {
       this.convolver.normalize = false;
       const cabinet = createCabinet(this.context, source.model, source.micPosition, source.distance);
@@ -220,17 +243,11 @@ export class CabEffect extends BaseEffect {
     this.debounceTimer = null;
   }
 
-  setCustomImpulse(buffer: AudioBuffer | null): void {
-    this.customImpulse = buffer;
-    this.update(this.currentPedal);
-  }
-
   override dispose(): void {
     this.cancelSwap();
     this.lowCut.disconnect();
     this.convolver.disconnect();
     this.convolver.buffer = null;
-    this.customImpulse = null;
     this.convolvedGain.disconnect();
     this.bypassGain.disconnect();
     this.highCut.disconnect();

@@ -436,12 +436,12 @@ interface PresetStore {
 }
 
 /**
- * Apply a complete preset snapshot. Session-only cabinet IRs are never part of snapshots.
+ * Apply a complete preset snapshot. 사용자 캐비닛 IR 은 프리셋에 들어 있지 않고 저장소에 따로 있다(S5.4) —
+ * 프리셋이 Cab 모델 '내 IR' 을 가리키면 그 IR 을 쓰고, 다른 모델을 가리키면 IR 은 쓰이지 않을 뿐 지워지지 않는다.
  * `trimDb` 는 그 프리셋의 음량 보정이다. 없으면 0 으로 적용한다(보정 없는 프리셋을 불러오면 앞 프리셋의 보정이 남지 않는다).
  */
 export function applyPresetPedals(pedals: PedalState[], trimDb?: number): void {
   const engine = AudioEngine.getInstance();
-  engine.clearAllCabinetIrs();
   usePedalStore.getState().setPedals(clonePedals(pedals), clampTrimDb(trimDb));
   useAudioStore.getState().adoptTempoFromPedals();
   engine.rebuildChain();

@@ -1,7 +1,7 @@
 // 페달 상태 → 이펙트 클래스. AudioEngine.createEffect()와 같은 대응이다.
 // PedalType 이 늘어나면 아래 switch 의 `satisfies never` 가 컴파일 오류로 알려 준다.
 import { AutoWahEffect } from '../nodes/AutoWahEffect';
-import { CabEffect } from '../nodes/CabEffect';
+import { CabEffect, type UserImpulseSource } from '../nodes/CabEffect';
 import { ChorusEffect } from '../nodes/ChorusEffect';
 import { CompressorEffect } from '../nodes/CompressorEffect';
 import { CrunchEffect } from '../nodes/CrunchEffect';
@@ -25,6 +25,8 @@ export function createOfflineEffect(
   impulseCache: ImpulseCache,
   /** 렌더 시각으로 재는 타이머(renderChain 이 넘긴다). 타이머로 IR 을 바꾸는 이펙트(Cab)만 쓴다. */
   timers?: Timers,
+  /** 'my-ir' 모델이 쓸 사용자 IR 제공자(S5.4). 없으면 '내 IR' 은 IR 없음 상태(기본 캐비닛으로 대신 울림)다. */
+  userImpulse?: UserImpulseSource,
 ): EffectNodeWrapper {
   switch (pedal.type) {
     case 'noiseGate':
@@ -44,7 +46,7 @@ export function createOfflineEffect(
     case 'eq':
       return new EQEffect(context, pedal);
     case 'cab':
-      return new CabEffect(context, pedal, timers);
+      return new CabEffect(context, pedal, timers, userImpulse);
     case 'chorus':
       return new ChorusEffect(context, pedal);
     case 'flanger':

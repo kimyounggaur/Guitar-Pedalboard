@@ -17,6 +17,11 @@ declare module 'node:path' {
   export function join(...parts: string[]): string;
   export function resolve(...parts: string[]): string;
 }
+declare module 'node:buffer' {
+  /** Playwright 의 setInputFiles 에 파일 내용을 직접 건넬 때 쓰는 버퍼(바이트 배열에서 만든다). */
+  export type Buffer = Uint8Array;
+  export const Buffer: { from(data: Uint8Array): Buffer };
+}
 declare module 'node:zlib' {
   export function gzipSync(data: Uint8Array, options?: { level?: number }): Uint8Array;
 }

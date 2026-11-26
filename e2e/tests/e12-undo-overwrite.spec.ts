@@ -1,6 +1,6 @@
 // E-12 되돌릴 수 있는 안전장치(설계서 S2.8, R2-14). 실제 브라우저에서 수용 기준 4개를 본다.
 //   1. 프리셋 삭제 → [실행 취소] → 프리셋이 원래 자리에 돌아온다(즐겨찾기·내용 포함).
-//   2. '기본 페달 설정' → [실행 취소] → 모든 노브·켜짐·음량 보정(·불러 둔 IR)이 되돌아온다. 되돌릴 게 없을 때 '되돌려졌다'고 속이지 않도록
+//   2. '기본 페달 설정' → [실행 취소] → 모든 노브·켜짐·음량 보정(·캐비닛이 쓰던 '내 IR' 모델)이 되돌아온다. 되돌릴 게 없을 때 '되돌려졌다'고 속이지 않도록
 //      처음 값으로 바뀌었다는 것도 함께 본다(공허한 시험 방지).
 //   3. 같은 이름 저장은 묻지 않고 덮어쓰는 길이 없다 — 대화상자(덮어쓰기 / 새 이름으로 저장 / 취소)가 뜨고, 고르기 전에는 저장소가 그대로다.
 //      브라우저 기본 대화상자(window.confirm)는 한 번도 뜨지 않는다.
@@ -235,30 +235,33 @@ test.describe('E-12 되돌리기·덮어쓰기 안전장치', () => {
     expect(dialogs).toEqual([]);
   });
 
-  test('불러 둔 캐비닛 IR 도 같은 오디오 세션에서는 [실행 취소] 로 돌아온다', async ({ page }) => {
+  test('내 IR 을 쓰던 캐비닛도 [실행 취소] 로 돌아온다: 기본 설정은 모델만 기본으로 돌리고 저장된 IR 은 지우지 않는다', async ({ page }) => {
     await openApp(page);
     await connectGuitar(page);
     const cab = pedalGroup(page, 'Cab');
     await cab.locator('input[type="file"]').setInputFiles(fixturePath('ref-impulse.wav'));
-    await expect(cab.getByText('사용 중: ref-impulse.wav')).toBeVisible({ timeout: 15_000 });
+    await expect(cab.getByText('내 IR: ref-impulse.wav')).toBeVisible({ timeout: 15_000 });
+    await expect(cab.getByLabel('캐비닛 모델'), '올리자마자 모델이 내 IR 로 바뀐다').toHaveValue('my-ir');
 
-    // 노브는 그대로 기본이어도 IR 이 있으면 기본 설정이 IR 을 지우므로 되돌릴 거리가 있다.
+    // 노브는 그대로 기본이어도 모델이 '내 IR' 이면 기본 설정이 모델을 바꾸므로 되돌릴 거리가 있다.
     await resetButton(page).click();
     const toast = toastOf(page, 'chain-reset');
     await expect(toast).toBeVisible();
-    await expect(cab.getByText('기본 캐비닛 IR 사용 중')).toBeVisible();
+    await expect(cab.getByLabel('캐비닛 모델')).toHaveValue('v30-4x12');
+    await expect(cab.getByText('내 IR: ref-impulse.wav'), '저장된 IR 은 지워지지 않는다(다시 고르면 바로 쓴다)').toBeVisible();
 
     await undoButton(toast).click();
-    await expect(cab.getByText('사용 중: ref-impulse.wav')).toBeVisible();
+    await expect(cab.getByLabel('캐비닛 모델')).toHaveValue('my-ir');
+    await expect(cab.getByText('내 IR: ref-impulse.wav')).toBeVisible();
     await expect(presetMessage(page)).toHaveText('기본 페달 설정 전으로 되돌렸습니다.');
   });
 
-  test('오디오를 다시 시작한 뒤에는 IR 은 돌아오지 않고, 그 사실을 알려 준다(나머지 값은 돌아온다)', async ({ page }) => {
+  test('오디오를 다시 시작한 뒤에도 내 IR 은 저장돼 있어 [실행 취소] 가 그대로 돌려 놓는다', async ({ page }) => {
     await openApp(page);
     await connectGuitar(page);
     const cab = pedalGroup(page, 'Cab');
     await cab.locator('input[type="file"]').setInputFiles(fixturePath('ref-impulse.wav'));
-    await expect(cab.getByText('사용 중: ref-impulse.wav')).toBeVisible({ timeout: 15_000 });
+    await expect(cab.getByText('내 IR: ref-impulse.wav')).toBeVisible({ timeout: 15_000 });
     const chorus = stompOf(page, 'Chorus');
     await chorus.click();
     const chorusToggled = await chorus.getAttribute('aria-pressed');
@@ -270,9 +273,10 @@ test.describe('E-12 되돌리기·덮어쓰기 안전장치', () => {
     await disconnectButton(page).click();
     await connectGuitar(page);
     await undoButton(toast).click();
-    await expect(presetMessage(page)).toContainText('불러 둔 IR 파일 1개');
-    await expect(presetMessage(page)).toContainText('다시 불러와 주세요');
-    await expect(cab.getByText('기본 캐비닛 IR 사용 중'), '낡은 IR 을 몰래 되살리지 않는다').toBeVisible();
+    // 예전에는 세션에만 있던 IR 이 오디오를 다시 시작하면 사라져 '다시 불러와 주세요' 를 알려야 했다. 이제 IR 은 저장소에 있다.
+    await expect(presetMessage(page)).toHaveText('기본 페달 설정 전으로 되돌렸습니다.');
+    await expect(cab.getByLabel('캐비닛 모델')).toHaveValue('my-ir');
+    await expect(cab.getByText('내 IR: ref-impulse.wav')).toBeVisible();
     await expect(chorus, '노브·켜짐은 돌아온다').toHaveAttribute('aria-pressed', chorusToggled!);
   });
 

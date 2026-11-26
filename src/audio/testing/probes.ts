@@ -5,6 +5,7 @@
 import type { MonitorMsg } from '../engine/guardSpec';
 import { setFeatureFlagOverride } from '../../config/flags';
 import { CompressorEffect } from '../nodes/CompressorEffect';
+import type { UserCabinetImpulse } from '../nodes/CabEffect';
 import { mixGains } from '../nodes/mixLaw';
 import { getPhaserWetMakeup, PHASER_CENTER_FREQUENCY } from '../nodes/PhaserEffect';
 import {
@@ -32,6 +33,7 @@ import {
   type RenderChainOptions,
 } from '../offline/renderChain';
 import type { PedalParamValue, PedalParams, PedalState, PedalType } from '../types';
+import { createCabinetImpulse, normalizeUserImpulse } from '../utils/cabinet';
 import type { ImpulseCache } from '../utils/impulseCache';
 import { runBootstrap } from '../../persistence/bootstrap';
 import { createSafeStorage, type StorageBackend } from '../../persistence/SafeStorage';
@@ -235,13 +237,109 @@ const p03: ProbeDefinition = {
 // P-04 — Cab 켬/끔 음량 차
 // ---------------------------------------------------------------------------------------------
 const CAB_MODELS = ['v30-4x12', 'greenback-4x12', 'blue-1x12', 'jensen-1x12', 'tweed-1x10'] as const;
+type CabParamsModel = (typeof CAB_MODELS)[number];
+
+/**
+ * 사용자가 불러올 법한 IR 의 합성 대역(S5.4). 모양이 서로 다르게 — 짧고 밝은 것, 긴 꼬리, 스테레오, 어둡고 먹먹한 것,
+ * 아주 작거나 큰 것 — 둬서 에너지 정규화가 어느 하나에만 맞춰져 있지 않은지 본다. 결정적 난수라 렌더마다 같다.
+ */
+function syntheticUserIrs(sampleRate: number): Array<{ name: string; channels: Float32Array[] }> {
+  const noise = (seed: number): (() => number) => {
+    let state = seed >>> 0;
+    return () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 0x80000000 - 1;
+    };
+  };
+  const decaying = (seconds: number, tauSeconds: number, gain: number, seed: number, tone: 'bright' | 'dark' | 'flat'): Float32Array => {
+    const random = noise(seed);
+    const frames = Math.round(seconds * sampleRate);
+    const out = new Float32Array(frames);
+    let previous = 0;
+    let smooth = 0;
+    for (let i = 0; i < frames; i += 1) {
+      const white = random();
+      let value = white;
+      if (tone === 'bright') value = white - 0.9 * previous; // 고역이 센 쪽
+      if (tone === 'dark') { smooth += 0.08 * (white - smooth); value = smooth * 4; } // 저역만 남는 쪽
+      previous = white;
+      out[i] = gain * value * Math.exp(-i / (tauSeconds * sampleRate));
+    }
+    // 처음에 직접음 한 번(실제 캐비닛 IR 처럼 앞쪽이 가장 세다)
+    out[0] += gain * 2;
+    return out;
+  };
+  const spike = new Float32Array(Math.round(0.02 * sampleRate));
+  spike[0] = 1;
+  return [
+    { name: 'bright-short', channels: [decaying(0.064, 0.012, 0.5, 11, 'bright')] },
+    { name: 'dark-short', channels: [decaying(0.1, 0.02, 0.5, 12, 'dark')] },
+    { name: 'long-tail', channels: [decaying(1, 0.15, 0.2, 13, 'flat')] },
+    { name: 'stereo', channels: [decaying(0.3, 0.05, 0.3, 14, 'flat'), decaying(0.3, 0.05, 0.3, 15, 'bright')] },
+    { name: 'quiet', channels: [decaying(0.2, 0.03, 0.001, 16, 'flat')] },
+    { name: 'hot', channels: [decaying(0.2, 0.03, 3, 17, 'flat')] },
+    { name: 'spike', channels: [spike] },
+  ];
+}
+
+/**
+ * 실제 캐비닛 IR 에 가까운 대역(S5.4). 만든 캐비닛의 응답(스피커·마이크가 만든 부드러운 응답)을 '사용자가 올린 IR' 로 보고,
+ * 레벨을 크게 다르게(×0.02·×8) 하거나 방 꼬리를 붙여서 정규화가 레벨·꼬리와 상관없이 같은 음량으로 맞추는지 본다.
+ * 상용 IR 팩의 IR 이 이와 비슷한 모양이다(스피커 공진 + 마이크 근접 효과 + 고역 롤오프).
+ */
+function realisticUserIrs(context: BaseAudioContext): Array<{ name: string; channels: Float32Array[] }> {
+  const rate = context.sampleRate;
+  const copyOf = (model: CabParamsModel, mic: number, distance: number, gain = 1): Float32Array[] => {
+    const impulse = createCabinetImpulse(context, model, mic, distance);
+    return [0, 1].map((channel) => impulse.getChannelData(channel).map((value) => value * gain));
+  };
+  const withRoomTail = (channels: Float32Array[]): Float32Array[] => {
+    const frames = Math.round(rate);
+    let state = 7;
+    return channels.map((samples) => {
+      const out = new Float32Array(frames);
+      out.set(samples.subarray(0, Math.min(samples.length, frames)));
+      for (let i = Math.round(0.02 * rate); i < frames; i += 1) {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+        out[i] += 0.01 * (state / 0x80000000 - 1) * Math.exp(-i / (0.2 * rate));
+      }
+      return out;
+    });
+  };
+  const result: Array<{ name: string; channels: Float32Array[] }> = [];
+  for (const model of CAB_MODELS) result.push({ name: model, channels: copyOf(model, 55, 30) });
+  result.push({ name: 'v30-mic0-near', channels: copyOf('v30-4x12', 0, 0) });
+  result.push({ name: 'v30-mic100-far', channels: copyOf('v30-4x12', 100, 100) });
+  result.push({ name: 'tweed-mic100-near', channels: copyOf('tweed-1x10', 100, 0) });
+  result.push({ name: 'blue-mic0-far', channels: copyOf('blue-1x12', 0, 100) });
+  result.push({ name: 'v30-gain0.02', channels: copyOf('v30-4x12', 55, 30, 0.02) });
+  result.push({ name: 'v30-gain8', channels: copyOf('v30-4x12', 55, 30, 8) });
+  result.push({ name: 'greenback-room-tail', channels: withRoomTail(copyOf('greenback-4x12', 55, 30)) });
+  result.push({ name: 'v30-mono', channels: [copyOf('v30-4x12', 55, 30)[0]] });
+  return result;
+}
+
+async function renderWithUserIr(
+  ctx: ProbeContext,
+  input: Float32Array,
+  channels: Float32Array[],
+): Promise<{ onDb: number; makeupDb: number }> {
+  const { channels: normalized, makeupDb } = normalizeUserImpulse(channels, ctx.sampleRate);
+  const buffer = new AudioBuffer({ numberOfChannels: normalized.length, length: normalized[0].length, sampleRate: ctx.sampleRate });
+  normalized.forEach((channel, index) => buffer.copyToChannel(channel as Float32Array<ArrayBuffer>, index));
+  const impulse: UserCabinetImpulse = { buffer, makeupDb };
+  const on = await ctx.render({ input: [input], pedals: [pedal('cab', { model: 'my-ir' })], userImpulse: () => impulse });
+  return { onDb: bodyLevelDb(on), makeupDb };
+}
 
 const p04: ProbeDefinition = {
   id: 'P-04',
   title: 'Cab 켬/끔 음량 차',
   describe:
-    'REF-PC 앞 4초를 Cab 하나만 두고 바이패스(끔)와 각 모델·마이크 위치(0·55·100)로 켠 출력의 RMS 차(켬 − 끔, dB)를 잰다.',
-  steps: 'S1.4b',
+    'REF-PC 앞 4초를 Cab 하나만 두고 바이패스(끔)와 각 모델·마이크 위치(0·55·100)로 켠 출력의 RMS 차(켬 − 끔, dB)를 잰다. ' +
+    "사용자 IR 모델('내 IR', S5.4)도 같은 방법으로 잰다 — 실제 캐비닛 모양 IR(만든 캐비닛의 응답을 레벨·꼬리를 바꿔 올린 것, myIrReal.*)의 최악값(myIrRealMaxAbsDiffDb)이 ≤ 1.5 dB 인지 본다. " +
+    "모양이 극단적인 합성 IR(밝은·어두운·긴 노이즈 꼬리·스테레오·아주 작은·큰·스파이크, myIrStress.*)은 한계를 알려 주는 참고값이다(피크 상한·보충 이득 상한 때문에 아주 한쪽으로 치우친 IR 은 더 작게 울린다).",
+  steps: 'S1.4b, S5.4',
   async run(ctx) {
     const input = signals.refPc(ctx.sampleRate, 4);
     const off = await ctx.render({ input: [input], pedals: [pedal('cab', {}, { active: false })] });
@@ -258,6 +356,25 @@ const p04: ProbeDefinition = {
     }
     values.maxAbsDiffDb = largest;
     values.defaultDiffDb = values['diffDb.v30-4x12.55'];
+
+    const bare = await ctx.createBareContext(1);
+    let largestReal = 0;
+    for (const { name, channels } of realisticUserIrs(bare)) {
+      const { onDb, makeupDb } = await renderWithUserIr(ctx, input, channels);
+      values[`myIrReal.${name}`] = onDb - offDb;
+      values[`myIrRealMakeupDb.${name}`] = makeupDb;
+      largestReal = Math.max(largestReal, Math.abs(onDb - offDb));
+    }
+    values.myIrRealMaxAbsDiffDb = largestReal;
+
+    let largestStress = 0;
+    for (const { name, channels } of syntheticUserIrs(ctx.sampleRate)) {
+      const { onDb, makeupDb } = await renderWithUserIr(ctx, input, channels);
+      values[`myIrStress.${name}`] = onDb - offDb;
+      values[`myIrStressMakeupDb.${name}`] = makeupDb;
+      largestStress = Math.max(largestStress, Math.abs(onDb - offDb));
+    }
+    values.myIrStressMaxAbsDiffDb = largestStress;
     return { metrics: metrics(values) };
   },
 };

@@ -8,7 +8,6 @@ import { useParamNames } from '../ParamScope';
 import { ko } from '../../i18n/ko';
 
 interface CabPedalProps {
-  pedalId: string;
   params: CabParams;
   onChange: (key: keyof CabParams, value: PedalParamValue) => void;
 }
@@ -19,20 +18,36 @@ const cabModels: Array<{ value: CabParams['model']; label: string }> = [
   { value: 'blue-1x12', label: 'Blue 1×12' },
   { value: 'jensen-1x12', label: 'American 1×12' },
   { value: 'tweed-1x10', label: 'Tweed 1×10' },
+  { value: 'my-ir', label: '내 IR' },
   { value: 'off', label: 'IR 끄기' },
 ];
 
-export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
-  const [irName, setIrName] = useState(() => AudioEngine.getInstance().getCabinetIrName(pedalId));
+/** 지우고 나서 '내 IR' 을 고른 채로 두면 화면과 소리가 어긋나므로 돌아갈 모델. 이펙트가 IR 없을 때 대신 쓰는 모델과 같다. */
+const MODEL_AFTER_IR_DELETE: CabParams['model'] = 'v30-4x12';
+
+export function CabPedal({ params, onChange }: CabPedalProps) {
+  const [irInfo, setIrInfo] = useState(() => AudioEngine.getInstance().getCabinetIrInfo());
   const [irError, setIrError] = useState('');
+  const [irNotPersisted, setIrNotPersisted] = useState(false);
   const [irLoading, setIrLoading] = useState(false);
   const irInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    const refresh = () => setIrName(AudioEngine.getInstance().getCabinetIrName(pedalId));
+    const engine = AudioEngine.getInstance();
+    const refresh = () => setIrInfo(engine.getCabinetIrInfo());
     window.addEventListener('cab-ir-change', refresh);
+    // 저장소에 남은 내 IR 을 읽는다(새로고침 뒤에도 이름이 보이도록). 읽기가 끝나면 'cab-ir-change' 로 다시 그린다.
+    void engine.loadStoredCabinetIr().then(refresh);
     refresh();
     return () => window.removeEventListener('cab-ir-change', refresh);
-  }, [pedalId]);
+  }, []);
+  const usesMyIr = params.model === 'my-ir';
+  // '내 IR' 을 쓰기 시작할 때(고르거나, 저장된 모델이 '내 IR' 인 채로 열 때) 저장소를 다시 읽는다. 다른 탭이 그 사이에 올리거나 지웠을 수 있어서,
+  // 저장돼 있는 IR 을 없다고 안내하거나 지워진 IR 을 '저장되어 유지된다' 고 안내하는 일이 없게 한다.
+  useEffect(() => {
+    if (!usesMyIr) return;
+    const engine = AudioEngine.getInstance();
+    void engine.syncCabinetIrFromStore().then(() => setIrInfo(engine.getCabinetIrInfo()));
+  }, [usesMyIr]);
   return (
     <div className="cab-sim-ui" role="group" aria-label={ko.pedal.cab.controls}>
       <div className="cab-grille" aria-hidden="true">
@@ -58,22 +73,37 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
       <div className="cab-custom-ir">
         {/* 브라우저 기본 파일 버튼('Choose File / No file chosen')은 브라우저 언어를 따라 영어로 나온다. 입력은 숨기고 한국어 버튼이 대신 연다(S4.6). */}
         <button type="button" className="secondary-button" disabled={irLoading} onClick={() => irInputRef.current?.click()}>
-          사용자 IR 불러오기 (WAV)
+          {ko.cabinetIr.ui.loadButton}
         </button>
         <input ref={irInputRef} className="hidden-file-input" type="file" accept=".wav,audio/wav" disabled={irLoading}
-          aria-label="사용자 IR 파일(WAV)" tabIndex={-1} onChange={async (event) => {
+          aria-label={ko.cabinetIr.ui.fileLabel} tabIndex={-1} onChange={async (event) => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = '';
             if (!file) return;
-            setIrError(''); setIrLoading(true);
-            try { await AudioEngine.getInstance().loadCabinetIr(pedalId, file); }
+            setIrError(''); setIrNotPersisted(false); setIrLoading(true);
+            try {
+              const { persisted } = await AudioEngine.getInstance().importCabinetIr(file);
+              setIrNotPersisted(!persisted);
+              // 올리자마자 적용: 새 IR 을 쓰도록 모델을 '내 IR' 로 바꾼다(이미 '내 IR' 이면 IR 만 바뀐다).
+              if (params.model !== 'my-ir') onChange('model', 'my-ir');
+            }
             catch (error) { setIrError(error instanceof Error ? error.message : ko.cabinetIr.loadFailed); }
             finally { setIrLoading(false); }
           }} />
-        <p>{irName ? `사용 중: ${irName}` : '기본 캐비닛 IR 사용 중'}</p>
-        {irName && <small>마이크 위치와 거리 조절은 기본 IR에만 적용됩니다.</small>}
-        {irName && <button type="button" onClick={() => AudioEngine.getInstance().clearCabinetIr(pedalId)}>기본 IR로 돌아가기</button>}
-        <small>모노·스테레오 PCM 또는 32비트 float WAV, 최대 2초·4 MB. 프리셋·A/B 슬롯·기본 설정을 불러오거나 오디오 종료·새로고침 시 해제되며 프리셋에는 저장되지 않습니다.</small>
+        {irInfo && <p>{ko.cabinetIr.ui.inUse(irInfo.name)}</p>}
+        {irInfo?.cut && <small role="status">{ko.cabinetIr.ui.cutNotice(irInfo.originalSeconds)}</small>}
+        {irInfo && <small>{irNotPersisted ? ko.cabinetIr.ui.notPersisted : ko.cabinetIr.ui.stored}</small>}
+        {usesMyIr && !irInfo && <small role="status">{ko.cabinetIr.ui.missing}</small>}
+        {usesMyIr && irInfo && <small>{ko.cabinetIr.ui.knobsNote}</small>}
+        {irInfo && (
+          <button type="button" onClick={async () => {
+            setIrNotPersisted(false);
+            await AudioEngine.getInstance().removeCabinetIr();
+            if (usesMyIr) onChange('model', MODEL_AFTER_IR_DELETE);
+          }}>{ko.cabinetIr.ui.deleteButton}</button>
+        )}
+        <small>{ko.cabinetIr.ui.limits}</small>
+        <small>{ko.cabinetIr.ui.licenseNotice}</small>
         {irError && <p role="alert">{irError}</p>}
       </div>
 

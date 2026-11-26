@@ -5,6 +5,7 @@
 //   3. 컨볼버 버퍼는 가지 게인이 0 일 때만 바뀐다(모든 교체에서 그 순간 게인을 잰다). 교체 뒤에는 새 보정값으로 되살아난다.
 //   4. 모델·사용자 IR 은 디바운스 없이 바로 페이드를 시작한다. 교체 중에 노브가 더 움직여도 램프를 다시 걸지 않고, 가장 새로운 값으로 만든다.
 //   5. 교체 도중 끔·사용자 IR 해제·dispose 에서도 타이머가 남지 않고 게인이 튀지 않는다(램프 중간에 값을 되돌리는 취소를 쓰지 않는다).
+//      사용자 IR 은 모델 '내 IR'(my-ir)일 때만 쓰이고(S5.4), 저장된 IR 이 없으면 기본 캐비닛으로 대신한다. 모델이 '끔'이면 IR 이 있어도 우회한다.
 //   6. 렌더 시각 타이머(contextTimers): 요청보다 일찍 울리지 않고, 현재 퀀텀 안에는 걸지 않으며, 지우면 울리지 않는다.
 //   7. 소스 단언: 버퍼는 load 한 곳에서만 바꾸고, CabEffect 는 창 타이머를 직접 부르지 않는다. 페이드는 fadeParam 으로만 한다 —
 //      Chrome 에서 cancelAndHoldAtTime 바로 뒤에 건 선형 램프는 페이드가 되지 않고 끊김이 된다(프로브 P-25 로 확인, REFACTOR_LOG L-220).
@@ -198,16 +199,19 @@ const basePedal = { ...JSON.parse(JSON.stringify(initialPedals.find((pedal) => p
 const pedalWith = (params) => ({ ...basePedal, params: { ...basePedal.params, ...params } });
 const START = pedalWith({ model: 'v30-4x12', micPosition: 55, distance: 30, mix: 100 });
 
-function createEffect(pedal = START) {
+function createEffect(pedal = START, initialUserImpulse = null) {
   const world = createFakeWorld();
+  // 사용자 IR 은 이펙트가 update 마다 이 함수로 읽는다(엔진이 넘기는 것과 같은 모양). 시험이 `user.impulse` 를 바꿔 IR 이 도착·삭제되는 것을 흉내 낸다.
+  const user = { impulse: initialUserImpulse };
   // convolvedGain 은 생성자 안에서 만들어진 뒤에야 알 수 있으므로, 첫 IR 이 들어갈 때(생성자 안)까지는 바인딩이 필요 없게 임시 게인을 쓴다.
   world.bindGain({ gain: new Param(world.clock) });
-  const effect = new CabEffect(world.context, pedal, world.timers);
+  const effect = new CabEffect(world.context, pedal, world.timers, () => user.impulse);
   world.bindGain(effect.convolvedGain);
   // 생성자에서 이미 첫 IR 이 들어갔다. 그 기록은 첫 IR 이라 따로 보관한다.
   const first = world.swaps.splice(0);
-  return { world, effect, first };
+  return { world, effect, first, user };
 }
+const fakeUserBuffer = (...samples) => ({ numberOfChannels: 1, length: samples.length, duration: 0.1, getChannelData: () => new Float32Array(samples) });
 
 const samplesOf = (buffer) => [buffer.getChannelData(0), buffer.getChannelData(1)];
 function expectedIr(world, model, micPosition, distance) {
@@ -434,60 +438,98 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
 }
 
 {
-  // 사용자 IR: 고르기·해제도 페이드로 바꾼다. 사용자 IR 에서는 노브가 IR 을 바꾸지 않는다.
-  const { world, effect } = createEffect();
+  // 사용자 IR: 모델 '내 IR' 로 고르기·다른 모델로 돌아가기도 페이드로 바꾼다. 사용자 IR 에서는 노브가 IR 을 바꾸지 않는다.
+  const { world, effect, user } = createEffect();
   world.timers.advance(500);
-  const custom = { numberOfChannels: 1, length: 3, duration: 0.1, getChannelData: () => new Float32Array([0, 0.2, -0.1]) };
-  effect.setCustomImpulse(custom);
-  equal(effect.phase, 'fadingOut', '사용자 IR 을 고르면 바로 페이드를 시작한다');
+  const custom = fakeUserBuffer(0, 0.2, -0.1);
+  user.impulse = { buffer: custom, makeupDb: 3 };
+  effect.update(pedalWith({ model: 'my-ir' }));
+  equal(effect.phase, 'fadingOut', "모델을 '내 IR' 로 고르면 바로 페이드를 시작한다");
   world.timers.advance(CAB_IR_SWAP_FADE_SECONDS * 1000 + 1);
   equal(world.swaps.length, 1, '사용자 IR 교체 한 번');
   ok(world.swaps[0].buffer === custom, '컨볼버에 사용자 IR 이 들어간다');
-  equal(world.swaps[0].normalize, true, '사용자 IR 은 Web Audio 정규화를 쓴다');
+  equal(world.swaps[0].normalize, false, '정규화는 앱이 이미 했으므로 컨볼버의 자체 정규화를 끈다');
   near(world.swaps[0].gain, 0, 1e-9, '사용자 IR 교체 순간 게인 0');
   world.timers.advance(100);
-  near(gainAt(effect, world.clock), 1, 1e-6, '사용자 IR 은 보정 없이 게인 1');
-  effect.update(pedalWith({ micPosition: 10, distance: 90 }));
+  near(gainAt(effect, world.clock), 10 ** (3 / 20), 1e-6, '사용자 IR 의 보충 이득(makeupDb)으로 올라간다');
+  effect.update(pedalWith({ model: 'my-ir', micPosition: 10, distance: 90 }));
   equal(world.timers.pending, 0, '사용자 IR 에서 노브를 돌려도 타이머가 없다');
   equal(world.swaps.length, 1, '사용자 IR 에서 노브를 돌려도 IR 을 버리지 않는다');
   // 다른 사용자 IR 로 바꾸면 바뀌고, 같은 IR 을 다시 주면 아무 일도 없다
-  const other = { numberOfChannels: 1, length: 3, duration: 0.1, getChannelData: () => new Float32Array([0, 0.3, -0.2]) };
+  const other = fakeUserBuffer(0, 0.3, -0.2);
   world.timers.advance(100);
-  effect.setCustomImpulse(other);
+  user.impulse = { buffer: other, makeupDb: 0 };
+  effect.update(pedalWith({ model: 'my-ir', micPosition: 10, distance: 90 }));
   world.timers.advance(CAB_IR_SWAP_FADE_SECONDS * 1000 + 1);
   equal(world.swaps.length, 2, '다른 사용자 IR 은 교체한다');
   ok(world.swaps[1].buffer === other, '새 사용자 IR 이 컨볼버에 들어간다');
   world.timers.advance(100);
-  effect.setCustomImpulse(other);
+  near(gainAt(effect, world.clock), 1, 1e-6, '새 IR 은 보충 이득 0 dB');
+  user.impulse = { buffer: other, makeupDb: 0 };
+  effect.update(pedalWith({ model: 'my-ir', micPosition: 10, distance: 90 }));
   equal(world.timers.pending, 0, '같은 사용자 IR 을 다시 주면 타이머가 없다');
   equal(world.swaps.length, 2, '같은 사용자 IR 을 다시 주면 버퍼를 바꾸지 않는다');
-  effect.setCustomImpulse(null);
+  // 다른 모델로 돌아가면 만든 IR 로 페이드 교체하고, IR 은 그대로 남아 있다(다시 '내 IR' 을 고르면 쓴다).
+  effect.update(pedalWith({ model: 'v30-4x12', micPosition: 10, distance: 90 }));
   world.timers.advance(CAB_IR_SWAP_FADE_SECONDS * 1000 + 1);
-  world.swaps.splice(1, 1); // 아래 확인은 해제 교체를 두 번째 기록으로 본다
-  equal(world.swaps.length, 2, '사용자 IR 해제도 페이드 교체');
-  equal(world.swaps[1].normalize, false, '해제하면 만든 IR 의 비정규화로 돌아온다');
-  near(world.swaps[1].gain, 0, 1e-9, '해제 교체 순간 게인 0');
-  ok(sameIr(world.swaps[1].buffer, expectedIr(world, 'v30-4x12', 10, 90)), '해제하면 그 사이 움직인 노브 값의 IR 로 돌아온다');
+  equal(world.swaps.length, 3, '다른 모델로 돌아가는 것도 페이드 교체');
+  equal(world.swaps[2].normalize, false, '만든 IR 은 비정규화 컨볼루션');
+  near(world.swaps[2].gain, 0, 1e-9, '돌아가는 교체 순간 게인 0');
+  ok(sameIr(world.swaps[2].buffer, expectedIr(world, 'v30-4x12', 10, 90)), '그 사이 움직인 노브 값의 IR 로 돌아온다');
+  world.timers.advance(100);
+  effect.update(pedalWith({ model: 'my-ir', micPosition: 10, distance: 90 }));
+  world.timers.advance(CAB_IR_SWAP_FADE_SECONDS * 1000 + 1);
+  equal(world.swaps.length, 4, "다시 '내 IR' 을 고르면 남아 있던 IR 을 쓴다");
+  ok(world.swaps[3].buffer === other, '같은 사용자 IR 이다');
   assertNoHold(effect);
   effect.dispose();
 }
 
-// 캐비닛 모델이 꺼져 있어도 사용자 IR 이 있으면 사용자 IR 이 이긴다. 사용자 IR 을 해제하면 다시 꺼진 상태(우회)로 돌아온다.
+// 저장된 IR 이 없는데 '내 IR' 을 고른 경우(다른 기기에서 온 프리셋, IR 을 지운 뒤): 기본 캐비닛으로 재생하고, IR 이 도착하면 바꾼다. 지우면 다시 기본 캐비닛으로 간다.
 {
-  const { world, effect } = createEffect(pedalWith({ model: 'off' }));
+  const { world, effect, first, user } = createEffect(pedalWith({ model: 'my-ir' }));
+  equal(first.length, 1, 'IR 이 없어도 소리가 나도록 기본 캐비닛을 바로 넣는다');
+  ok(sameIr(first[0].buffer, expectedIr(world, 'v30-4x12', 55, 30)), '대신 쓰는 모델은 기본 캐비닛(v30-4x12)이다');
+  equal(first[0].normalize, false);
   world.timers.advance(500);
+  near(gainAt(effect, world.clock), makeupOf('v30-4x12', 55, 30), 1e-6, '기본 캐비닛의 보정값');
+  near(effect.bypassGain.gain.valueAt(world.clock.now), 0, 1e-3, '우회 가지는 닫힘(날것의 소리가 나지 않는다)');
+
+  const custom = fakeUserBuffer(0, 0.2, -0.1);
+  user.impulse = { buffer: custom, makeupDb: 0 };
+  effect.update(pedalWith({ model: 'my-ir' }));
+  world.timers.advance(CAB_IR_SWAP_FADE_SECONDS * 1000 + 1);
+  equal(world.swaps.length, 1, 'IR 이 도착하면 바꾼다');
+  ok(world.swaps[0].buffer === custom, '도착한 IR');
+
+  world.timers.advance(100);
+  user.impulse = null;
+  effect.update(pedalWith({ model: 'my-ir' }));
+  world.timers.advance(CAB_IR_SWAP_FADE_SECONDS * 1000 + 1);
+  equal(world.swaps.length, 2, 'IR 을 지우면 기본 캐비닛으로 바꾼다');
+  ok(sameIr(world.swaps[1].buffer, expectedIr(world, 'v30-4x12', 55, 30)), '기본 캐비닛으로 돌아온다');
+  assertNoHold(effect);
+  effect.dispose();
+}
+
+// 모델이 '끔'이면 IR 이 저장돼 있어도 우회한다. '내 IR' 을 고르면 쓰고, 다시 끄면 우회로 돌아온다.
+{
+  const custom = fakeUserBuffer(0, 0.2, -0.1);
+  const { world, effect, first } = createEffect(pedalWith({ model: 'off' }), { buffer: custom, makeupDb: 0 });
+  world.timers.advance(500);
+  equal(first.length, 0, '꺼져 있으면 IR 이 있어도 컨볼버에 넣지 않는다');
   near(effect.bypassGain.gain.valueAt(world.clock.now), 1, 1e-3, '꺼진 캐비닛: 우회 가지 1');
-  const custom = { numberOfChannels: 1, length: 3, duration: 0.1, getChannelData: () => new Float32Array([0, 0.2, -0.1]) };
-  effect.setCustomImpulse(custom);
+  near(gainAt(effect, world.clock), 0, 1e-6, '꺼진 캐비닛: 컨볼버 가지 0');
+  effect.update(pedalWith({ model: 'my-ir' }));
   world.timers.advance(300);
-  ok(effect.convolver.buffer === custom, '모델이 꺼져 있어도 사용자 IR 이 들어간다');
+  ok(effect.convolver.buffer === custom, "'내 IR' 을 고르면 사용자 IR 이 들어간다");
   near(gainAt(effect, world.clock), 1, 1e-6, '사용자 IR: 컨볼버 가지 1');
   near(effect.bypassGain.gain.valueAt(world.clock.now), 0, 1e-3, '사용자 IR: 우회 가지 0');
-  effect.setCustomImpulse(null);
+  effect.update(pedalWith({ model: 'off' }));
   world.timers.advance(300);
-  equal(world.timers.pending, 0, '해제 뒤 남은 타이머 없음');
-  near(gainAt(effect, world.clock), 0, 1e-6, '해제하면 모델이 꺼져 있으니 컨볼버 가지 0');
-  near(effect.bypassGain.gain.valueAt(world.clock.now), 1, 1e-3, '해제하면 우회 가지 1');
+  equal(world.timers.pending, 0, '끈 뒤 남은 타이머 없음');
+  near(gainAt(effect, world.clock), 0, 1e-6, '다시 끄면 컨볼버 가지 0');
+  near(effect.bypassGain.gain.valueAt(world.clock.now), 1, 1e-3, '다시 끄면 우회 가지 1');
   assertNoHold(effect);
   effect.dispose();
 }
@@ -530,16 +572,16 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   const withoutLoad = source.slice(0, loadStart) + source.slice(loadEnd);
   const assigned = [...withoutLoad.matchAll(/convolver\.buffer\s*=\s*(?!=)([^;]+);/g)].map((match) => match[1].trim());
   ok(assigned.every((value) => value === 'null'), `컨볼버 버퍼는 load 밖에서 null(해제)로만 바꾼다: ${assigned.join(', ')}`);
-  ok(/convolver\.buffer\s*=\s*source\.buffer/.test(source) && /convolver\.buffer\s*=\s*cabinet\.impulse/.test(source), 'load 안에서 사용자 IR 과 만든 IR 을 넣는다');
+  ok(/convolver\.buffer\s*=\s*source\.impulse\.buffer/.test(source) && /convolver\.buffer\s*=\s*cabinet\.impulse/.test(source), 'load 안에서 사용자 IR 과 만든 IR 을 넣는다');
   ok(!/\bwindow\b/.test(source.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/windowTimers/g, '')), 'CabEffect 는 창 타이머를 직접 부르지 않는다(주입받은 Timers 만 쓴다)');
   ok(!/\brampParam\b|cancelAndHoldAtTime/.test(source.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')), 'CabEffect 는 rampParam·cancelAndHoldAtTime 을 쓰지 않는다(fadeParam 만)');
   ok(/fadeParam/.test(source), 'CabEffect 는 fadeParam 으로 페이드한다');
   equal(CAB_IR_DEBOUNCE_MS, 120, '설계서: 마이크·거리 노브는 120 ms 멈춘 뒤에만 IR 을 다시 만든다');
   equal(CAB_IR_SWAP_FADE_SECONDS, 0.02, '설계서: IR 을 바꿀 때 20 ms 웻 페이드');
   const factory = await readFile(new URL('src/audio/offline/effectFactory.ts', rootUrl), 'utf8');
-  ok(/new CabEffect\(context, pedal, timers\)/.test(factory), '오프라인 팩토리는 렌더 시각 타이머를 Cab 에 넘긴다');
+  ok(/new CabEffect\(context, pedal, timers, userImpulse\)/.test(factory), '오프라인 팩토리는 렌더 시각 타이머와 사용자 IR 제공자를 Cab 에 넘긴다');
   const chain = await readFile(new URL('src/audio/offline/renderChain.ts', rootUrl), 'utf8');
-  ok(/createOfflineEffect\(context, pedal, impulseCache, timers\)/.test(chain), 'renderChain 은 이펙트 생성에 렌더 시각 타이머를 넘긴다');
+  ok(/createOfflineEffect\(context, pedal, impulseCache, timers, options\.userImpulse\)/.test(chain), 'renderChain 은 이펙트 생성에 렌더 시각 타이머와 사용자 IR 제공자를 넘긴다');
 }
 
 // ---------------------------------------------------------------------------------------------

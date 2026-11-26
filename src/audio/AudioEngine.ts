@@ -43,8 +43,11 @@ import { OutputStage } from './engine/OutputStage';
 import { MonitorService, type MonitorSink } from './monitor/MonitorService';
 import { clampTrimDb, PRESET_TRIM_RAMP_SECONDS } from './offline/loudnessSpec';
 import { clamp, dbToGain } from './utils/db';
-import { MAX_CAB_IR_BYTES, validateCabinetWav, validateDecodedCabinetIr } from './utils/cabinetIr';
+import { CabinetIrLibrary, type CabinetIrImportResult, type CabinetIrInfo } from './cabinetIrLibrary';
+import { createBrowserCabinetIrAudio } from './cabinetIrAudio';
+import { createIndexedDbIrStore } from './utils/cabinetIrStore';
 import { ImpulseCache } from './utils/impulseCache';
+import { windowTimers } from './utils/timers';
 import { fadeParam, rampParam, smoothVolume } from './utils/smoothing';
 import { noiseGateProcessorSource } from './worklets/noise-gate-processor';
 import { envelopeFollowerProcessorSource } from './worklets/envelope-follower-processor';
@@ -83,12 +86,6 @@ const CHAIN_RECONNECT_WAIT_MS = 12;
 const SILENCE_TIME_CONSTANT_SECONDS = 0.003;
 /** 램프가 끝나도록 컨텍스트를 닫기 전에 기다리는 시간(ms). */
 const SILENCE_SETTLE_MS = 24;
-
-/** 기억해 둔 캐비닛 IR(S2.8). 같은 세션(`generation`) 안에서만 되돌릴 수 있다. */
-export interface CabinetIrSnapshot {
-  generation: number;
-  entries: { pedalId: string; name: string; buffer: AudioBuffer }[];
-}
 
 export class AudioEngine {
   private static instance: AudioEngine | null = null;
@@ -132,8 +129,12 @@ export class AudioEngine {
   private effects = new Map<string, EffectNode>();
   /** 세션이 시작됐을 때 읽은 playbackStats.underrunEvents. 화면의 끊김 수는 이 값 이후의 증가분이다(설계서 4.12). */
   private underrunBaseline: number | null = null;
-  private cabImpulses = new Map<string, { name: string; buffer: AudioBuffer }>();
-  private cabIrRequests = new Map<string, number>();
+  /** 사용자 캐비닛 IR 하나(설계서 S5.4). 저장소(IndexedDB)·디코딩·정규화를 맡고, 바뀌면 화면에 'cab-ir-change' 로 알린다. */
+  private readonly cabinetIrs = new CabinetIrLibrary(
+    createIndexedDbIrStore(),
+    createBrowserCabinetIrAudio(),
+    () => window.dispatchEvent(new Event('cab-ir-change')),
+  );
   private chainConnections = new Map<string, ChainConnection>();
   private reverbImpulseCache: ImpulseCache | null = null;
   private getPedals: () => PedalState[] = () => [];
@@ -342,6 +343,7 @@ export class AudioEngine {
       this.assertCurrentSession(context, generation);
       await this.loadWorklets();
       this.assertCurrentSession(context, generation);
+      await this.prepareCabinetIr(context, generation);
 
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -391,6 +393,7 @@ export class AudioEngine {
       this.assertCurrentSession(context, generation);
       await this.loadWorklets();
       this.assertCurrentSession(context, generation);
+      await this.prepareCabinetIr(context, generation);
 
       audioFileUrl = URL.createObjectURL(file);
       audioElement = new Audio(audioFileUrl);
@@ -493,10 +496,9 @@ export class AudioEngine {
       case 'eq':
         return new EQEffect(this.context, pedal);
       case 'cab': {
-        const effect = new CabEffect(this.context, pedal);
-        const custom = this.cabImpulses.get(pedal.id);
-        if (custom) effect.setCustomImpulse(custom.buffer);
-        return effect;
+        // 사용자 IR 은 이펙트가 update 마다 이 함수로 읽는다 — IR 이 바뀐 뒤 어느 이펙트든 update 만 받으면 새 IR 을 쓴다.
+        const context = this.context;
+        return new CabEffect(context, pedal, windowTimers, () => this.cabinetIrs.ready(context.sampleRate));
       }
       case 'chorus':
         return new ChorusEffect(this.context, pedal);
@@ -529,89 +531,65 @@ export class AudioEngine {
   ): void {
     const pedal = this.getPedals().find((candidate) => candidate.id === pedalId);
     if (!pedal) return;
-    if (pedal.type === 'cab' && _paramName === 'model') this.clearCabinetIr(pedalId);
     this.effects.get(pedalId)?.update(pedal);
   }
 
-  getCabinetIrName(pedalId: string): string | null {
-    return this.cabImpulses.get(pedalId)?.name ?? null;
+  /** 저장된 사용자 IR 의 정보. `loadStoredCabinetIr()` 가 끝나기 전에는 null 일 수 있다. */
+  getCabinetIrInfo(): CabinetIrInfo | null {
+    return this.cabinetIrs.info();
   }
 
-  async loadCabinetIr(pedalId: string, file: File): Promise<void> {
-    const context = this.context;
-    const generation = this.sessionGeneration;
-    if (!context || context.state === 'closed') throw new Error(ko.engine.startAudioFirst);
-    if (!/\.wav$/i.test(file.name) || file.size > MAX_CAB_IR_BYTES) {
-      throw new Error(ko.cabinetIr.fileTooBig);
-    }
-    const requestId = (this.cabIrRequests.get(pedalId) ?? 0) + 1;
-    this.cabIrRequests.set(pedalId, requestId);
-    const bytes = await file.arrayBuffer();
-    validateCabinetWav(bytes);
-    let buffer: AudioBuffer;
-    try { buffer = await context.decodeAudioData(bytes); }
-    catch { throw new Error(ko.cabinetIr.readFailed); }
-    validateDecodedCabinetIr(buffer);
-    this.assertCurrentSession(context, generation);
-    if (this.cabIrRequests.get(pedalId) !== requestId) throw new Error(ko.cabinetIr.cancelled);
-    const effect = this.effects.get(pedalId);
-    if (!(effect instanceof CabEffect)) throw new Error(ko.cabinetIr.pedalMissing);
-    effect.setCustomImpulse(buffer);
-    this.cabImpulses.set(pedalId, { name: file.name, buffer });
-    // A queued chain rebuild may already have captured the old IR.
-    this.rebuildChain();
-    window.dispatchEvent(new Event('cab-ir-change'));
+  /** 저장소에서 사용자 IR 을 읽는다(앱이 Cab 화면을 처음 그릴 때). 이미 읽었으면 바로 끝난다. */
+  loadStoredCabinetIr(): Promise<void> {
+    return this.cabinetIrs.load();
   }
 
-  clearCabinetIr(pedalId: string): void {
-    this.cabIrRequests.set(pedalId, (this.cabIrRequests.get(pedalId) ?? 0) + 1);
-    if (!this.cabImpulses.delete(pedalId)) return;
-    const effect = this.effects.get(pedalId);
-    if (effect instanceof CabEffect) effect.setCustomImpulse(null);
-    this.rebuildChain();
-    window.dispatchEvent(new Event('cab-ir-change'));
+  /**
+   * WAV 파일을 사용자 IR 로 불러와 저장한다. 오디오를 시작하지 않아도 된다(시작할 때 컨텍스트에 맞춰 준비한다).
+   * 오디오가 돌고 있으면 새 IR 을 곧바로 준비해 Cab 에 알린다. 어느 페달이 쓸지는 모델('내 IR')이 정하므로 여기서는 고르지 않는다.
+   */
+  async importCabinetIr(file: File): Promise<CabinetIrImportResult> {
+    const context = this.liveContext();
+    const result = await this.cabinetIrs.importFile(file, context?.sampleRate);
+    if (context) await this.cabinetIrs.prepare(context.sampleRate);
+    this.refreshCabinetIr();
+    return result;
   }
 
-  /** Restore built-in IRs when loading a complete preset or comparison snapshot. */
-  clearAllCabinetIrs(): void {
-    this.cabIrRequests.forEach((requestId, pedalId) => this.cabIrRequests.set(pedalId, requestId + 1));
-    if (this.cabImpulses.size === 0) return;
-    this.cabImpulses.forEach((_impulse, pedalId) => {
-      const effect = this.effects.get(pedalId);
-      if (effect instanceof CabEffect) effect.setCustomImpulse(null);
+  /**
+   * 저장소를 다시 읽는다. 다른 탭이 올리거나 지운 IR 을 이 탭이 모르는 채 '내 IR' 을 고르면, 저장돼 있는 IR 을 없다고 안내하게 되기 때문이다.
+   * 바뀐 것이 있으면 오디오가 돌고 있을 때 새 IR 을 준비해 Cab 에 알린다.
+   */
+  async syncCabinetIrFromStore(): Promise<void> {
+    if (!(await this.cabinetIrs.refresh())) return;
+    const context = this.liveContext();
+    if (context) await this.cabinetIrs.prepare(context.sampleRate);
+    this.refreshCabinetIr();
+  }
+
+  /** 저장된 사용자 IR 을 지운다. '내 IR' 을 고른 Cab 은 기본 캐비닛으로 대신한다. */
+  async removeCabinetIr(): Promise<void> {
+    await this.cabinetIrs.remove();
+    this.refreshCabinetIr();
+  }
+
+  /** 사용자 IR 이 바뀐 것을 Cab 페달에 알린다. 지금 만드는 중인 체인이 옛 IR 을 쥐고 있을 수 있어 재구성도 한 번 부른다. */
+  private refreshCabinetIr(): void {
+    this.getPedals().forEach((pedal) => {
+      if (pedal.type === 'cab') this.effects.get(pedal.id)?.update(pedal);
     });
-    this.cabImpulses.clear();
-    window.dispatchEvent(new Event('cab-ir-change'));
+    this.rebuildChain();
   }
 
-  /**
-   * 지금 불러 둔 캐비닛 IR 들을 기억해 둔다('기본 페달 설정' 을 되돌릴 수 있게, S2.8).
-   * IR 은 이 세션의 오디오 컨텍스트가 디코딩한 버퍼라 세션이 끝나면 쓸 수 없다 — 그래서 세션 번호를 함께 적는다.
-   */
-  snapshotCabinetIrs(): CabinetIrSnapshot {
-    return {
-      generation: this.sessionGeneration,
-      entries: [...this.cabImpulses].map(([pedalId, impulse]) => ({ pedalId, name: impulse.name, buffer: impulse.buffer })),
-    };
-  }
-
-  /**
-   * `snapshotCabinetIrs` 로 기억한 IR 들을 되돌린다. 그 사이 세션이 바뀌었으면(정지·다시 연결) 버퍼가 낡았으므로 하나도 되돌리지 않는다.
-   * 지금도 같은 페달에 다른 IR 이 불려 있으면 그것을 지키고 건드리지 않는다. 되돌린 개수를 돌려 준다.
-   * 소리에 닿으려면 부르는 쪽이 이어서 `rebuildChain()` 을 불러야 한다(새로 만드는 캐비닛이 이 IR 을 읽는다).
-   */
-  restoreCabinetIrs(snapshot: CabinetIrSnapshot): number {
-    if (snapshot.generation !== this.sessionGeneration) return 0;
+  private liveContext(): AudioContext | null {
     const context = this.context;
-    if (!context || context.state === 'closed') return 0;
-    let restored = 0;
-    for (const entry of snapshot.entries) {
-      if (this.cabImpulses.has(entry.pedalId)) continue;
-      this.cabImpulses.set(entry.pedalId, { name: entry.name, buffer: entry.buffer });
-      restored += 1;
-    }
-    if (restored > 0) window.dispatchEvent(new Event('cab-ir-change'));
-    return restored;
+    return context && context.state !== 'closed' ? context : null;
+  }
+
+  /** 이 세션의 컨텍스트 샘플레이트에 맞춘 사용자 IR 을 미리 준비한다. 실패해도 세션을 막지 않는다(기본 캐비닛으로 재생). */
+  private async prepareCabinetIr(context: AudioContext, generation: number): Promise<void> {
+    await this.cabinetIrs.prepare(context.sampleRate);
+    this.assertCurrentSession(context, generation);
   }
 
   /**
@@ -785,9 +763,6 @@ export class AudioEngine {
     this.outputMeter = null;
     this.tuner = null;
     this.effects.clear();
-    this.cabImpulses.clear();
-    this.cabIrRequests.clear();
-    window.dispatchEvent(new Event('cab-ir-change'));
     this.workletsLoaded = false;
     this.workletUrls.forEach((url) => URL.revokeObjectURL(url));
     this.workletUrls = [];

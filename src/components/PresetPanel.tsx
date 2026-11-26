@@ -322,13 +322,9 @@ export function PresetPanel() {
       action: {
         label: ko.common.undo,
         onAction: () => {
-          const { cabinetIrsLost } = restoreChainSnapshot(before);
+          restoreChainSnapshot(before);
           setActivePresetId(previousPresetId);
-          setMessage(
-            cabinetIrsLost > 0
-              ? ko.preset.resetUndoneIrLost(cabinetIrsLost)
-              : ko.preset.resetUndone,
-          );
+          setMessage(ko.preset.resetUndone);
         },
       },
     });
