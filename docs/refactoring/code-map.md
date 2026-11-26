@@ -93,7 +93,7 @@
 | R4-4 노브 조작 방식 | 해결 | `useKnobDrag.ts`(껍데기 `[data-knob-drag]` 에 핸들러, Shift 정밀·터치 가로 끌기·더블탭), `KnobNumberInput.tsx`(숫자 입력), 값 표시 `<output>`; 투명 range 는 `pointer-events: none`(`accessibility.css`) | S4.4 완료(E-20 `e20-knob.spec.ts`, 옛 코드 13개 중 8개 실패 → 모두 통과) |
 | R4-5 글자 대비·크기 | 해결 | `tokens.css` 의 `--fs-min/label/value`(11·12·13 px), 새 `type-scale.css`(라벨·값 층), 새 `contrast.css`(페달 면별 `--pedal-ink`·면 색), `PedalCard.tsx` `section` region, `ConnectGuitarPanel.tsx` `div role="note"` | S4.5 완료(E-21 `e21-text.spec.ts`; 옛 코드는 11 px 미만 46개·대비 위반 화면당 약 150개) |
 | R4-6 한국어·영어 혼용 | 해결 | `src/i18n/ko.ts`(문구 178개·20묶음), `i18n/paramName.ts`·`ParamScope.tsx`(조절기 한국어 접근성 이름), `scripts/ko-catalog-regression.mjs`(정적 검사). 페달 얼굴 글자(이름·노브 약어·프리셋 이름)는 설계서 허용대로 영어 유지 | S4.6 완료(E-22 `e22-copy.spec.ts`; 옛 코드는 영어 시스템 문구 30~50곳·내부 이름 3~6곳·한글 없는 접근성 이름 103개) |
-| R4-7 테스트가 소스 문자열 검사, 배포 때 미실행 | 부분 | 배포 전 lint·test·responsive 실행(`deploy.yml:35-41`). 정규식 단언 337 → 312 | PR용 `verify.yml` 없음, Chrome 없으면 반응형 테스트를 조용히 건너뜀(`responsive-a11y-regression.mjs:256-259`), 프로브·E2E 없음 → S0.2~S0.4, S4.7 |
+| R4-7 테스트가 소스 문자열 검사, 배포 때 미실행 | 부분(S4.7 후: 정규식 단언 0, 소스 글자 읽기 19개 58곳 동결) | 배포 전 lint·test·responsive 실행(`deploy.yml:35-41`). 정규식 단언 337 → 394(Phase 1~4 에서 늘어남) → 0(S4.7) | PR용 `verify.yml` 없음, Chrome 없으면 반응형 테스트를 조용히 건너뜀(`responsive-a11y-regression.mjs:256-259`), 프로브·E2E 없음 → S0.2~S0.4, S4.7 |
 | R4-8 상표명·저작물 | 부분 | `Source/`의 참고 이미지는 제거됨(`README.md:130`; 옛 Git 기록에는 남음 — D8). 그러나 AI 기획 문서 3개(약 100 KB)는 아직 추적 중 | 'Plexi Lead' 프리셋(`presetStore.ts:218`), 'TS Clean'·'TS Boost'(`DrivePedal.tsx:15-16`), Cab 내부 id `v30`·`greenback`·`jensen`·`tweed`(저장값이라 이름 못 바꿈) → S4.8 |
 | R4-9 저장소 정리 | 부분 | `esbuild`가 devDependency로 명시(`package.json:51`) | `assets/` 2파일이 추적 중(.gitignore에는 있음), `sourcemap: true`(`vite.config.ts:73`), `engines` 없음, `__migration_check.ts` 1,085줄 → S0.2, S4.9 |
 
@@ -178,7 +178,7 @@
 | S4.4 | `SliderControl.tsx` 48~57행 → `KnobControl.tsx`, `controls.css` 102~110행 | `useKnobDrag.ts`, `SliderControl.tsx`·`VerticalFader.tsx`·페달 8곳의 껍데기, `accessibility.css`·`controls.css`, `KnobNumberInput.tsx` | 위치 다름 | 완료(L-287~L-295) — 동작만 한 곳으로 모았고 `KnobControl` 통합·길게 누르기 팝오버·taper 는 하지 않았다(L-290) |
 | S4.5 | `src/styles/*.css` 약 47곳, `PedalCard.tsx:162`, `ConnectGuitarPanel.tsx:89` | `font-size` 52곳 → 토큰, `PedalCard.tsx:85` `role="group"` → `section`, `ConnectGuitarPanel.tsx` `<aside>` → `div role="note"` | 위치 다름 | 완료(L-296~L-306) — axe·Lighthouse 는 못 돌려 자체 계산으로 확인 |
 | S4.6 | `ko.ts`, 영어 문구, 내부 이름 노출, `PedalBoard.tsx:96` | `ko.ts` 는 이미 있었고(4묶음) 20묶음 178개로 늘림. `PedalBoard.tsx` 의 알림은 이미 한국어였다 | 위치 다름 | 완료(L-307~L-319) — 얼굴 글자는 영어 유지(L-308) |
-| S4.7 | `scripts/*-regression.mjs` 정규식 단언, `pwa-regression.mjs`, 프로브·E2E | 정규식 단언 312곳(`regex-assertions.md`) | 위치 다름 | 부분 |
+| S4.7 | `scripts/*-regression.mjs` 정규식 단언, `pwa-regression.mjs`, 프로브·E2E | 정규식 단언 394곳(`regex-assertions.md`, S4.7 시작 시점) | 위치 다름 | S4.7 완료(정규식 단언 0, 가드 `test:test-system`) |
 | S4.8 | Drive·Crunch UI·프리셋 이름, `cabinet.ts` 223~229행, `Source/`, `.gitignore`, `README.md` 118행 | `DrivePedal.tsx:15-16`, `presetStore.ts:218`, `CabPedal.tsx:15-19`, `README.md:130`; `Source/`에는 이미지가 없고 AI 기획 문서 3개만 남음(설계서 S4.8의 `git mv docs/planning/` 대상) | 위치 다름 | 부분 |
 | S4.9 | `assets/`, `package.json`, `README.md`, `vite.config.ts` 73행, `__migration_check.ts` + `main.tsx` 10~14행, 문자열 워클릿 3개 | `assets/` 추적 2파일, `vite.config.ts:73`, `__migration_check.ts`(1,085줄), `main.tsx:10-14`, 문자열 워클릿은 8개로 늘었음(`worklets/*.ts`) | 위치 다름 | 미착수 |
 
