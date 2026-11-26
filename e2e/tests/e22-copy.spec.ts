@@ -39,7 +39,8 @@ const PINNED_EXACT = [
 
 /** 글자 안에 이것이 들어 있으면 안 되는 영어 시스템 문구 */
 const PINNED_CONTAINS = [
-  'Gate: ',
+  // 끝 공백은 쓰지 않는다: 글자 노드를 하나씩 trim 해서 보므로 'Gate: ' 는 어떤 노드와도 맞지 못한다(S4.6 변이 E4 가 이 구멍을 드러냈다).
+  'Gate:',
   'Preset saved',
   'Signal Chain Updated',
   'Click-Safe Amplitude Modulation',
@@ -76,11 +77,20 @@ async function screenTexts(page: Page): Promise<Seen[]> {
       return `${element.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
     };
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    // React 는 `{라벨} {상태}` 를 글자 노드 셋("Gate:", " ", "열림")으로 쪼갠다. 노드별 검사만 하면 '라벨: 값' 꼴의 못 박은 문구를 놓치므로,
+    // 같은 요소 안의 글자 노드는 이어 붙인 한 줄도 함께 본다.
+    const joined = new Map<Element, string[]>();
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const text = (node.textContent ?? '').trim();
       const parent = node.parentElement;
       if (!text || !parent || parent.closest('script,style,noscript') || !visible(parent)) continue;
       seen.push({ kind: 'text', text, where: where(parent) });
+      joined.set(parent, [...(joined.get(parent) ?? []), node.textContent ?? '']);
+    }
+    for (const [parent, parts] of joined) {
+      if (parts.length < 2) continue;
+      const line = parts.join('').replace(/\s+/g, ' ').trim();
+      if (line) seen.push({ kind: 'text', text: line, where: where(parent) });
     }
     for (const element of Array.from(document.querySelectorAll('[aria-label],[title],[placeholder],img[alt]'))) {
       if (!visible(element)) continue;
