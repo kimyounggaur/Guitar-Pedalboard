@@ -20,8 +20,11 @@ export function SessionProtection() {
     if (!isRunning || !('wakeLock' in navigator)) return;
     let active = true;
     let sentinel: WakeLockSentinel | null = null;
+    // 요청이 끝나기 전에 '보임' 신호가 또 오면 겹쳐 요청해 앞의 잠금을 잃어버린다(풀 수 없는 잠금이 남아 화면이 계속 켜져 있다).
+    let requesting = false;
     const acquire = async () => {
-      if (!active || document.visibilityState !== 'visible' || sentinel) return;
+      if (!active || document.visibilityState !== 'visible' || sentinel || requesting) return;
+      requesting = true;
       try {
         const lock = await navigator.wakeLock.request('screen');
         if (!active) { await lock.release(); return; }
@@ -29,6 +32,8 @@ export function SessionProtection() {
         lock.addEventListener('release', () => { if (sentinel === lock) sentinel = null; });
       } catch {
         // Browsers may deny wake locks or release them when the page is hidden.
+      } finally {
+        requesting = false;
       }
     };
     void acquire();
