@@ -5,6 +5,7 @@ import { access, readFile, readdir, stat } from 'node:fs/promises';
 import { inflateSync } from 'node:zlib';
 import path from 'node:path';
 import process from 'node:process';
+import vm from 'node:vm';
 
 const projectRoot = process.cwd();
 const distDirectory = path.join(projectRoot, 'dist');
@@ -100,6 +101,23 @@ function decodePng(buffer, label) {
   return { width, height, rgba };
 }
 
+// 원본 아이콘(public/)이 없으면 다음 빌드에서 아이콘이 빠진다. dist/ 에 남은 옛 빌드가 이 시험을 통과시키지 못하도록
+// 매니페스트가 가리키는 파일과 apple-touch·favicon 이 public/ 에 실제로 있고, dist/ 의 파일이 그것과 바이트까지 같은지 본다(S4.7).
+{
+  const publicDirectory = path.join(projectRoot, 'public');
+  const iconFiles = [
+    ...manifest.icons.map(({ src }) => src.slice(expectedBase.length)),
+    'apple-touch-icon.png',
+    'favicon.ico',
+    'favicon.svg',
+  ];
+  for (const file of iconFiles) {
+    const original = await readFile(path.join(publicDirectory, file)).catch(() => null);
+    assert.ok(original && original.length > 0, `public/${file} 이 없습니다 — 다음 빌드에서 아이콘이 빠집니다`);
+    assert.ok(original.equals(await readFile(path.join(distDirectory, file))), `dist/${file} 이 public/${file} 과 다릅니다(옛 빌드이거나 파일이 바뀌었습니다)`);
+  }
+}
+
 const decoded = new Map();
 for (const icon of manifest.icons) {
   const [declaredWidth, declaredHeight] = icon.sizes.split('x').map(Number);
@@ -167,17 +185,96 @@ const builtIndex = await readFile(indexPath, 'utf8');
   );
   await Promise.all(iconLinks.map(({ href }) => access(distFile(href))));
 }
-assert.match(builtIndex, /manifest\.webmanifest/);
-assert.match(builtIndex, /registerSW\.js/);
+// 매니페스트 링크와 서비스 워커 등록 스크립트: 태그를 읽어 가리키는 파일이 dist/ 에 실제로 있는지 본다.
+{
+  const tagsOf = (name) => builtIndex.split(`<${name} `).slice(1).map((tag) => tag.slice(0, tag.indexOf('>')));
+  const attribute = (tag, name) => tag.split(`${name}="`)[1]?.split('"')[0];
+  const manifestLinks = tagsOf('link').filter((tag) => attribute(tag, 'rel') === 'manifest');
+  assert.deepEqual(manifestLinks.map((tag) => attribute(tag, 'href')), [`${expectedBase}manifest.webmanifest`], 'index.html must link the manifest exactly once');
+  const registerScripts = tagsOf('script').filter((tag) => attribute(tag, 'src')?.endsWith('registerSW.js'));
+  assert.deepEqual(registerScripts.map((tag) => attribute(tag, 'src')), [`${expectedBase}registerSW.js`], 'index.html must load registerSW.js exactly once');
+  await Promise.all([manifestLinks[0], registerScripts[0]].map((tag) => access(distFile(attribute(tag, tag.includes('href=') ? 'href' : 'src')))));
+}
 
 const serviceWorker = await readFile(serviceWorkerPath, 'utf8');
-assert.match(serviceWorker, /NetworkFirst/);
-assert.match(serviceWorker, /guitar-pedalboard-runtime/);
-
+// 서비스 워커를 실제로 실행해 workbox 에 무엇을 요청하는지 기록한다(글자 검사가 아니라 실행 결과).
 // 새 버전 알림(S2.4)이 기대는 동작: 새 서비스 워커가 곧바로 켜지고(skipWaiting) 열린 탭을 넘겨받으며(clientsClaim), 그때 탭에 controllerchange 가 온다.
 // 등록 스크립트는 평범한 등록뿐이다 — 새 서비스 워커가 켜졌다고 페이지를 스스로 다시 불러오지 않는다(연주 중 자동 새로고침 금지).
-assert.ok(serviceWorker.includes('skipWaiting()'), 'the new service worker must activate immediately (skipWaiting)');
-assert.ok(serviceWorker.includes('clientsClaim()'), 'the activated service worker must claim open tabs (clientsClaim)');
+{
+  const calls = [];
+  const record = (name) => (...args) => {
+    calls.push([name, ...args]);
+  };
+  const workbox = {
+    clientsClaim: record('clientsClaim'),
+    precacheAndRoute: record('precacheAndRoute'),
+    cleanupOutdatedCaches: record('cleanupOutdatedCaches'),
+    registerRoute: record('registerRoute'),
+    createHandlerBoundToURL: (url) => ({ boundTo: url }),
+    NavigationRoute: class NavigationRoute {
+      constructor(handler) {
+        this.handler = handler;
+      }
+    },
+    NetworkFirst: class NetworkFirst {
+      constructor(options) {
+        this.options = options;
+      }
+    },
+    CacheableResponsePlugin: class CacheableResponsePlugin {
+      constructor(options) {
+        this.options = options;
+      }
+    },
+    ExpirationPlugin: class ExpirationPlugin {
+      constructor(options) {
+        this.options = options;
+      }
+    },
+  };
+  const sandbox = {
+    skipWaiting: record('skipWaiting'),
+    define(dependencies, factory) {
+      assert.equal(dependencies.length, 1, 'sw.js 는 workbox 런타임 하나만 불러온다');
+      const runtimeFile = path.join(distDirectory, `${dependencies[0]}.js`);
+      sandbox.runtimeFile = runtimeFile;
+      factory(workbox);
+    },
+  };
+  sandbox.self = sandbox;
+  vm.runInNewContext(serviceWorker, sandbox, { filename: 'sw.js' });
+  await access(sandbox.runtimeFile); // 불러올 workbox 런타임 파일이 dist/ 에 있다
+
+  const called = (name) => calls.filter(([callName]) => callName === name);
+  assert.equal(called('skipWaiting').length, 1, 'the new service worker must activate immediately (skipWaiting)');
+  assert.equal(called('clientsClaim').length, 1, 'the activated service worker must claim open tabs (clientsClaim)');
+  assert.equal(called('cleanupOutdatedCaches').length, 1, '옛 프리캐시를 정리한다');
+
+  // 프리캐시: 앱을 열 수 있는 파일이 모두 들어 있고, 목록의 파일이 dist/ 에 실제로 있다(없으면 서비스 워커 설치가 실패한다).
+  const [[, precacheEntries]] = called('precacheAndRoute');
+  const precached = precacheEntries.map(({ url }) => url);
+  for (const required of ['index.html', 'manifest.webmanifest', 'registerSW.js', 'apple-touch-icon.png', 'favicon.ico', 'favicon.svg', ...manifest.icons.map(({ src }) => src.slice(expectedBase.length))]) {
+    assert.ok(precached.includes(required), `${required} 가 프리캐시에 없습니다`);
+  }
+  assert.ok(precached.some((url) => /^assets\/index-.*\.js$/.test(url)) && precached.some((url) => url.endsWith('.css')), '앱 스크립트와 스타일이 프리캐시에 있다');
+  await Promise.all(precached.map((url) => access(path.join(distDirectory, url))));
+
+  // 라우트: 화면 이동은 index.html 로 대신하고, 앱 경로의 나머지 GET 은 NetworkFirst(런타임 캐시 guitar-pedalboard-runtime)다.
+  const routes = called('registerRoute');
+  assert.equal(routes.length, 2, '라우트는 화면 이동(NavigationRoute)과 런타임 캐시 둘이다');
+  const [navigation, runtime] = routes.map(([, ...args]) => args);
+  assert.deepEqual({ ...navigation[0].handler }, { boundTo: `${expectedBase}index.html` }, '화면 이동은 앱 index.html 로 대신한다');
+  const [matcher, strategy, method] = runtime;
+  assert.ok(matcher.test(`https://example.test${expectedBase}assets/x.js`), '앱 경로의 요청은 런타임 캐시를 지난다');
+  assert.ok(!matcher.test('https://example.test/other-app/assets/x.js'), '다른 경로의 요청은 지나지 않는다');
+  assert.equal(method, 'GET');
+  assert.equal(strategy.constructor.name, 'NetworkFirst', '런타임 캐시는 NetworkFirst 다(오프라인에서만 캐시를 쓴다)');
+  assert.equal(strategy.options.cacheName, 'guitar-pedalboard-runtime');
+  assert.equal(strategy.options.networkTimeoutSeconds, 4);
+  const [cacheable, expiration] = strategy.options.plugins;
+  assert.deepEqual([...cacheable.options.statuses], [0, 200]);
+  assert.deepEqual({ ...expiration.options }, { maxEntries: 64, maxAgeSeconds: 60 * 60 * 24 * 7 });
+}
 const registerScript = await readFile(path.join(distDirectory, 'registerSW.js'), 'utf8');
 assert.ok(
   registerScript.includes(`navigator.serviceWorker.register('${expectedBase}sw.js'`),
