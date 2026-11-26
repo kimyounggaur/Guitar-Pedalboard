@@ -1,0 +1,178 @@
+/**
+ * 매핑이 페달을 움직이는 방식(설계서 4.11).
+ * - `momentary`(저장된 이름. 설계서의 **latch**): 스위치가 보낸 값을 그대로 따른다 — 64 이상(Note On)이면 켜고, 미만(Note Off)이면 끈다. 값이 없는 매핑도 이 방식이다.
+ * - `toggle`: 누를 때마다 켜짐·꺼짐이 바뀐다. 뗌(64 미만)은 무시한다.
+ * 저장소에는 예전부터 `momentary` 로 쓰여 있어서 이름을 바꾸지 않았다(바꾸면 이미 저장된 매핑을 읽는 길이 둘이 된다, L-160).
+ */
+export type MidiMode = 'momentary' | 'toggle';
+
+export interface MidiCcMapping {
+  channel: number;
+  mode?: MidiMode;
+  cc: number;
+  value: number;
+  note?: never;
+}
+
+export interface MidiNoteMapping {
+  channel: number;
+  mode?: MidiMode;
+  note: number;
+  value: number;
+  cc?: never;
+}
+
+export type MidiMapping = MidiCcMapping | MidiNoteMapping;
+export type MidiMappings = Record<string, MidiMapping>;
+
+export interface MidiDeviceInfo {
+  id: string;
+  name: string;
+  manufacturer: string;
+  state: 'connected' | 'disconnected';
+}
+
+export interface ParsedMidiCcMessage {
+  kind: 'cc';
+  channel: number;
+  cc: number;
+  value: number;
+  /** 이 메시지가 페달을 켜라는 뜻인가. CC 값 64 이상이 켬(S2.4: 옛 `bypassed` 의 반대 방향으로 이름을 바꿨다 — 값의 뜻은 그대로). */
+  active: boolean;
+}
+
+export interface ParsedMidiNoteMessage {
+  kind: 'note';
+  channel: number;
+  note: number;
+  value: number;
+  /** Note On(세기 1 이상)이 켬, Note Off·세기 0 이 끔. */
+  active: boolean;
+}
+
+export type ParsedMidiMessage = ParsedMidiCcMessage | ParsedMidiNoteMessage;
+
+function isIntegerInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isSafePedalId(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value !== '__proto__' &&
+    value !== 'constructor' &&
+    value !== 'prototype'
+  );
+}
+
+export function isMidiMapping(value: unknown): value is MidiMapping {
+  if (!isPlainRecord(value)) return false;
+
+  const keys = Object.keys(value);
+  if (keys.some((key) => key !== 'channel' && key !== 'cc' && key !== 'note' && key !== 'value' && key !== 'mode')) {
+    return false;
+  }
+
+  const hasCc = Object.hasOwn(value, 'cc');
+  const hasNote = Object.hasOwn(value, 'note');
+  return (
+    (value.mode === undefined || value.mode === 'momentary' || value.mode === 'toggle') &&
+    hasCc !== hasNote &&
+    isIntegerInRange(value.channel, 1, 16) &&
+    isIntegerInRange(value.value, 0, 127) &&
+    (hasCc
+      ? isIntegerInRange(value.cc, 0, 127)
+      : isIntegerInRange(value.note, 0, 127))
+  );
+}
+
+export function validateMidiMappings(value: unknown): MidiMappings {
+  if (!isPlainRecord(value)) return {};
+
+  const mappings: MidiMappings = {};
+  Object.entries(value).forEach(([pedalId, mapping]) => {
+    if (!isSafePedalId(pedalId) || !isMidiMapping(mapping)) return;
+    mappings[pedalId] = { ...mapping };
+  });
+  return mappings;
+}
+
+export function parseMidiMappingsJson(value: string | null): MidiMappings {
+  if (!value) return {};
+
+  try {
+    return validateMidiMappings(JSON.parse(value));
+  } catch {
+    return {};
+  }
+}
+
+export function parseMidiMessage(
+  data: ArrayLike<number> | null | undefined,
+): ParsedMidiMessage | null {
+  if (!data || data.length < 3) return null;
+
+  const status = data[0];
+  const data1 = data[1];
+  const data2 = data[2];
+  if (
+    !isIntegerInRange(status, 0, 255) ||
+    !isIntegerInRange(data1, 0, 127) ||
+    !isIntegerInRange(data2, 0, 127)
+  ) {
+    return null;
+  }
+
+  const messageType = status & 0xf0;
+  const channel = (status & 0x0f) + 1;
+
+  if (messageType === 0xb0) {
+    return {
+      kind: 'cc',
+      channel,
+      cc: data1,
+      value: data2,
+      active: data2 >= 64,
+    };
+  }
+
+  if (messageType === 0x80 || messageType === 0x90) {
+    return {
+      kind: 'note',
+      channel,
+      note: data1,
+      value: data2,
+      active: messageType === 0x90 && data2 > 0,
+    };
+  }
+
+  return null;
+}
+
+export function createMidiMapping(message: ParsedMidiMessage): MidiMapping {
+  return message.kind === 'cc'
+    ? { channel: message.channel, cc: message.cc, value: message.value }
+    : { channel: message.channel, note: message.note, value: message.value };
+}
+
+export function midiMappingMatches(
+  mapping: MidiMapping,
+  message: ParsedMidiMessage,
+): boolean {
+  if (mapping.channel !== message.channel) return false;
+  return message.kind === 'cc'
+    ? 'cc' in mapping && mapping.cc === message.cc
+    : 'note' in mapping && mapping.note === message.note;
+}
+
+export function formatMidiMapping(mapping: MidiMapping): string {
+  return 'cc' in mapping
+    ? `Ch ${mapping.channel} · CC ${mapping.cc}`
+    : `Ch ${mapping.channel} · Note ${mapping.note}`;
+}

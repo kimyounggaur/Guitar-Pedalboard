@@ -62,7 +62,7 @@ export class FlangerEffect extends BaseEffect {
   private readonly processor: AudioWorkletNode;
   private disposed = false;
 
-  constructor(context: AudioContext, pedal: PedalState) {
+  constructor(context: BaseAudioContext, pedal: PedalState) {
     super(context, normalizeFlangerPedal(pedal));
     this.processor = new AudioWorkletNode(context, 'flanger-processor', {
       numberOfInputs: 1,

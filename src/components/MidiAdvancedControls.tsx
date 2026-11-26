@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
-import { MIDI_ADVANCED_KEY, dispatchAdvancedMessage, parseAdvancedMessage, readMidiAdvanced, validateMidiAdvanced, type MidiAdvancedConfig } from '../audio/midiAdvanced';
+import { dispatchAdvancedMessage, parseAdvancedMessage, validateMidiAdvanced, type MidiAdvancedConfig } from '../audio/midiAdvanced';
+import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { registerMidiAdvancedHandler, useAudioStore } from '../store/audioStore';
+import { ko } from '../i18n/ko';
 import { usePedalStore } from '../store/pedalStore';
 import { applyPresetPedals, usePresetStore } from '../store/presetStore';
-import { notifyStorageFailure } from '../store/storageNotice';
+
+/** 저장된 MIDI 고급 설정. 비어 있으면 기본값, JSON 이 아니면 SafeStorage 가 깨진 값으로 보관하고 기본값을 쓴다. */
+function readMidiAdvanced(): MidiAdvancedConfig {
+  return safeStorage.read<MidiAdvancedConfig>(STORAGE_KEYS.midiAdvanced, (raw) => validateMidiAdvanced(JSON.parse(raw)), validateMidiAdvanced(null));
+}
 
 export function MidiAdvancedControls() {
   const [config, setConfig] = useState(readMidiAdvanced);
@@ -20,13 +26,13 @@ export function MidiAdvancedControls() {
   const save = (next: MidiAdvancedConfig) => {
     const checked = validateMidiAdvanced(next);
     const collision = Object.values(mappings).some((mapping) => mapping.channel === checked.channel && 'cc' in mapping && (mapping.cc === checked.volumeCc || mapping.cc === checked.wahCc));
-    if (collision) { setNotice('선택한 채널과 CC가 페달 MIDI 스위치와 겹칩니다. 다른 CC를 선택하세요.'); return; }
-    if (next.volumeCc !== null && next.volumeCc === next.wahCc) { setNotice('볼륨과 와우에는 서로 다른 CC를 지정하세요.'); return; }
-    setNotice('설정을 저장했습니다.');
+    if (collision) { setNotice(ko.midi.advancedCollision); return; }
+    if (next.volumeCc !== null && next.volumeCc === next.wahCc) { setNotice(ko.midi.advancedSameCc); return; }
+    setNotice(ko.midi.advancedSaved);
     configRef.current = checked;
     setConfig(checked);
-    try { localStorage.setItem(MIDI_ADVANCED_KEY, JSON.stringify(checked)); } catch { notifyStorageFailure(); }
-    if (checked.volumeCc !== null || checked.wahCc !== null || Object.keys(checked.programs).length) void useAudioStore.getState().connectSavedMidi(true);
+    safeStorage.set(STORAGE_KEYS.midiAdvanced, checked);
+    if (checked.volumeCc !== null || checked.wahCc !== null || Object.keys(checked.programs).length) void useAudioStore.getState().connectSavedMidi({ force: true, userAction: true });
   };
 
   useEffect(() => {
@@ -35,9 +41,9 @@ export function MidiAdvancedControls() {
     const handle = (data: Uint8Array) => dispatchAdvancedMessage(data, configRef.current, {
       program: (id) => {
         const preset = usePresetStore.getState().presets.find((item) => item.id === id);
-        if (!preset) { setNotice('지정된 프리셋을 찾을 수 없습니다. 매핑을 다시 설정하세요.'); return; }
-        applyPresetPedals(preset.pedals);
-        setNotice(`MIDI: ${preset.name} 프리셋을 불러왔습니다.`);
+        if (!preset) { setNotice(ko.midi.programMissing); return; }
+        applyPresetPedals(preset.pedals, preset.trimDb);
+        setNotice(ko.midi.programLoaded(preset.name));
       },
       volume: (value) => {
         AudioEngine.getInstance().setMasterVolume(value);
@@ -49,7 +55,7 @@ export function MidiAdvancedControls() {
       },
       wah: (value) => {
         const pedal = usePedalStore.getState().pedals.find((item) => item.type === 'autoWah');
-        if (!pedal) { setNotice('와우 페달이 없어 익스프레션을 적용할 수 없습니다.'); return; }
+        if (!pedal) { setNotice(ko.midi.wahMissing); return; }
         const pedalStore = usePedalStore.getState();
         if ('mode' in pedal.params && pedal.params.mode !== 'manual') {
           pedalStore.updatePedalParam(pedal.id, 'mode', 'manual');
@@ -60,7 +66,7 @@ export function MidiAdvancedControls() {
       },
     });
     registerMidiAdvancedHandler(handle, match);
-    if (configRef.current.volumeCc !== null || configRef.current.wahCc !== null || Object.keys(configRef.current.programs).length) void useAudioStore.getState().connectSavedMidi(true);
+    if (configRef.current.volumeCc !== null || configRef.current.wahCc !== null || Object.keys(configRef.current.programs).length) void useAudioStore.getState().connectSavedMidi({ force: true });
     return () => { clearTimeout(volumeSaveTimer); registerMidiAdvancedHandler(null, null); };
   }, []);
 
@@ -71,7 +77,7 @@ export function MidiAdvancedControls() {
     <details className="midi-advanced-controls">
       <summary>MIDI 프리셋·익스프레션 설정</summary>
       <p>Program Change 번호는 0–127 기준입니다. 와우 CC 입력 시 와우가 수동 모드로 전환됩니다. 페달을 켜야 소리가 바뀝니다.</p>
-      <button type="button" className="secondary-button" onClick={() => void useAudioStore.getState().connectSavedMidi(true)}>MIDI 연결</button>
+      <button type="button" className="secondary-button" onClick={() => void useAudioStore.getState().connectSavedMidi({ force: true, userAction: true })}>MIDI 연결</button>
       <label>채널 <select value={config.channel} onChange={(event) => save({ ...config, channel: Number(event.currentTarget.value) })}>
         {Array.from({ length: 16 }, (_, index) => <option key={index + 1} value={index + 1}>{index + 1}</option>)}
       </select></label>

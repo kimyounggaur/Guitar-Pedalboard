@@ -23,8 +23,8 @@ export type Pedal = {
   id: string;
   type: PedalType;
   name: string;
-  enabled: boolean;
-  bypassed: boolean;
+  /** 소리에 걸리는가. 화면의 발스위치·LED 가 이 값 하나다(S2.4: 옛 `enabled` 와 `bypassed` 를 하나로 합쳤다). */
+  active: boolean;
   params: Record<string, PedalParamValue>;
 };
 
@@ -111,6 +111,8 @@ export interface CabParams extends BasePedalParams {
     | 'blue-1x12'
     | 'jensen-1x12'
     | 'tweed-1x10'
+    /** 사용자가 불러온 IR(S5.4). 저장된 IR 이 없으면 기본 캐비닛으로 재생한다. */
+    | 'my-ir'
     | 'off';
   micPosition: number;
   distance: number;
@@ -194,8 +196,7 @@ export interface PedalState extends Omit<Pedal, 'params'> {
   id: string;
   type: PedalType;
   name: string;
-  enabled: boolean;
-  bypassed: boolean;
+  active: boolean;
   color: string;
   params: PedalParams;
 }
@@ -205,9 +206,10 @@ export interface EffectNodeWrapper {
   readonly type: PedalType;
   readonly input: AudioNode;
   readonly output: AudioNode;
+  /** 켜져 있을 때 신호에 더하는 고정 지연(초). 꺼져 있으면 0(설계서 4.6) */
+  readonly latencySeconds: number;
   connect(destination: AudioNode): void;
   disconnect(): void;
-  setEnabled(enabled: boolean): void;
   update(pedal: PedalState): void;
   dispose(): void;
 }
@@ -221,20 +223,43 @@ export interface LevelReading {
   clipHoldUntil: number;
 }
 
+/** 입력 지연을 어디서 읽었는가. 트랙 통계(Chromium 125+)가 먼저고, 없으면 트랙 설정이다. */
+export type InputLatencySource = 'track-stats' | 'track-settings';
+
+/**
+ * 화면에 보이는 지연의 재료(설계서 4.6). 모두 ms 다. 합계·'미포함' 판정은 engine/latency.ts 의 summarizeLatency 가 한다.
+ * sampleRate 가 0 이면 아직 오디오 컨텍스트가 없어 아무것도 읽지 못한 상태다.
+ */
 export interface LatencyReading {
-  base: number | null;
-  output: number | null;
-  input: number | null;
   sampleRate: number;
+  /** 입력 방식. 'device' 면 입력 지연을 읽고, 'file'(음원 파일)이면 입력 지연이 없다. */
+  inputKind: 'device' | 'file';
+  /** 입력 지연(ms). 장치 모드에서 브라우저가 알려 주지 않으면 null('입력 지연 미포함'). */
+  input: number | null;
+  inputSource: InputLatencySource | null;
+  /** 켜진 페달들이 신호에 더하는 고정 지연(ms) */
+  pedals: number;
+  /** 마스터 리미터 룩어헤드(ms) */
+  limiter: number;
+  /** AudioContext.baseLatency(ms). 브라우저가 알려 주지 않으면 null. */
+  outputBase: number | null;
+  /** AudioContext.outputLatency(ms). 브라우저가 알려 주지 않으면 null. */
+  outputDevice: number | null;
 }
 
 export interface PitchReading {
   frequency: number | null;
+  /** 들린 음의 이름과 옥타브('D2'). 가장 가까운 반음 기준이라 줄과는 상관없다 */
   note: string | null;
+  /** 목표(가장 가까운 줄, 옥타브 위 음이면 그 음)와의 차이. 크로매틱은 가장 가까운 반음과의 차이 */
   cents: number;
+  /** 기타 모드에서 가장 가까운 줄의 음('E2'). 어느 줄인지 알 수 없으면 없다 */
   targetNote?: string;
   stringNumber?: number;
-  octaveMismatch?: boolean;
+  /** 그 줄의 음이 아니라 몇 옥타브 위의 같은 음(양수). 이때 cents 는 그 옥타브 위 음과의 차이다 */
+  octavesAbove?: number;
+  /** 가장 가까운 줄과도 너무 멀어서(600센트 초과) 어느 줄인지 알 수 없다 */
+  checkString?: boolean;
 }
 
 export type TuningPresetId = 'standard' | 'drop-d' | 'half-step-down' | 'open-g' | 'chromatic';
@@ -243,6 +268,11 @@ export interface Preset {
   id: string;
   name: string;
   pedals: PedalState[];
+  /**
+   * 프리셋 음량 보정(dB, S1.4c). REF-PC 기준 출력 음량을 −20 dBFS 로 맞추는 고정 이득이다.
+   * 없으면 0(보정 없음)으로 읽는다(M6). 이전 버전이 저장·내보낸 프리셋에는 이 필드가 없다.
+   */
+  trimDb?: number;
   updatedAt: number;
   libraryId?: string;
   libraryName?: string;

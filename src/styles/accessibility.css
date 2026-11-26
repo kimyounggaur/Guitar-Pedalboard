@@ -1,4 +1,4 @@
-/* Keep parameter names and values readable at the default browser text size. */
+/* S4.5: 매개변수 이름(라벨)은 12px 이상 — 값은 아래 type-scale.css 에서 13px 로 올린다. */
 :is(.compressor-knob, .compressor-knob output, .fuzz-knob, .reverb-knob,
     .reverb-knob output, .graphic-eq-fader output, .vertical-fader-label,
     .vertical-fader output, .tap-tempo-button kbd, .tap-tempo-status,
@@ -8,7 +8,7 @@
     .auto-wah-ui .knob-control-head, .preset-tabs em, .preset-tool-title,
     .sidebar .preset-load-button span, .preset-library-list small,
     .preset-library-list em, .preset-search span) {
-  font-size: max(0.6875rem, 11px);
+  font-size: var(--fs-label);
   line-height: 1.2;
 }
 
@@ -32,10 +32,33 @@
   color: #101820;
 }
 
-:is(.noise-gate-knob-shell, .tube-knob-shell, .crunch-knob-shell,
-    .fuzz-knob-shell, .delay-knob-shell, .compressor-knob-shell,
-    .reverb-knob-shell, .graphic-eq-slot, .vertical-fader-rail) input {
+/* S4.4: 끌기는 노브의 껍데기가 받는다(useKnobDrag). 투명 range 는 키보드·보조기기만 받고 포인터 입력은 받지 않는다.
+   range 가 포인터를 직접 받으면 브라우저가 누른 자리로 값을 뛰게 한다(터치는 pointerdown 을 막아도 그렇다). */
+:is(.knob-control-shell, .noise-gate-knob-shell, .tube-knob-shell, .crunch-knob-shell,
+    .fuzz-knob-shell, .delay-knob-shell, .compressor-knob-shell, .reverb-knob-shell,
+    .graphic-eq-slot, .vertical-fader-rail) > input {
+  pointer-events: none;
+}
+
+/* 노브: 세로로 쓸면 페이지가 스크롤되고 가로로 끌면 돌아간다(터치). */
+:is(.knob-control-shell, .noise-gate-knob-shell, .tube-knob-shell, .crunch-knob-shell,
+    .fuzz-knob-shell, .delay-knob-shell, .compressor-knob-shell, .reverb-knob-shell) {
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+/* 세로 페이더는 위아래로 끌므로 브라우저의 스크롤을 막는다. */
+:is(.graphic-eq-slot, .vertical-fader-rail) {
+  cursor: pointer;
   touch-action: none;
+}
+
+/* 막힌 노브(Delay Sync 중의 D.Time)는 누를 수 없다. */
+:is(.knob-control-shell, .noise-gate-knob-shell, .tube-knob-shell, .crunch-knob-shell,
+    .fuzz-knob-shell, .delay-knob-shell, .compressor-knob-shell, .reverb-knob-shell,
+    .graphic-eq-slot, .vertical-fader-rail):has(> input:disabled) {
+  cursor: not-allowed;
+  touch-action: auto;
 }
 
 .knob-number-input {
@@ -48,13 +71,13 @@
   border-radius: 4px;
   background: #fff;
   color: #111;
-  font: 500 11px/1.2 system-ui, sans-serif;
+  font: 500 var(--fs-value)/1.2 system-ui, sans-serif;
   text-align: center;
 }
 
 :is(.noise-gate-knob, .tube-knob, .crunch-knob, .fuzz-knob, .delay-knob) output {
   color: currentColor;
-  font: 700 11px/1.2 system-ui, sans-serif;
+  font: 700 var(--fs-value)/1.2 system-ui, sans-serif;
 }
 
 @media (max-width: 767px) {

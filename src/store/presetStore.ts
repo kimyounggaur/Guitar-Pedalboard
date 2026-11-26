@@ -1,30 +1,59 @@
-import { notifyStorageFailure } from './storageNotice';
 import { create } from 'zustand';
 import { AudioEngine } from '../audio/AudioEngine';
-import type { PedalParamValue, PedalState, Preset } from '../audio/types';
+import { clampTrimDb } from '../audio/offline/loudnessSpec';
+import { appVersion } from '../app/errorReport';
+import { getBoot, getPresetCarry, readUserPresets, writeUserPresets } from '../persistence/appData';
 import {
-  clonePedals,
-  initialPedals,
-  migratePedalCollection,
-  SCHEMA_VERSION,
-  usePedalStore,
-} from './pedalStore';
+  applyImport,
+  buildExportFile,
+  parseImportFile,
+  planImport,
+  serializeExportFile,
+  type ConflictResolution,
+  type ImportPlan,
+  type ImportResult,
+} from '../persistence/exportFormat';
+import { normalizeTrimField } from '../persistence/legacy/presetsV1';
+import { keysAfter, reinsertByKey, uniqueRestoredName } from '../persistence/presetUndo';
+import { findFactoryCopies } from '../persistence/schema';
+import { createId } from '../presets/createId';
+import type { PedalParamValue, PedalState, Preset } from '../audio/types';
+import factoryTrims from '../presets/factoryTrims.json';
+import { clonePedals, initialPedals, usePedalStore } from './pedalStore';
 import { useAudioStore } from './audioStore';
+import { showToast } from './toastStore';
+import { ko } from '../i18n/ko';
 
-const STORAGE_KEY = 'web-guitar-pedalboard-presets';
 const FACTORY_TIMESTAMP = 1767225600000;
 
-type PresetExport = {
-  version: number;
-  exportedAt?: number;
-  presets: Preset[];
-};
+/** 팩토리 프리셋의 음량 보정(dB, S1.4c). `npm run trims` 가 만든 파일이고, 목록에 없는 프리셋은 보정 없음(0)이다(M6). */
+const factoryTrimById: Readonly<Record<string, number>> = factoryTrims.trims;
 
 export type PresetListItem = Preset & {
   isFactory?: boolean;
 };
 
 export type PresetComparisonSlot = 'A' | 'B';
+
+/** 지운 내 프리셋과 지우기 전의 자리. `restoreDeletedPreset` 가 이것으로 되돌린다(S2.8). */
+export interface DeletedPreset {
+  preset: Preset;
+  /** 지우기 전에 이 프리셋 뒤에 있던 내 프리셋의 id 들(앞에서부터) */
+  followingIds: string[];
+}
+
+export interface RestorePresetResult {
+  restored: boolean;
+  /** 되돌린 프리셋(이름이 바뀌었을 수 있다). 되돌리지 못했으면 없다. */
+  preset?: Preset;
+  /** 그 사이 같은 이름이 쓰여서 '(복원)' 이름으로 되돌렸다 */
+  renamed: boolean;
+  /** 되돌리지 못한 이유: 같은 id 의 프리셋이 이미 있다 */
+  reason?: 'exists';
+}
+
+/** 'saved' 저장함, 'exists' 같은 이름이 있어 저장하지 않음(덮어쓰려면 `overwrite: true`), 'invalid' 이름이 비어 있음 */
+export type SavePresetResult = 'saved' | 'exists' | 'invalid';
 
 type PedalOverrides = Parameters<typeof withPedalOverrides>[1];
 type PresetOverrides = Record<string, PedalOverrides>;
@@ -56,16 +85,13 @@ function clonePreset(preset: PresetListItem): PresetListItem {
 
 function withPedalOverrides(
   pedal: PedalState,
-  overrides: Partial<Pick<PedalState, 'enabled' | 'bypassed'>> & {
+  overrides: Partial<Pick<PedalState, 'active'>> & {
     params?: Record<string, PedalParamValue>;
   },
 ): PedalState {
-  const bypassed = overrides.bypassed ?? pedal.bypassed;
-
   return {
     ...pedal,
-    enabled: overrides.enabled ?? pedal.enabled,
-    bypassed,
+    active: overrides.active ?? pedal.active,
     params: {
       ...pedal.params,
       ...overrides.params,
@@ -82,6 +108,7 @@ function createPreset(
   overrides: PresetOverrides,
 ): PresetListItem {
   const library = libraryById.get(libraryId);
+  const trimDb = factoryTrimById[id];
 
   return {
     id,
@@ -91,6 +118,7 @@ function createPreset(
     description,
     tags,
     isFactory: true,
+    ...(trimDb === undefined ? {} : { trimDb: clampTrimDb(trimDb) }),
     updatedAt: FACTORY_TIMESTAMP,
     pedals: clonePedals(initialPedals).map((pedal) =>
       overrides[pedal.id] ? withPedalOverrides(pedal, overrides[pedal.id]) : pedal,
@@ -98,9 +126,10 @@ function createPreset(
   };
 }
 
-const off = (mix?: number): PedalOverrides => ({ bypassed: true, ...(mix !== undefined && mix > 0 ? { params: { mix } } : {}) });
+// 꺼 둘 페달은 기본값 그대로 두고 스위치만 끈다. 특히 Mix 를 0 으로 두면 나중에 켜도 소리가 바뀌지 않는다(R2-2, S2.1) — 그래서 Mix 를 받지 않는다.
+const off = (): PedalOverrides => ({ active: false });
 const on = (params: Record<string, PedalParamValue> = {}): PedalOverrides => ({
-  bypassed: false,
+  active: true,
   params,
 });
 
@@ -274,13 +303,13 @@ export const defaultPresets: PresetListItem[] = [
     compressor: on({ threshold: -32, ratio: 2.6, sustain: 48, mix: 72 }),
     eq: on({ lowCut: 95, bassGain: -1, midFreq: 1000, midGain: -1, trebleGain: 2, presenceGain: 3 }),
     delay: on({ mode: 'tape', sync: true, bpm: 90, division: 'dotted1/8', feedback: 0.62, mix: 48, tone: 38 }),
-    reverb: on({ mode: 'ambient', decay: 6.2, preDelay: 65, mix: 45, highCut: 8200 }),
+    reverb: on({ mode: 'ambient', decay: 6, preDelay: 65, mix: 45, highCut: 8200 }),
   }),
   preset('factory-tape-swell', 'ambient', 'Tape Swell', '테이프 딜레이와 긴 프리딜레이로 천천히 퍼지는 톤입니다.', ['ambient', 'tape'], {
     compressor: on({ threshold: -36, ratio: 3, sustain: 60, mix: 76 }),
     eq: on({ lowCut: 100, bassGain: -1.5, midFreq: 900, midGain: -1.2, trebleGain: 1.5, presenceGain: 2.5 }),
     delay: on({ mode: 'tape', timeMs: 620, feedback: 0.54, mix: 42, tone: 34 }),
-    reverb: on({ mode: 'ambient', decay: 7.5, preDelay: 90, mix: 48, highCut: 7600 }),
+    reverb: on({ mode: 'ambient', decay: 6, preDelay: 90, mix: 48, highCut: 7600 }),
   }),
   preset('factory-post-rock-wash', 'ambient', 'Post Rock Wash', '코드가 뒤로 번지는 포스트록 클린 공간계입니다.', ['post-rock', 'wash'], {
     drive: on({ mode: 'overdrive', drive: 20, tone: 50, level: 96, mix: 36, bias: 0.04 }),
@@ -330,10 +359,10 @@ export const defaultPresets: PresetListItem[] = [
   }),
 
   preset('factory-direct-clean', 'utility', 'Direct Clean', '거의 모든 효과를 걷어낸 기준점 프리셋입니다.', ['utility', 'direct'], {
-    'noise-gate': off(100),
-    compressor: off(0),
+    'noise-gate': off(),
+    compressor: off(),
     eq: on({ lowCut: 40, bassGain: 0, midFreq: 800, midGain: 0, midQ: 0.9, trebleGain: 0, presenceGain: 0 }),
-    cab: off(100),
+    cab: off(),
   }),
   preset('factory-headphone-safe-start', 'utility', 'Headphone Safe Start', '낮은 레벨과 최소 공간계로 시작하는 안전 테스트 프리셋입니다.', ['utility', 'safe'], {
     'noise-gate': on({ thresholdDb: -62, reductionDb: -80, attackMs: 8, holdMs: 80, releaseMs: 220, level: 80 }),
@@ -343,7 +372,7 @@ export const defaultPresets: PresetListItem[] = [
   }),
   preset('factory-low-noise-gate', 'utility', 'Low Noise Gate', '노이즈가 많은 입력을 빠르게 점검하기 위한 게이트 중심 프리셋입니다.', ['utility', 'gate'], {
     'noise-gate': on({ thresholdDb: -48, reductionDb: -80, attackMs: 2, holdMs: 60, releaseMs: 120, hysteresisDb: 7 }),
-    compressor: off(0),
+    compressor: off(),
     eq: on({ lowCut: 90, bassGain: 0, midFreq: 850, midGain: 0, trebleGain: 1, presenceGain: 1 }),
   }),
   preset('factory-solo-boost', 'utility', 'Solo Boost', '현재 체인에 리드감을 주는 볼륨과 중역 부스트 프리셋입니다.', ['utility', 'boost'], {
@@ -365,96 +394,6 @@ export const defaultPresets: PresetListItem[] = [
   }),
 ];
 
-function canUseStorage(): boolean {
-  try { return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'; } catch { return false; }
-}
-
-function isPreset(value: unknown): value is Preset {
-  const preset = value as Preset;
-
-  return (
-    !!preset &&
-    typeof preset.id === 'string' &&
-    typeof preset.name === 'string' &&
-    typeof preset.updatedAt === 'number' && Number.isFinite(preset.updatedAt) &&
-    Array.isArray(preset.pedals)
-  );
-}
-
-function normalizeImportedPreset(preset: Preset, version: number): Preset {
-  return {
-    id: preset.id || createId(),
-    name: preset.name.trim() || 'Imported Preset',
-    libraryId: typeof preset.libraryId === 'string' ? preset.libraryId : undefined,
-    libraryName: typeof preset.libraryName === 'string' ? preset.libraryName : undefined,
-    description: typeof preset.description === 'string' ? preset.description : undefined,
-    tags: Array.isArray(preset.tags) ? preset.tags.filter((tag) => typeof tag === 'string') : undefined,
-    pedals: migratePedalCollection(preset.pedals, version),
-    updatedAt: typeof preset.updatedAt === 'number' ? preset.updatedAt : Date.now(),
-  };
-}
-
-export function parsePresetJson(json: string): Preset[] {
-  let parsed: unknown;
-  try { parsed = JSON.parse(json); } catch { throw new Error('JSON 파일을 읽을 수 없습니다. 형식을 확인해 주세요.'); }
-  if (!parsed || typeof parsed !== 'object') throw new Error('프리셋 JSON 형식이 올바르지 않습니다.');
-  const payload = parsed as Partial<PresetExport>;
-  const candidates = Array.isArray(parsed) ? parsed : payload.presets;
-  const version = Array.isArray(parsed) ? 1 : typeof payload.version === 'number' ? payload.version : 1;
-
-  if (!Array.isArray(candidates)) {
-    throw new Error('프리셋 JSON 형식이 올바르지 않습니다.');
-  }
-
-  if (!candidates.every(isPreset)) throw new Error('프리셋 항목이 올바르지 않습니다.');
-  return candidates.map((preset) => normalizeImportedPreset(preset, version));
-}
-
-export function serializePresetPayload(
-  presets: Preset[],
-  options: { exportedAt?: number; pretty?: boolean } = {},
-): string {
-  const payload: PresetExport = {
-    version: SCHEMA_VERSION,
-    presets: presets.map((preset) => ({
-      ...preset,
-      pedals: clonePedals(preset.pedals),
-    })),
-  };
-
-  if (typeof options.exportedAt === 'number') {
-    payload.exportedAt = options.exportedAt;
-  }
-
-  return JSON.stringify(payload, null, options.pretty ? 2 : undefined);
-}
-
-function readUserPresets(): Preset[] {
-  if (!canUseStorage()) return [];
-
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return parsePresetJson(raw);
-  } catch {
-    return [];
-  }
-}
-
-function writeUserPresets(presets: Preset[]): void {
-  try {
-    if (!canUseStorage()) throw new Error('Storage unavailable');
-    window.localStorage.setItem(STORAGE_KEY, serializePresetPayload(presets));
-  } catch {
-    notifyStorageFailure();
-  }
-}
-
-function createId(): string {
-  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-  return `preset-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
 function toPresetList(userPresets: Preset[]): PresetListItem[] {
   const normalizedUserPresets = userPresets.map((preset) => ({
     ...preset,
@@ -471,37 +410,59 @@ interface PresetStore {
   presets: PresetListItem[];
   slotA: PedalState[] | null;
   slotB: PedalState[] | null;
+  /** 슬롯에 담아 둔 프리셋 음량 보정(dB). 페달 스냅샷과 짝이라 슬롯을 바꿔도 음량이 따라간다. */
+  slotATrimDb: number;
+  slotBTrimDb: number;
   activeSlot: PresetComparisonSlot;
-  savePreset: (name: string, pedals: PedalState[]) => void;
-  deletePreset: (id: string) => void;
+  /**
+   * `trimDb` 를 주지 않으면 지금 쓰는 음량 보정을 함께 저장한다.
+   * 같은 이름의 내 프리셋이 이미 있으면 `options.overwrite === true` 일 때만 덮어쓰고, 아니면 아무것도 바꾸지 않고 'exists' 를 돌려 준다 —
+   * 묻지 않고 덮어쓰는 길이 없게 하려는 것이다(S2.8).
+   */
+  savePreset: (name: string, pedals: PedalState[], trimDb?: number, options?: { overwrite?: boolean }) => SavePresetResult;
+  /** 내 프리셋을 지우고, 되돌릴 수 있게 지운 것과 자리를 돌려 준다. 없는 id 이거나 팩토리 프리셋이면 아무것도 하지 않고 null. */
+  deletePreset: (id: string) => DeletedPreset | null;
+  /** `deletePreset` 이 돌려 준 기록으로 지운 프리셋을 원래 자리에 되돌린다(S2.8). */
+  restoreDeletedPreset: (deleted: DeletedPreset) => RestorePresetResult;
   reloadPresets: () => void;
-  exportPresets: () => string;
-  importPresets: (json: string) => number;
+  /** 내 프리셋을 v2 파일 문자열로 만든다(S2.7). 내 프리셋이 하나도 없으면 빈 파일을 만들지 않고 null 을 돌려 준다. */
+  exportPresets: () => string | null;
+  /** 가져올 파일을 읽어 무엇을 추가·건너뛰고 무엇이 충돌하는지 계산한다. 저장하지 않는다. 파일이 틀렸으면 한국어 메시지로 던진다. */
+  planImport: (text: string) => ImportPlan;
+  /** `planImport` 의 계획을 저장한다. `resolutions[i]` 가 `plan.conflicts[i]` 에 대한 선택이다. 바뀐 것이 없으면 저장하지 않는다. */
+  commitImport: (plan: ImportPlan, resolutions: readonly ConflictResolution[]) => ImportResult;
   captureCurrentToSlot: (slot: PresetComparisonSlot) => void;
   activateSlot: (slot: PresetComparisonSlot) => boolean;
 }
 
-/** Apply a complete preset snapshot. Session-only cabinet IRs are never part of snapshots. */
-export function applyPresetPedals(pedals: PedalState[]): void {
+/**
+ * Apply a complete preset snapshot. 사용자 캐비닛 IR 은 프리셋에 들어 있지 않고 저장소에 따로 있다(S5.4) —
+ * 프리셋이 Cab 모델 '내 IR' 을 가리키면 그 IR 을 쓰고, 다른 모델을 가리키면 IR 은 쓰이지 않을 뿐 지워지지 않는다.
+ * `trimDb` 는 그 프리셋의 음량 보정이다. 없으면 0 으로 적용한다(보정 없는 프리셋을 불러오면 앞 프리셋의 보정이 남지 않는다).
+ */
+export function applyPresetPedals(pedals: PedalState[], trimDb?: number): void {
   const engine = AudioEngine.getInstance();
-  engine.clearAllCabinetIrs();
-  usePedalStore.getState().setPedals(clonePedals(pedals));
+  usePedalStore.getState().setPedals(clonePedals(pedals), clampTrimDb(trimDb));
   useAudioStore.getState().adoptTempoFromPedals();
   engine.rebuildChain();
 }
 
 export const usePresetStore = create<PresetStore>((set, get) => ({
-  presets: toPresetList(readUserPresets()),
+  // 사용자 프리셋은 앱을 열 때 한 번 읽어 온 값을 쓴다(persistence/bootstrap). 코드에 있는 팩토리 프리셋과 합쳐 보여 준다.
+  presets: toPresetList(getBoot().userPresets),
   slotA: null,
   slotB: null,
+  slotATrimDb: 0,
+  slotBTrimDb: 0,
   activeSlot: 'A',
 
-  savePreset: (name, pedals) => {
+  savePreset: (name, pedals, trimDb = usePedalStore.getState().presetTrimDb, options) => {
     const trimmedName = name.trim();
-    if (!trimmedName) return;
+    if (!trimmedName) return 'invalid';
 
     const userPresets = get().presets.filter((preset) => !preset.isFactory);
     const existing = userPresets.find((preset) => preset.name === trimmedName);
+    if (existing && options?.overwrite !== true) return 'exists';
     const nextPreset: Preset = {
       id: existing?.id ?? createId(),
       name: trimmedName,
@@ -510,6 +471,7 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
       description: '사용자가 저장한 페달 체인',
       tags: ['user', 'custom'],
       pedals: clonePedals(pedals),
+      ...normalizeTrimField(trimDb),
       updatedAt: Date.now(),
     };
 
@@ -519,63 +481,111 @@ export const usePresetStore = create<PresetStore>((set, get) => ({
 
     writeUserPresets(nextUserPresets);
     set({ presets: toPresetList(nextUserPresets) });
+    return 'saved';
   },
 
   deletePreset: (id) => {
-    const preset = get().presets.find((item) => item.id === id);
-    if (preset?.isFactory) return;
+    const target = get().presets.find((item) => item.id === id);
+    if (!target || target.isFactory) return null;
 
-    const userPresets = get().presets.filter((item) => !item.isFactory && item.id !== id);
+    const before = get().presets.filter((item) => !item.isFactory);
+    const followingIds = keysAfter(before, id, (item) => item.id);
+    const userPresets = before.filter((item) => item.id !== id);
     writeUserPresets(userPresets);
     set({ presets: toPresetList(userPresets) });
+
+    const { isFactory: _isFactory, ...preset } = target;
+    return { preset, followingIds };
+  },
+
+  restoreDeletedPreset: (deleted) => {
+    const current = get().presets.filter((item) => !item.isFactory).map(({ isFactory: _isFactory, ...preset }) => preset);
+    if (current.some((item) => item.id === deleted.preset.id)) return { restored: false, renamed: false, reason: 'exists' };
+
+    const takenNames = new Set(current.map((item) => item.name));
+    const renamed = takenNames.has(deleted.preset.name);
+    const preset: Preset = renamed
+      ? { ...deleted.preset, name: uniqueRestoredName(deleted.preset.name, takenNames) }
+      : deleted.preset;
+    const next = reinsertByKey(current, preset, deleted.followingIds, (item) => item.id);
+    writeUserPresets(next);
+    set({ presets: toPresetList(next) });
+    return { restored: true, preset, renamed };
   },
 
   reloadPresets: () => set({ presets: toPresetList(readUserPresets()) }),
 
   exportPresets: () => {
     const presets = get().presets.filter((preset) => !preset.isFactory).map(({ isFactory: _isFactory, ...preset }) => preset);
+    if (presets.length === 0) return null;
 
-    return serializePresetPayload(presets, {
-      exportedAt: Date.now(),
-      pretty: true,
-    });
+    return serializeExportFile(
+      buildExportFile(presets, { appVersion, exportedAt: Date.now(), carryOf: getPresetCarry }),
+    );
   },
 
-  importPresets: (json) => {
-    const importedPresets = parsePresetJson(json).map((preset) => ({
-      ...preset,
-      id: preset.id.startsWith('factory-') ? createId() : preset.id,
-      updatedAt: Date.now(),
-    }));
-    const userPresets = get().presets.filter((preset) => !preset.isFactory);
-    const nextByName = new Map<string, Preset>();
+  planImport: (text) =>
+    planImport(
+      parseImportFile(text),
+      get().presets.filter((preset) => !preset.isFactory),
+      defaultPresets,
+    ),
 
-    [...userPresets, ...importedPresets].forEach((preset) => {
-      nextByName.set(preset.name, preset);
-    });
-
-    const nextUserPresets = Array.from(nextByName.values());
-    writeUserPresets(nextUserPresets);
-    set({ presets: toPresetList(nextUserPresets) });
-
-    return importedPresets.length;
+  commitImport: (plan, resolutions) => {
+    const userPresets = get().presets.filter((preset) => !preset.isFactory).map(({ isFactory: _isFactory, ...preset }) => preset);
+    const result = applyImport(plan, userPresets, resolutions, { now: Date.now(), createId });
+    // 바뀐 것이 없으면(같은 파일을 다시 가져온 경우 등) 저장소를 건드리지 않는다.
+    if (result.imported > 0) {
+      writeUserPresets(result.next);
+      set({ presets: toPresetList(result.next) });
+    }
+    return result;
   },
 
   captureCurrentToSlot: (slot) => {
     const capturedPedals = clonePedals(usePedalStore.getState().pedals);
+    const capturedTrimDb = usePedalStore.getState().presetTrimDb;
     set(
       slot === 'A'
-        ? { slotA: capturedPedals, activeSlot: slot }
-        : { slotB: capturedPedals, activeSlot: slot },
+        ? { slotA: capturedPedals, slotATrimDb: capturedTrimDb, activeSlot: slot }
+        : { slotB: capturedPedals, slotBTrimDb: capturedTrimDb, activeSlot: slot },
     );
   },
 
   activateSlot: (slot) => {
     const storedPedals = slot === 'A' ? get().slotA : get().slotB;
     if (!storedPedals) return false;
+    const storedTrimDb = slot === 'A' ? get().slotATrimDb : get().slotBTrimDb;
 
-    applyPresetPedals(storedPedals);
+    applyPresetPedals(storedPedals, storedTrimDb);
     set({ activeSlot: slot });
     return true;
   },
 }));
+
+// 이전 위치에서 쓰던 이름을 그대로 내보낸다(S2.4 선행 이동: 가져오는 쪽 코드는 바꾸지 않는다).
+export { parsePresetJson, serializePresetPayload } from '../persistence/legacy/presetsV1';
+
+/**
+ * M5(S2.4): 이번 방문에 v1 에서 v2 로 옮겼고, 사용자 프리셋 중 팩토리 프리셋과 이름·내용이 똑같은 사본이 있으면 한 번 묻는다.
+ * 알려 주기만 하고 지우지는 않는다 — '정리'를 누르면 그때 다시 확인해서 지금도 똑같은 사본만 지운다.
+ */
+export function announceFactoryCopies(): void {
+  if (getBoot().outcome !== 'converted') return;
+  const copyIds = findFactoryCopies(getBoot().userPresets, defaultPresets);
+  if (copyIds.length === 0) return;
+  showToast({
+    key: 'storage:factory-copies',
+    kind: 'info',
+    durationMs: 0,
+    message: ko.preset.duplicatesFound(copyIds.length),
+    action: {
+      label: ko.preset.duplicatesClean,
+      onAction: () => {
+        const store = usePresetStore.getState();
+        const stillCopies = new Set(findFactoryCopies(store.presets.filter((preset) => !preset.isFactory), defaultPresets));
+        copyIds.filter((id) => stillCopies.has(id)).forEach((id) => store.deletePreset(id));
+      },
+    },
+  });
+}

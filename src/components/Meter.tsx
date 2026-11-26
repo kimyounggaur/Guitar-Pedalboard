@@ -7,12 +7,17 @@ import {
   type CSSProperties,
 } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
-import { createRecordingFilename } from '../audio/recording';
+import { formatLatency, UNDERRUN_UNAVAILABLE_REASON } from '../audio/engine/latency';
+import { createRecordingFilename, WAV_BIT_DEPTHS, WAV_MAX_SECONDS_OPTIONS, type WavBitDepth } from '../audio/recording';
 import type { LevelReading, TuningPresetId } from '../audio/types';
-import { TUNING_PRESETS, TUNING_PRESET_OPTIONS } from '../audio/utils/tunings';
+import { describeTuner } from '../audio/utils/tunerDisplay';
+import { GUITAR_TUNING_OPTIONS, TUNING_PRESETS } from '../audio/utils/tunings';
 import { useAudioStore } from '../store/audioStore';
+import { readInputLevel, readOutputLevel, useMonitorStore } from '../store/monitorStore';
+import { InputLevelNotice } from './InputLevelNotice';
 import { ToggleSwitch } from './ToggleSwitch';
 import { WaveformCanvas, type WaveformCanvasHandle } from './WaveformCanvas';
+import { ko } from '../i18n/ko';
 
 const STORE_REFRESH_INTERVAL_MS = 100;
 const SILENT_LEVEL: LevelReading = {
@@ -41,7 +46,7 @@ export function Meter({ active = true }: MeterProps) {
   const tuningPreset = useAudioStore((state) => state.tuningPreset);
   const tuningReferenceHz = useAudioStore((state) => state.tuningReferenceHz);
   const latency = useAudioStore((state) => state.latency);
-  const audioGlitchCount = useAudioStore((state) => state.audioGlitchCount);
+  const underrunCount = useAudioStore((state) => state.underrunCount);
   const masterVolume = useAudioStore((state) => state.masterVolume);
   const setMasterVolume = useAudioStore((state) => state.setMasterVolume);
   const setTunerActive = useAudioStore((state) => state.setTunerActive);
@@ -51,6 +56,11 @@ export function Meter({ active = true }: MeterProps) {
   const recordingFormat = useAudioStore((state) => state.recordingFormat);
   const recordedFormat = useAudioStore((state) => state.recordedFormat);
   const setRecordingFormat = useAudioStore((state) => state.setRecordingFormat);
+  const wavBitDepth = useAudioStore((state) => state.wavBitDepth);
+  const setWavBitDepth = useAudioStore((state) => state.setWavBitDepth);
+  const wavMaxSeconds = useAudioStore((state) => state.wavMaxSeconds);
+  const setWavMaxSeconds = useAudioStore((state) => state.setWavMaxSeconds);
+  const recordingLimitSeconds = useAudioStore((state) => state.recordingLimitSeconds);
   const wavSupported = typeof AudioContext !== 'undefined' && !!AudioContext.prototype.createScriptProcessor;
   const webmSupported = useAudioStore((state) => state.recordingSupported);
   const selectedRecordingSupported = recordingFormat === 'wav' ? wavSupported : webmSupported;
@@ -64,48 +74,30 @@ export function Meter({ active = true }: MeterProps) {
   const waveformRef = useRef<WaveformCanvasHandle>(null);
   const clipIndicatorRef = useRef<HTMLDivElement>(null);
   const outputWarningRef = useRef<HTMLParagraphElement>(null);
-  const latencyTotal = latency.base !== null && latency.output !== null ? latency.base + latency.output : null;
-  const hasLatencyReading = latency.sampleRate > 0 && latencyTotal !== null;
-  const hasPitch = isTunerActive && pitch.frequency !== null && pitch.note !== null;
-  const absoluteCents = Math.abs(pitch.cents);
-  const tunerStatus = !hasPitch
-    ? 'idle'
-    : pitch.octaveMismatch
-      ? 'far'
-    : absoluteCents <= 5
-      ? 'in-tune'
-      : absoluteCents <= 15
-        ? 'near'
-        : 'far';
-  const roundedCents = Math.round(pitch.cents);
-  const centsLabel = hasPitch
-    ? `${roundedCents > 0 ? '+' : ''}${roundedCents} ¢`
-    : '-- ¢';
-  const tuningStatusLabel = !isTunerActive
-    ? '튜너 꺼짐'
-    : !hasPitch
-      ? '신호 대기'
-      : pitch.octaveMismatch
-        ? `옥타브 확인 · 목표 ${pitch.targetNote}`
-      : tunerStatus === 'in-tune'
-        ? '정확함'
-        : `${Math.abs(roundedCents)}센트 ${roundedCents > 0 ? '높음' : '낮음'}`;
-  const boundedCents = Math.round(Math.min(50, Math.max(-50, hasPitch ? pitch.cents : 0)));
-  const centPosition = hasPitch ? Math.min(100, Math.max(0, 50 + pitch.cents)) : 50;
+  const latencyDisplay = formatLatency(latency);
+  const tuner = describeTuner(pitch, isTunerActive);
+  const hasPitch = tuner.hasPitch;
+  const tunerStatus = tuner.status;
+  const isChromatic = tuningPreset === 'chromatic';
+  // 크로매틱에서 기타로 돌아올 때 직전에 쓰던 기타 튜닝으로 간다(처음엔 표준)
+  const lastGuitarPresetRef = useRef<TuningPresetId>('standard');
+  if (!isChromatic) lastGuitarPresetRef.current = tuningPreset;
   const tuningTargets = TUNING_PRESETS[tuningPreset].targets;
 
   useEffect(() => {
     const engine = AudioEngine.getInstance();
     let animationFrame: number | null = null;
 
-    const updateRealtimeStatus = (inputLevel: LevelReading, outputLevel: LevelReading) => {
-      const isClipping = inputLevel.isClipping || outputLevel.isClipping;
+    const updateRealtimeStatus = (outputLevel: LevelReading) => {
+      // 입력 쪽은 막대의 순간 클립 표시가 아니라 MonitorService 가 판정한 '너무 큼'(4.12)을 따른다. 입력 패널의 안내와 같은 값이라
+      // 한쪽은 '클리핑 발생', 다른 쪽은 '헤드룸 정상'이라고 하는 어긋남이 없다(S2.5).
+      const isClipping = useMonitorStore.getState().inputWarning === 'high' || outputLevel.isClipping;
       const clipIndicator = clipIndicatorRef.current;
       const outputWarning = outputWarningRef.current;
 
       if (clipIndicator) {
         clipIndicator.classList.toggle('is-active', isClipping);
-        clipIndicator.textContent = isClipping ? '클리핑 발생' : '헤드룸 정상';
+        clipIndicator.textContent = isClipping ? ko.meter.clipped : ko.meter.headroomOk;
       }
 
       if (!outputWarning) return;
@@ -114,14 +106,12 @@ export function Meter({ active = true }: MeterProps) {
         outputWarning.hidden = false;
         outputWarning.className = 'level-warning is-danger';
         outputWarning.setAttribute('role', 'alert');
-        outputWarning.textContent =
-          '출력 클리핑이 발생했습니다. 마스터 볼륨이나 페달 레벨을 낮추세요.';
+        outputWarning.textContent = ko.meter.outputClipping;
       } else if (outputLevel.peakDb > -1) {
         outputWarning.hidden = false;
         outputWarning.className = 'level-warning is-warning';
         outputWarning.setAttribute('role', 'status');
-        outputWarning.textContent =
-          '마스터 출력이 0dBFS에 근접했습니다. 페달 레벨이나 인터페이스 출력을 낮추세요.';
+        outputWarning.textContent = ko.meter.outputNearFull;
       } else {
         outputWarning.hidden = true;
         outputWarning.className = 'level-warning';
@@ -134,7 +124,7 @@ export function Meter({ active = true }: MeterProps) {
       inputLevelRef.current?.reset();
       outputLevelRef.current?.reset();
       waveformRef.current?.clear();
-      updateRealtimeStatus(SILENT_LEVEL, SILENT_LEVEL);
+      updateRealtimeStatus(SILENT_LEVEL);
     };
 
     const cancelFrame = () => {
@@ -148,13 +138,14 @@ export function Meter({ active = true }: MeterProps) {
       animationFrame = null;
       if (!active || !isRunning || document.visibilityState !== 'visible') return;
 
-      const inputLevel = engine.readInputLevel();
-      const outputLevel = engine.readOutputLevel();
+      // 레벨은 오디오 스레드의 level-meter 가 재서 monitorStore 에 둔 값이다. 여기서는 읽어 그리기만 한다.
+      const inputLevel = readInputLevel();
+      const outputLevel = readOutputLevel();
 
       inputLevelRef.current?.update(inputLevel);
       outputLevelRef.current?.update(outputLevel);
       waveformRef.current?.draw(engine.readInputWaveform(), engine.readOutputWaveform());
-      updateRealtimeStatus(inputLevel, outputLevel);
+      updateRealtimeStatus(outputLevel);
 
       animationFrame = window.requestAnimationFrame(renderFrame);
     };
@@ -183,8 +174,7 @@ export function Meter({ active = true }: MeterProps) {
   // Meter readings and file position must not depend on the selected panel.
   useEffect(() => {
     if (!isRunning) return;
-    const engine = AudioEngine.getInstance();
-    const update = () => refreshMeters(engine.readInputLevel(), engine.readOutputLevel());
+    const update = () => refreshMeters(readInputLevel(), readOutputLevel());
     update();
     const timer = window.setInterval(update, STORE_REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
@@ -193,7 +183,7 @@ export function Meter({ active = true }: MeterProps) {
   return (
     <section className="side-panel meter-panel">
       <div className="panel-title">
-        <p className="eyebrow">Monitor</p>
+        <p className="eyebrow">{ko.app.eyebrow.monitor}</p>
         <h2>미터 & 튜너</h2>
       </div>
 
@@ -214,12 +204,14 @@ export function Meter({ active = true }: MeterProps) {
         />
       </label>
 
-      <LevelBar ref={inputLevelRef} label="Input" />
-      <LevelBar ref={outputLevelRef} label="Output" />
+      <LevelBar ref={inputLevelRef} label={ko.meter.inputBar} />
+      <LevelBar ref={outputLevelRef} label={ko.meter.outputBar} />
 
       <div ref={clipIndicatorRef} className="clip-indicator" role="status" aria-live="polite">
         헤드룸 정상
       </div>
+
+      <InputLevelNotice />
 
       <p ref={outputWarningRef} className="level-warning" hidden />
 
@@ -228,12 +220,26 @@ export function Meter({ active = true }: MeterProps) {
       <div className="recording-panel">
         <label>녹음 형식
           <select value={recordingFormat} disabled={recordingStatus === 'recording'} onChange={(event) => setRecordingFormat(event.currentTarget.value as 'webm' | 'wav')}>
-            <option value="webm">압축 녹음 (브라우저 지원 형식)</option>
-            <option value="wav">WAV (16-bit PCM)</option>
+            <option value="wav">WAV (원본 음질, 길이 정확)</option>
+            <option value="webm">작은 파일 (브라우저 지원 압축 형식)</option>
           </select>
         </label>
+        {recordingFormat === 'wav' ? (
+          <div className="recording-wav-options">
+            <label>비트 깊이
+              <select value={wavBitDepth} disabled={recordingStatus === 'recording'} onChange={(event) => setWavBitDepth(Number(event.currentTarget.value) as WavBitDepth)}>
+                {WAV_BIT_DEPTHS.map((depth) => <option key={depth} value={depth}>{depth}비트</option>)}
+              </select>
+            </label>
+            <label>최대 길이
+              <select value={wavMaxSeconds} disabled={recordingStatus === 'recording'} onChange={(event) => setWavMaxSeconds(Number(event.currentTarget.value))}>
+                {WAV_MAX_SECONDS_OPTIONS.map((seconds) => <option key={seconds} value={seconds}>{seconds / 60}분</option>)}
+              </select>
+            </label>
+          </div>
+        ) : null}
         {recordingFormat === 'webm' ? <p>압축 녹음 형식은 브라우저에 따라 WebM, MP4 또는 기타 형식으로 저장됩니다.</p> : null}
-        {recordingFormat === 'wav' ? <p>WAV 녹음은 최대 2분이며 메모리 제한에 도달하면 자동 저장됩니다. 녹음 중에는 화면을 열어 두세요. 기기가 바쁘거나 백그라운드 상태일 때 소리가 끊길 수 있습니다.</p> : null}
+        {recordingFormat === 'wav' ? <p>WAV 녹음은 고른 최대 길이나 메모리 제한에 도달하면 자동 저장됩니다. 길수록 메모리를 많이 씁니다. 녹음 중에는 화면을 열어 두세요. 기기가 바쁘거나 백그라운드 상태일 때 소리가 끊길 수 있습니다.</p> : null}
         <div className="recording-actions" role="group" aria-label="마스터 출력 녹음">
           <button
             className="secondary-button recording-start-button"
@@ -268,9 +274,9 @@ export function Meter({ active = true }: MeterProps) {
         </div>
         <p className="recording-status" aria-live="polite">
           {!selectedRecordingSupported
-            ? '이 브라우저에서는 녹음을 지원하지 않습니다.'
+            ? ko.meter.recordingUnsupported
             : recordingStatus === 'recording'
-              ? `녹음 중 ${formatElapsed(recordingElapsed)}`
+              ? `녹음 중 ${formatElapsed(recordingElapsed)}${recordingFormat === 'wav' ? ` · 남은 시간 ${formatElapsed(recordingLimitSeconds - recordingElapsed)}` : ''}`
               : recordingStatus === 'ready'
                 ? `녹음 완료 ${formatElapsed(recordingElapsed)} · ${recordedFormat === 'unknown' ? '파일 형식 확인 불가 (확장자 없음)' : recordedFormat.toUpperCase()}`
                 : '녹음 대기'}
@@ -278,18 +284,20 @@ export function Meter({ active = true }: MeterProps) {
       </div>
 
       <div className="latency-status" aria-live="polite">
-        <span>
-          {hasLatencyReading
-            ? `출력 지연 추정 ${(latencyTotal ?? 0).toFixed(1)}ms @ ${(latency.sampleRate / 1000).toFixed(1)}kHz`
-            : '지연시간 측정 대기'}
-        </span>
-        <p>입력 장치 설정 지연: {latency.input === null ? '확인 불가' : `${latency.input.toFixed(1)}ms`} · 활성 이펙터 처리 지연: 추정 미지원</p>
-        <p>입력 값은 장치 설정상의 목표치이며 실제 왕복 지연 측정값이 아닙니다. 출력 추정에는 이펙터 처리가 포함되지 않습니다.</p>
-        {latencyTotal !== null && latencyTotal > 20 ? (
-          <p>
-            지연이 큽니다. 유선 헤드폰과 오디오 인터페이스를 사용하고 다른 작업을 줄여 보세요.
-          </p>
+        <span>{latencyDisplay.headline}</span>
+        {latencyDisplay.items.length > 0 ? (
+          <>
+            <p className="latency-items">
+              {latencyDisplay.items.map((item) => (
+                <span key={item.key} className={`latency-item latency-item-${item.key}`}>
+                  {item.text}
+                </span>
+              ))}
+            </p>
+            <p>입력·출력은 브라우저가 알려 주는 값이고 실제 왕복 지연을 잰 값이 아닙니다. 처리는 켜진 페달과 리미터가 더하는 고정 지연입니다.</p>
+          </>
         ) : null}
+        {latencyDisplay.advice ? <p className="latency-advice">지연이 큽니다. {latencyDisplay.advice}</p> : null}
       </div>
 
       <div className="performance-status" aria-live="polite">
@@ -298,26 +306,40 @@ export function Meter({ active = true }: MeterProps) {
         </span>
         <i aria-hidden="true">·</i>
         <span>
-          출력 지연 추정 <output>{hasLatencyReading ? `${(latencyTotal ?? 0).toFixed(1)}ms` : '--'}</output>
+          지연 <output>{latencyDisplay.totalMs === null ? '--' : `${latencyDisplay.totalMs.toFixed(1)}ms`}</output>
         </span>
         <i aria-hidden="true">·</i>
-        <span>
-          출력 버퍼 부족 <output>{audioGlitchCount === null ? '측정 미지원' : `${audioGlitchCount}회`}</output>
+        <span title={isRunning && underrunCount === null ? UNDERRUN_UNAVAILABLE_REASON : '세션을 시작한 뒤 출력 버퍼가 모자라 소리가 끊긴 횟수'}>
+          끊김{' '}
+          <output className="underrun-count">{!isRunning ? '--' : underrunCount === null ? '측정 불가' : `${underrunCount}회`}</output>
         </span>
       </div>
 
       <div className="tuner-display">
         <div className="tuner-toolbar">
           <ToggleSwitch label="튜너" checked={isTunerActive} onChange={setTunerActive} />
+          <div className="tuner-mode-switch" role="group" aria-label="튜너 방식">
+            <button
+              type="button"
+              aria-pressed={!isChromatic}
+              onClick={() => setTuningPreset(lastGuitarPresetRef.current)}
+            >
+              기타
+            </button>
+            <button type="button" aria-pressed={isChromatic} onClick={() => setTuningPreset('chromatic')}>
+              크로매틱
+            </button>
+          </div>
           <label className="tuner-preset-control">
             <span>튜닝</span>
             <select
-              value={tuningPreset}
+              value={isChromatic ? lastGuitarPresetRef.current : tuningPreset}
+              disabled={isChromatic}
               onChange={(event) =>
                 setTuningPreset(event.currentTarget.value as TuningPresetId)
               }
             >
-              {TUNING_PRESET_OPTIONS.map((preset) => (
+              {GUITAR_TUNING_OPTIONS.map((preset) => (
                 <option key={preset.id} value={preset.id}>
                   {preset.label}
                 </option>
@@ -332,7 +354,7 @@ export function Meter({ active = true }: MeterProps) {
           </label>
         </div>
 
-        <div className="tuner-targets" role="group" aria-label="현재 튜닝 목표음">
+        <div className="tuner-targets" role="group" aria-label="현재 튜닝 목표음" hidden={isChromatic}>
           {tuningTargets.map((target) => {
             const isTarget = hasPitch && pitch.targetNote === target.note;
             return (
@@ -348,25 +370,23 @@ export function Meter({ active = true }: MeterProps) {
         </div>
 
         <div className={`tuner-reading is-${tunerStatus}`} aria-live="polite">
-          <span className="tuner-note">{hasPitch ? pitch.note : '--'}</span>
-          {hasPitch && pitch.stringNumber ? <span>{pitch.stringNumber}번 줄 · 목표 {pitch.targetNote}</span> : null}
+          <span className="tuner-note">{tuner.note}</span>
           <span className="tuner-pitch-detail">
-            <span className="tuner-frequency">
-              {hasPitch && pitch.frequency ? `${pitch.frequency.toFixed(1)} Hz` : '주파수 --'}
-            </span>
-            <strong className="tuner-status-text">{tuningStatusLabel}</strong>
+            {tuner.stringLabel ? <span className="tuner-string">{tuner.stringLabel}</span> : null}
+            <span className="tuner-frequency">{tuner.frequencyText}</span>
+            <strong className="tuner-status-text">{tuner.statusText}</strong>
           </span>
-          <output className="tuner-cents">{centsLabel}</output>
+          <output className="tuner-cents">{tuner.centsText}</output>
         </div>
 
         <div
           className={`cent-strip is-${tunerStatus}`}
-          style={{ '--cent-position': `${centPosition}%` } as CSSProperties}
+          style={{ '--cent-position': `${tuner.needlePercent}%` } as CSSProperties}
           aria-label="튜닝 센트"
           aria-valuemax={50}
           aria-valuemin={-50}
-          aria-valuenow={boundedCents}
-          aria-valuetext={tuningStatusLabel}
+          aria-valuenow={tuner.boundedCents}
+          aria-valuetext={tuner.statusText}
           role="meter"
         >
           <span />
@@ -402,7 +422,7 @@ const LevelBar = memo(
           if (trackRef.current) {
             trackRef.current.classList.toggle('is-clipping', reading.isClipping);
             trackRef.current.setAttribute('aria-valuenow', String(Math.round(level * 100)));
-            trackRef.current.setAttribute('aria-valuetext', `${dbText}, peak ${peakText}`);
+            trackRef.current.setAttribute('aria-valuetext', ko.meter.valueText(dbText, peakText));
           }
         },
         reset: () => {
@@ -412,7 +432,7 @@ const LevelBar = memo(
           if (trackRef.current) {
             trackRef.current.classList.remove('is-clipping');
             trackRef.current.setAttribute('aria-valuenow', '0');
-            trackRef.current.setAttribute('aria-valuetext', '-inf dB, peak -inf dBpk');
+            trackRef.current.setAttribute('aria-valuetext', ko.meter.valueTextEmpty);
           }
         },
       }),
@@ -432,7 +452,7 @@ const LevelBar = memo(
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={0}
-          aria-valuetext="-inf dB, peak -inf dBpk"
+          aria-valuetext={ko.meter.valueTextEmpty}
           role="meter"
         >
           <span ref={fillRef} style={{ transform: 'scaleX(0)' }} />

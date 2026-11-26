@@ -74,10 +74,25 @@ export const TUNING_PRESETS: Record<TuningPresetId, TuningPresetDefinition> = {
   },
 };
 
-export const TUNING_PRESET_OPTIONS = (
-  ['standard', 'drop-d', 'half-step-down', 'open-g', 'chromatic'] as const
-).map((id) => TUNING_PRESETS[id]);
+/** 기타 모드에서 고를 수 있는 튜닝(크로매틱은 모드 전환 버튼으로 따로 고른다) */
+export const GUITAR_TUNING_OPTIONS = (['standard', 'drop-d', 'half-step-down', 'open-g'] as const).map(
+  (id) => TUNING_PRESETS[id],
+);
 
+/** 어떤 줄의 목표음(또는 그 옥타브 위 음)에서 이만큼 안이면 '그 음'으로 본다 */
+export const OCTAVE_MATCH_TOLERANCE_CENTS = 50;
+/** 가장 가까운 줄이 이보다 멀면 어느 줄인지 알 수 없다 */
+export const STRING_CHECK_CENTS = 600;
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
+
+/**
+ * 들린 주파수를 읽는다.
+ *  - 크로매틱: 가장 가까운 반음(음이름 + 옥타브)과 센트 차이.
+ *  - 기타: **옥타브를 접지 않고** 센트 거리가 가장 가까운 줄을 고른다(D2 → 6번 줄 E2, 200센트 낮음).
+ *    줄의 목표음에서 한두 옥타브 위에 정확히 얹히면(E3 → 6번 줄 E2 의 한 옥타브 위) `octavesAbove` 로 알리고 cents 는 그 음과의 차이다.
+ *    가장 가까운 줄과도 600센트 넘게 떨어지면 줄을 정하지 않고 `checkString` 으로 알린다.
+ */
 export function getPitchReading(
   frequency: number | null,
   presetId: TuningPresetId,
@@ -89,45 +104,73 @@ export function getPitchReading(
 
   const reference = Number.isFinite(referenceHz) && referenceHz >= 400 && referenceHz <= 480 ? referenceHz : 440;
   const midi = Math.round(69 + 12 * Math.log2(frequency / reference));
-  const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const note = `${names[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+  const note = `${NOTE_NAMES[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
   if (presetId === 'chromatic') {
     return { frequency, note, cents: 1200 * Math.log2(frequency / midiToFrequency(midi, reference)) };
   }
-  const targets = TUNING_PRESETS[presetId].targets;
-  let nearest = targets[0];
-  let nearestCents = getOctaveWrappedCents(frequency, nearest.frequency * reference / 440);
-  let nearestFrequencyDistance = Math.abs(frequency - nearest.frequency * reference / 440);
 
-  for (let index = 1; index < targets.length; index += 1) {
-    const candidate = targets[index];
-    const candidateFrequency = candidate.frequency * reference / 440;
-    const candidateCents = getOctaveWrappedCents(frequency, candidateFrequency);
-    const candidateFrequencyDistance = Math.abs(frequency - candidateFrequency);
-    const centsDifference = Math.abs(candidateCents) - Math.abs(nearestCents);
+  const scale = reference / 440;
+  const strings = TUNING_PRESETS[presetId].targets.map((candidate, index) => {
+    const targetFrequency = candidate.frequency * scale;
+    return {
+      target: candidate,
+      stringNumber: 6 - index,
+      cents: 1200 * Math.log2(frequency / targetFrequency),
+      distance: Math.abs(frequency - targetFrequency),
+    };
+  });
 
+  let nearest = strings[0];
+  for (let index = 1; index < strings.length; index += 1) {
+    const candidate = strings[index];
+    const centsDifference = Math.abs(candidate.cents) - Math.abs(nearest.cents);
     if (
       centsDifference < -CENTS_TIE_EPSILON ||
-      (Math.abs(centsDifference) <= CENTS_TIE_EPSILON &&
-        candidateFrequencyDistance < nearestFrequencyDistance)
+      (Math.abs(centsDifference) <= CENTS_TIE_EPSILON && candidate.distance < nearest.distance)
     ) {
       nearest = candidate;
-      nearestCents = candidateCents;
-      nearestFrequencyDistance = candidateFrequencyDistance;
     }
+  }
+
+  // 어느 줄의 목표음과도 가깝지 않은데 어떤 줄의 옥타브 위 음에는 얹혀 있으면 '옥타브가 다르다'고 알린다.
+  // 위로만 본다: 6번 줄을 한 음 내린 D2 처럼 아래 음은 제 줄의 낮춘 튜닝일 수 있어서 줄 판독(위)이 맞다.
+  if (Math.abs(nearest.cents) > OCTAVE_MATCH_TOLERANCE_CENTS) {
+    let match: { string: (typeof strings)[number]; octaves: number; deviation: number } | null = null;
+    for (const candidate of strings) {
+      const octaves = Math.round(candidate.cents / 1200);
+      if (octaves < 1) continue;
+
+      const deviation = candidate.cents - octaves * 1200;
+      if (Math.abs(deviation) > OCTAVE_MATCH_TOLERANCE_CENTS) continue;
+
+      // 가장 적게 올라간 줄로 안내한다(E5 는 6번 줄 E2 의 세 옥타브 위이기도 하지만 1번 줄 E4 의 한 옥타브 위로 말한다).
+      // 기본 튜닝들에서 두 줄이 같은 음 ±100센트 안에 겹치는 일은 없어서 같은 단계의 동률은 생기지 않는다.
+      if (match === null || octaves < match.octaves) {
+        match = { string: candidate, octaves, deviation };
+      }
+    }
+
+    if (match) {
+      return {
+        frequency,
+        note,
+        cents: match.deviation,
+        targetNote: match.string.target.note,
+        stringNumber: match.string.stringNumber,
+        octavesAbove: match.octaves,
+      };
+    }
+  }
+
+  if (Math.abs(nearest.cents) > STRING_CHECK_CENTS) {
+    return { frequency, note, cents: nearest.cents, checkString: true };
   }
 
   return {
     frequency,
     note,
-    cents: nearestCents,
-    targetNote: nearest.note,
-    stringNumber: 6 - targets.indexOf(nearest),
-    octaveMismatch: Math.abs(1200 * Math.log2(frequency / (nearest.frequency * reference / 440)) - nearestCents) > 600,
+    cents: nearest.cents,
+    targetNote: nearest.target.note,
+    stringNumber: nearest.stringNumber,
   };
-}
-
-function getOctaveWrappedCents(frequency: number, targetFrequency: number): number {
-  const rawCents = 1200 * Math.log2(frequency / targetFrequency);
-  return rawCents - Math.round(rawCents / 1200) * 1200;
 }

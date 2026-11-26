@@ -7,15 +7,20 @@ export default defineConfig(({ mode }) => {
   // serves it from the domain root. Vercel exposes the VERCEL environment
   // variable for every deployment build.
   const baseUrl = loadEnv(mode, '.', '').VERCEL ? '/' : '/Guitar-Pedalboard/';
+  // `vite build --mode test` 는 오디오 렌더 프로브(probe.html)만 빌드한다. 배포용 앱·PWA 와는 관계가 없다.
+  const isProbeBuild = mode === 'test';
 
   return {
-  base: baseUrl,
+  base: isProbeBuild ? '/' : baseUrl,
   plugins: [
     react(),
-    VitePWA({
+    ...(isProbeBuild ? [] : [VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo.webp', 'favicon.ico', 'apple-touch-icon.png'],
+      includeAssets: ['logo-520.webp', 'logo-1040.webp', 'favicon.svg', 'favicon.ico', 'apple-touch-icon.png'],
       manifest: {
+        // 앱의 식별자와 언어(S2.14). id 는 start_url 과 같게 두어 이미 설치한 사용자의 앱 식별이 바뀌지 않게 한다.
+        id: baseUrl,
+        lang: 'ko',
         name: 'Guitar Pedalboard',
         short_name: 'Pedalboard',
         description: '브라우저에서 연주하고 녹음하는 웹 기타 멀티 이펙터',
@@ -37,6 +42,13 @@ export default defineConfig(({ mode }) => {
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any',
+          },
+          {
+            // 가운데 지름 80% 원 안에만 그림이 있다(docs/refactoring/tools/make-maskable-icon.mjs). 'any' 와 한 항목으로 묶지 않는다.
+            src: `${baseUrl}pwa-512x512-maskable.png`,
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
           },
         ],
       },
@@ -65,13 +77,14 @@ export default defineConfig(({ mode }) => {
           },
         ],
       },
-    }),
+    })]),
   ],
   build: {
     emptyOutDir: true,
     minify: 'esbuild',
     sourcemap: true,
     rollupOptions: {
+      ...(isProbeBuild ? { input: { probe: 'probe.html' } } : {}),
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) return 'vendor';

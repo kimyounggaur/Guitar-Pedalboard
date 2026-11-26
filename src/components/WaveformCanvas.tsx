@@ -1,4 +1,5 @@
 import { forwardRef, memo, useEffect, useImperativeHandle, useRef } from 'react';
+import { ko } from '../i18n/ko';
 
 export interface WaveformCanvasHandle {
   draw: (input: readonly number[], output: readonly number[]) => void;
@@ -101,8 +102,8 @@ const WaveformCanvasImpl = forwardRef<WaveformCanvasHandle>(function WaveformCan
   return (
     <div className="waveform-panel">
       <span className="control-row">
-        <span>Waveform</span>
-        <output>In / Out</output>
+        <span>{ko.app.waveform}</span>
+        <output>{ko.app.waveformInOut}</output>
       </span>
       <canvas
         ref={canvasRef}

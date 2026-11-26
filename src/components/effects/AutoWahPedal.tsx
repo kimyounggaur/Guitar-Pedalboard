@@ -1,6 +1,8 @@
 import { knobDefault } from '../knobDefaults';
 import type { AutoWahParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { ko } from '../../i18n/ko';
+import { useParamNames } from '../ParamScope';
 
 interface AutoWahPedalProps {
   params: AutoWahParams;
@@ -10,8 +12,9 @@ interface AutoWahPedalProps {
 const modeOptions: AutoWahParams['mode'][] = ['auto', 'manual'];
 
 export function AutoWahPedal({ params, onChange }: AutoWahPedalProps) {
+  const modeName = useParamNames('Mode').name;
   return (
-    <div className="auto-wah-ui" role="group" aria-label="오토 와우 컨트롤">
+    <div className="auto-wah-ui" role="group" aria-label={ko.pedal.autoWah.controls}>
       <div className="auto-wah-sweep-panel" aria-hidden="true">
         <span />
         <span />
@@ -20,7 +23,7 @@ export function AutoWahPedal({ params, onChange }: AutoWahPedalProps) {
         <strong>ENVELOPE SWEEP</strong>
       </div>
 
-      <fieldset className="auto-wah-mode-selector">
+      <fieldset className="auto-wah-mode-selector" aria-label={modeName}>
         <legend>Mode</legend>
         <div>
           {modeOptions.map((mode) => (
@@ -103,7 +106,7 @@ export function AutoWahPedal({ params, onChange }: AutoWahPedalProps) {
 
       <div className="auto-wah-brand-plate">
         <strong>AUTO WAH</strong>
-        <span>Touch Responsive Filter</span>
+        <span>{ko.tagline.autoWah}</span>
       </div>
     </div>
   );

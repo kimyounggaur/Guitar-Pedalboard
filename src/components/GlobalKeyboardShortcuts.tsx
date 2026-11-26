@@ -1,75 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AudioEngine } from '../audio/AudioEngine';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createShortcutKeydownHandler } from '../input/ShortcutService';
 import { useAudioStore } from '../store/audioStore';
-import { usePedalStore } from '../store/pedalStore';
 import { usePresetStore } from '../store/presetStore';
 import { ShortcutHelp } from './ShortcutHelp';
-import { resolveShortcutCommand, type ShortcutCommand } from './keyboardShortcuts';
 
-export function isInteractiveShortcutTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
-
-  const tagName = target.tagName.toLowerCase();
-  return (
-    tagName === 'input' ||
-    tagName === 'select' ||
-    tagName === 'textarea' ||
-    tagName === 'button' ||
-    (tagName === 'a' && target.hasAttribute('href')) ||
-    target.closest(
-      'button, a[href], summary, audio[controls], video[controls], [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="textbox"], [role="combobox"], [role="slider"], [role="switch"], [role="tab"], [tabindex]:not([tabindex="-1"])',
-    ) !== null
-  );
-}
-
-export function executeShortcutCommand(
-  command: ShortcutCommand,
-  openHelp: () => void,
-): boolean {
-  switch (command.type) {
-    case 'toggle-pedal': {
-      if (!Number.isInteger(command.index) || command.index < 0 || command.index > 14) return false;
-
-      const pedalStore = usePedalStore.getState();
-      const pedal = pedalStore.pedals[command.index];
-      if (!pedal) return false;
-
-      const bypassed = !pedal.bypassed;
-      pedalStore.setPedalBypass(pedal.id, bypassed);
-      AudioEngine.getInstance().setPedalBypass(pedal.id, bypassed);
-      return true;
-    }
-    case 'toggle-audio': {
-      const audioState = useAudioStore.getState();
-      if (audioState.isLoading) return true;
-
-      if (audioState.inputMode === 'file') {
-        if (audioState.isFilePaused) void audioState.playFile();
-        else audioState.pauseFile();
-      } else if (audioState.isRunning) {
-        void audioState.stop();
-      } else {
-        void audioState.start();
-      }
-      return true;
-    }
-    case 'tap-tempo':
-      useAudioStore.getState().tapTempoTap();
-      return true;
-    case 'activate-slot':
-      return usePresetStore.getState().activateSlot(command.slot);
-    case 'panic':
-      useAudioStore.getState().panic();
-      return true;
-    case 'show-help':
-      openHelp();
-      return true;
-    default:
-      command satisfies never;
-      return false;
-  }
-}
-
+/** 전역 keydown 리스너를 하나만 달고 도움말 대화상자를 연다. 키를 해석하고 실행하는 일은 `input/ShortcutService` 가 한다(설계서 S2.11). */
 export function GlobalKeyboardShortcuts() {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const helpOpenRef = useRef(false);
@@ -83,30 +18,15 @@ export function GlobalKeyboardShortcuts() {
   }, []);
   const openHelp = useCallback(() => setHelpOpen(true), [setHelpOpen]);
   const closeHelp = useCallback(() => setHelpOpen(false), [setHelpOpen]);
+  const handleKeyDown = useMemo(
+    () => createShortcutKeydownHandler({ isHelpOpen: () => helpOpenRef.current, openHelp, closeHelp }),
+    [closeHelp, openHelp],
+  );
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const command = resolveShortcutCommand(event);
-
-      if (helpOpenRef.current) {
-        if (command?.type === 'panic') {
-          event.preventDefault();
-          event.stopPropagation();
-          closeHelp();
-        }
-        return;
-      }
-
-      if (!command || isInteractiveShortcutTarget(event.target)) return;
-
-      if (executeShortcutCommand(command, openHelp)) {
-        event.preventDefault();
-      }
-    };
-
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [closeHelp, openHelp]);
+  }, [handleKeyDown]);
 
   return (
     <>

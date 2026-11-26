@@ -5,6 +5,8 @@ import type { CrunchParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 import { useKnobDrag } from '../../hooks/useKnobDrag';
 import { initialPedals } from '../../store/pedalStore';
+import { useParamNames } from '../ParamScope';
+import { ko } from '../../i18n/ko';
 
 interface CrunchPedalProps {
   params: CrunchParams;
@@ -21,6 +23,7 @@ interface CrunchKnobProps {
 }
 
 function CrunchKnob({ label, value, min, max, step, onChange }: CrunchKnobProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const progress = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(progress, 0), 1) * 270;
   const defaults = initialPedals.find((pedal) => pedal.type === 'crunch')!.params as CrunchParams;
@@ -30,7 +33,7 @@ function CrunchKnob({ label, value, min, max, step, onChange }: CrunchKnobProps)
   return (
     <div className={`crunch-knob crunch-knob-${label.toLowerCase().replace('.', '')}`}>
       <span
-        className="crunch-knob-shell"
+        className="crunch-knob-shell" {...dragHandlers}
         style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}
       >
         <i aria-hidden="true" />
@@ -40,22 +43,21 @@ function CrunchKnob({ label, value, min, max, step, onChange }: CrunchKnobProps)
           max={max}
           step={step}
           value={value}
-          {...dragHandlers}
-          aria-label={label}
-          aria-valuetext={`${label} ${Math.round(value)}%`}
+          aria-label={accessibleName}
+          aria-valuetext={`${accessibleName} ${Math.round(value)}%`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
-      <strong>{label}</strong>
+      <strong title={tip}>{label}</strong>
       <output>{Math.round(value)}%</output>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} onChange={onChange} />
     </div>
   );
 }
 
 export function CrunchPedal({ params, onChange }: CrunchPedalProps) {
   return (
-    <div className="crunch-box-ui" role="group" aria-label="Crunch controls">
+    <div className="crunch-box-ui" role="group" aria-label={ko.pedal.crunch.controls}>
       <section className="crunch-face">
         <div className="crunch-knob-layout">
           <CrunchKnob
@@ -84,12 +86,18 @@ export function CrunchPedal({ params, onChange }: CrunchPedalProps) {
           />
         </div>
 
-        <div className="crunch-led" aria-hidden="true" />
-        <span className="crunch-side-label crunch-side-out">OUT</span>
-        <span className="crunch-side-label crunch-side-in">IN</span>
-        <strong className="crunch-brand">Crunch</strong>
-        <div className="crunch-footswitch" aria-hidden="true">
-          <span />
+        {/* S1.8: LED·로고·발스위치·입출력 글자를 고정 좌표(absolute top)로 놓지 않고 노브 줄 아래에 차례로 쌓는다.
+            노브 칸에 숫자 입력이 붙어 노브 줄이 길어져도 이 장식이 글자를 덮지 않는다. */}
+        <div className="crunch-center-row">
+          <span className="crunch-side-label crunch-side-out">OUT</span>
+          <div className="crunch-center-stack">
+            <div className="crunch-led" aria-hidden="true" />
+            <strong className="crunch-brand">Crunch</strong>
+            <div className="crunch-footswitch" aria-hidden="true">
+              <span />
+            </div>
+          </div>
+          <span className="crunch-side-label crunch-side-in">IN</span>
         </div>
         <strong className="crunch-mode-label">Distortion</strong>
       </section>

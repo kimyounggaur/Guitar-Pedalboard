@@ -2,9 +2,12 @@ import { KnobNumberInput } from '../KnobNumberInput';
 import { knobDefault } from '../knobDefaults';
 import type { CSSProperties } from 'react';
 import type { FuzzParams, PedalParamValue } from '../../audio/types';
+import { formatParamValue, getParamDef } from '../../audio/params';
 import { SliderControl } from '../SliderControl';
 import { useKnobDrag } from '../../hooks/useKnobDrag';
 import { initialPedals } from '../../store/pedalStore';
+import { useParamNames } from '../ParamScope';
+import { ko } from '../../i18n/ko';
 
 interface FuzzPedalProps {
   params: FuzzParams;
@@ -22,6 +25,9 @@ interface FuzzKnobProps {
   onChange: (value: number) => void;
 }
 
+// Gate 의 이름·범위·표시('끔' 또는 문턱 dB)는 스키마가 정한다(S2.2, D15).
+const gateDef = getParamDef('fuzz', 'gate');
+
 const fuzzModes: FuzzParams['mode'][] = ['classic', 'gated', 'velcro'];
 const fuzzModeLabels: Record<FuzzParams['mode'], string> = {
   classic: 'Classic',
@@ -30,6 +36,7 @@ const fuzzModeLabels: Record<FuzzParams['mode'], string> = {
 };
 
 function FuzzKnob({ label, value, min, max, step, size = 'large', ariaValueText, onChange }: FuzzKnobProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const progress = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(progress, 0), 1) * 270;
   const accessibleValue = ariaValueText ?? `${Math.round(value)}%`;
@@ -40,7 +47,7 @@ function FuzzKnob({ label, value, min, max, step, size = 'large', ariaValueText,
   return (
     <div className={`fuzz-knob fuzz-knob-${size}`}>
       <span
-        className="fuzz-knob-shell"
+        className="fuzz-knob-shell" {...dragHandlers}
         style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}
       >
         <i aria-hidden="true" />
@@ -50,15 +57,14 @@ function FuzzKnob({ label, value, min, max, step, size = 'large', ariaValueText,
           max={max}
           step={step}
           value={value}
-          {...dragHandlers}
-          aria-label={label}
-          aria-valuetext={`${label} ${accessibleValue}`}
+          aria-label={accessibleName}
+          aria-valuetext={`${accessibleName} ${accessibleValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
-      <strong>{label}</strong>
+      <strong title={tip}>{label}</strong>
       <output>{accessibleValue}</output>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} onChange={onChange} />
     </div>
   );
 }
@@ -67,7 +73,7 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
   const modeIndex = Math.max(0, fuzzModes.indexOf(params.mode));
 
   return (
-    <div className="fuzz-stomp-ui" role="group" aria-label="Fuzz controls">
+    <div className="fuzz-stomp-ui" role="group" aria-label={ko.pedal.fuzz.controls}>
       <section className="fuzz-face">
         <div className="fuzz-check-row">
           <span>CHECK</span>
@@ -133,13 +139,13 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
           onChange={(value) => onChange('bias', value)}
         />
         <SliderControl
-          label="출력 감쇠"
+          label={gateDef.label}
           value={params.gate}
           defaultValue={knobDefault('fuzz', 'gate')}
-          min={0}
-          max={100}
-          step={1}
-          displayValue={`${Math.round(params.gate)}%`}
+          min={gateDef.min}
+          max={gateDef.max}
+          step={gateDef.step}
+          displayValue={formatParamValue(gateDef, params.gate)}
           onChange={(value) => onChange('gate', value)}
         />
         <SliderControl

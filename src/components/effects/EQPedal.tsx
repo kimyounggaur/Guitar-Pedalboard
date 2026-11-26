@@ -1,8 +1,11 @@
 import { knobDefault } from '../knobDefaults';
 import { KnobNumberInput } from '../KnobNumberInput';
 import { useKnobDrag } from '../../hooks/useKnobDrag';
+import { getParamDef } from '../../audio/params';
 import type { EQParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { useParamNames } from '../ParamScope';
+import { ko } from '../../i18n/ko';
 
 interface EQPedalProps {
   params: EQParams;
@@ -27,16 +30,17 @@ const presets: Record<string, Partial<EQParams>> = {
 };
 
 function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFaderProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const progress = max === min ? 0 : (value - min) / (max - min);
   const clampedProgress = Math.min(Math.max(progress, 0), 1);
   const position = 100 - clampedProgress * 100;
   const key = ({ 'Low Cut': 'lowCut', Bass: 'bassGain', Mid: 'midGain', 'Mid Hz': 'midFreq', 'Mid Q': 'midQ', Treble: 'trebleGain', Presence: 'presenceGain', Level: 'level' } as Record<string, string>)[label];
-  const dragHandlers = useKnobDrag(value, min, max, step, onChange, knobDefault('eq', key));
+  const dragHandlers = useKnobDrag(value, min, max, step, onChange, knobDefault('eq', key), { touchAxis: 'y' });
 
   return (
     <div className="graphic-eq-fader">
-      <span>{label}</span>
-      <span className="graphic-eq-slot">
+      <span title={tip}>{label}</span>
+      <span className="graphic-eq-slot" {...dragHandlers}>
         <span className="graphic-eq-scale" aria-hidden="true" />
         <span className="graphic-eq-thumb" style={{ top: `${position}%` }} aria-hidden="true" />
         <input
@@ -45,17 +49,19 @@ function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFad
           max={max}
           step={step}
           value={value}
-          {...dragHandlers}
-          aria-label={label}
-          aria-valuetext={`${label} ${displayValue}`}
+          aria-label={accessibleName}
+          aria-valuetext={`${accessibleName} ${displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
       <output>{displayValue}</output>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} onChange={onChange} />
     </div>
   );
 }
+
+// Level 의 범위는 스키마가 정한다(0~200). 공장 프리셋 'Solo Boost' 가 108 을 쓰므로 0~100 으로는 그 값을 그릴 수 없었다(기록 L-81).
+const levelDef = getParamDef('eq', 'level');
 
 export function EQPedal({ params, onChange }: EQPedalProps) {
   const applyPreset = (name: string) => {
@@ -65,7 +71,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
   };
 
   return (
-    <div className="graphic-eq-ui" role="group" aria-label="Graphic Equalizer controls">
+    <div className="graphic-eq-ui" role="group" aria-label={ko.pedal.eq.controls}>
       <section className="graphic-eq-slider-panel">
         <div className="graphic-eq-led" aria-hidden="true" />
         <div className="graphic-eq-fader-bank">
@@ -135,9 +141,9 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
           <EQFader
             label="Level"
             value={params.level}
-            min={0}
-            max={100}
-            step={1}
+            min={levelDef.min}
+            max={levelDef.max}
+            step={levelDef.step}
             displayValue={`${Math.round(params.level)}%`}
             onChange={(value) => onChange('level', value)}
           />

@@ -1,7 +1,7 @@
 import type { CabParams } from '../types';
 import { clamp } from './db';
 
-type ActiveCabModel = Exclude<CabParams['model'], 'off'>;
+type ActiveCabModel = Exclude<CabParams['model'], 'off' | 'my-ir'>;
 
 type CabinetProfile = {
   durationMs: number;
@@ -241,24 +241,77 @@ function maximumBandGain(samples: Float32Array, sampleRate: number): number {
   return peak;
 }
 
-function calibrateCabinet(samples: Float32Array, sampleRate: number): number {
+/**
+ * IR 을 기준 음량에 맞추는 배율과, 피크 상한 때문에 못 채운 부족분(dB)을 돌려준다.
+ * 부족분은 IR 에 곱하지 않고(IR 피크 ≤ +8 dB 계약을 지키려고) 합성 경로 이득으로 따로 보충한다(S1.4b).
+ * 채널이 둘이면 기준 음량은 두 채널의 평균 에너지로, 피크는 둘 중 큰 쪽으로 잰다(만든 IR 은 두 채널이 같아 한 채널과 결과가 같다).
+ */
+function calibrateChannels(channels: readonly Float32Array[], sampleRate: number): { scale: number; shortfallDb: number } {
   let inputEnergy = 0, outputEnergy = 0;
   for (const fundamental of GUITAR_FUNDAMENTALS) {
     for (let harmonic = 1; harmonic <= 16; harmonic++) {
       const frequency = fundamental * harmonic;
       if (frequency >= sampleRate / 2) continue;
       const weight = 1 / (harmonic * harmonic);
-      const magnitude = responseMagnitude(samples, sampleRate, frequency);
+      let channelEnergy = 0;
+      for (const samples of channels) {
+        const magnitude = responseMagnitude(samples, sampleRate, frequency);
+        channelEnergy += magnitude * magnitude;
+      }
       inputEnergy += weight;
-      outputEnergy += weight * magnitude * magnitude;
+      outputEnergy += weight * channelEnergy / channels.length;
     }
   }
   const reference = Math.sqrt(outputEnergy / inputEnergy);
-  const peak = maximumBandGain(samples, sampleRate);
-  if (!(reference > 0) || !(peak > 0)) return 1;
+  const peak = Math.max(0, ...channels.map((samples) => maximumBandGain(samples, sampleRate)));
+  if (!(reference > 0) || !(peak > 0)) return { scale: 1, shortfallDb: 0 };
   // Leave slight margin for peaks between FFT bins.
-  return Math.min(1 / reference, MAX_REFERENCE_PEAK * 0.96 / peak);
+  const scale = Math.min(1 / reference, MAX_REFERENCE_PEAK * 0.96 / peak);
+  // scale 이 1/reference 보다 작으면 피크 상한이 먼저 걸린 것이라 기준 음량에 못 미친다.
+  return { scale, shortfallDb: Math.max(0, -20 * Math.log10(scale * reference)) };
 }
+
+function calibrateCabinet(samples: Float32Array, sampleRate: number): { scale: number; shortfallDb: number } {
+  return calibrateChannels([samples], sampleRate);
+}
+
+/**
+ * 사용자 IR 의 에너지 정규화(설계서 S5.4, GS-3). 만든 IR 과 같은 기준 스펙트럼으로 음량을 맞춰,
+ * Cab 을 켜고 끌 때 음량 차이가 모델을 바꿀 때와 같은 수준이 되게 한다.
+ * `channels` 는 바꾸지 않고, 배율을 곱한 새 배열과 합성 경로에 더 곱할 이득(dB)을 돌려준다. 모델별 보정표(CAB_LEVEL_TRIM_DB)는 쓰지 않는다.
+ */
+export function normalizeUserImpulse(
+  channels: readonly Float32Array[],
+  sampleRate: number,
+): { channels: Float32Array[]; makeupDb: number } {
+  const { scale, shortfallDb } = calibrateChannels(channels, sampleRate);
+  return {
+    channels: channels.map((samples) => samples.map((value) => value * scale)),
+    makeupDb: Math.min(MAX_CAB_MAKEUP_DB, shortfallDb),
+  };
+}
+
+/**
+ * 모델별 켬/끔 음량 보정(dB). `shortfallDb`(피크 상한으로 못 채운 분)를 채운 뒤에도 남는, REF-PC(합성 파워코드)와
+ * 기준 스펙트럼(여섯 줄의 1/h² 배음)의 차이를 P-04 로 재서 상쇄한다. 새 IR·모델을 더하면
+ * `npm run probe -- --only P-04` 의 `diffDb.<모델>.*` 평균을 보고 이 표를 다시 맞춘다(설계서 GS-3).
+ */
+export const CAB_LEVEL_TRIM_DB: Readonly<Record<ActiveCabModel, number>> = {
+  'v30-4x12': 0.2,
+  'greenback-4x12': -0.5,
+  'blue-1x12': -0.4,
+  'jensen-1x12': -0.6,
+  'tweed-1x10': 0.2,
+};
+
+/** 보충 이득의 상한(dB). 마이크·거리 전 범위에서 실제로는 약 4.4 dB 까지만 쓰인다(`test:cabinet-response` 가 확인). */
+export const MAX_CAB_MAKEUP_DB = 6;
+
+export type CabinetBuild = {
+  impulse: AudioBuffer;
+  /** 합성(컨볼루션) 경로에 더 곱할 이득(dB). 켬/끔 음량 차를 줄이려는 보정이며 IR 에는 들어 있지 않다. */
+  makeupDb: number;
+};
 
 export function createCabinetImpulse(
   context: BaseAudioContext,
@@ -266,14 +319,23 @@ export function createCabinetImpulse(
   micPosition: number,
   distance: number,
 ): AudioBuffer {
+  return createCabinet(context, model, micPosition, distance).impulse;
+}
+
+export function createCabinet(
+  context: BaseAudioContext,
+  model: CabParams['model'],
+  micPosition: number,
+  distance: number,
+): CabinetBuild {
   if (model === 'off') {
     const impulse = context.createBuffer(2, 1, context.sampleRate);
     impulse.getChannelData(0)[0] = 1;
     impulse.getChannelData(1)[0] = 1;
-    return impulse;
+    return { impulse, makeupDb: 0 };
   }
 
-  const profile = cabinetProfiles[model] ?? cabinetProfiles['v30-4x12'];
+  const profile = cabinetProfiles[model as ActiveCabModel] ?? cabinetProfiles['v30-4x12'];
   const mic = safeControl(micPosition, 55) / 100;
   const roomDistance = safeControl(distance, 30) / 100;
   const sampleRate = context.sampleRate;
@@ -318,13 +380,16 @@ export function createCabinetImpulse(
     }
   }
 
+  let shortfallDb = 0;
   if (absolutePeak > 0) {
-    const scale = calibrateCabinet(impulse.getChannelData(0), sampleRate);
+    const calibration = calibrateCabinet(impulse.getChannelData(0), sampleRate);
+    shortfallDb = calibration.shortfallDb;
     for (let channel = 0; channel < impulse.numberOfChannels; channel += 1) {
       const samples = impulse.getChannelData(channel);
-      for (let index = 0; index < samples.length; index += 1) samples[index] *= scale;
+      for (let index = 0; index < samples.length; index += 1) samples[index] *= calibration.scale;
     }
   }
 
-  return impulse;
+  const knownModel = (model in CAB_LEVEL_TRIM_DB ? model : 'v30-4x12') as ActiveCabModel;
+  return { impulse, makeupDb: Math.min(MAX_CAB_MAKEUP_DB, shortfallDb + CAB_LEVEL_TRIM_DB[knownModel]) };
 }

@@ -1,3 +1,4 @@
+import { REVERB_DECAY_MAX, REVERB_DECAY_MIN } from '../params/definitions/reverb';
 import type { ReverbMode } from '../types';
 import type {
   ImpulseWorkerRequest,
@@ -34,7 +35,7 @@ export class ImpulseCache {
   private requestCounter = 0;
   private disposed = false;
 
-  constructor(private readonly context: AudioContext) {
+  constructor(private readonly context: BaseAudioContext) {
     try {
       if (typeof Worker !== 'undefined') {
         this.worker = new Worker(new URL('../workers/impulse.worker.ts', import.meta.url), {
@@ -57,7 +58,7 @@ export class ImpulseCache {
   }
 
   describe(mode: ReverbMode, decay: number): ImpulseDescriptor {
-    const seconds = Number(Math.min(6, Math.max(0.2, decay)).toFixed(1));
+    const seconds = Number(Math.min(REVERB_DECAY_MAX, Math.max(REVERB_DECAY_MIN, decay)).toFixed(1));
     const sampleRate = this.context.sampleRate;
 
     return {

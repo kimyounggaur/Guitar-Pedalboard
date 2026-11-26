@@ -1,4 +1,5 @@
 import type { MouseEventHandler } from 'react';
+import { useParamNames } from './ParamScope';
 
 interface ToggleSwitchProps {
   label: string;
@@ -8,11 +9,13 @@ interface ToggleSwitchProps {
 }
 
 export function ToggleSwitch({ label, checked, onChange, onContextMenu }: ToggleSwitchProps) {
+  const { name, tip } = useParamNames(label);
   return (
     <label className="toggle-switch" onContextMenu={onContextMenu}>
-      <span>{label}</span>
+      <span title={tip}>{label}</span>
       <input
         type="checkbox"
+        aria-label={name}
         checked={checked}
         onChange={(event) => onChange(event.currentTarget.checked)}
       />

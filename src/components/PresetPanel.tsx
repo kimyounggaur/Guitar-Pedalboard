@@ -1,7 +1,18 @@
-import { notifyStorageFailure } from '../store/storageNotice';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AudioEngine } from '../audio/AudioEngine';
-import { usePedalStore } from '../store/pedalStore';
+import type { PedalState } from '../audio/types';
+import { formatTrimDb } from '../audio/offline/loudnessSpec';
+import { safeStorage, STORAGE_KEYS, type StorageKey } from '../persistence';
+import { clonePedals, usePedalStore } from '../store/pedalStore';
+import { formatImportSummary, type ConflictResolution, type ImportPlan } from '../persistence/exportFormat';
+import { idsAfter, reinsertId } from '../persistence/presetUndo';
+import {
+  captureChainSnapshot,
+  isDefaultChain,
+  resetToDefaultChain,
+  restoreChainSnapshot,
+} from '../store/chainActions';
+import { showToast } from '../store/toastStore';
 import {
   applyPresetPedals,
   presetLibraries,
@@ -9,9 +20,14 @@ import {
   type PresetComparisonSlot,
   type PresetListItem,
 } from '../store/presetStore';
+import { ImportConflictDialog, PasteImportDialog } from './PresetImportDialogs';
+import { SameNamePresetDialog } from './PresetSaveDialog';
+import { ko } from '../i18n/ko';
 
-const FAVORITES_KEY = 'guitar-pedalboard:preset-favorites';
-const RECENTS_KEY = 'guitar-pedalboard:preset-recents';
+const FAVORITES_KEY = STORAGE_KEYS.presetFavorites;
+const RECENTS_KEY = STORAGE_KEYS.presetRecents;
+/** 삭제·기본 설정 되돌리기 토스트가 떠 있는 시간(설계서 S2.8: 8초) */
+const UNDO_TOAST_MS = 8000;
 
 type LibraryFilter = {
   id: string;
@@ -20,26 +36,21 @@ type LibraryFilter = {
   count: number;
 };
 
-function canUseStorage(): boolean {
-  try { return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'; } catch { return false; }
+/** 문자열 목록(즐겨찾기·최근). 배열이 아니면 깨진 값으로 보고 SafeStorage 가 보관한 뒤 빈 목록을 쓴다. 문자열이 아닌 항목은 걸러 낸다. */
+function readStringList(key: StorageKey): string[] {
+  return safeStorage.read<string[]>(
+    key,
+    (raw) => {
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error('저장된 목록의 모양이 올바르지 않습니다.');
+      return parsed.filter((item): item is string => typeof item === 'string');
+    },
+    [],
+  );
 }
 
-function readStringList(key: string): string[] {
-  if (!canUseStorage()) return [];
-
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(key) ?? '[]');
-    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeStringList(key: string, values: string[]): void {
-  try {
-    if (!canUseStorage()) throw new Error('Storage unavailable');
-    window.localStorage.setItem(key, JSON.stringify(values));
-  } catch { notifyStorageFailure(); }
+function writeStringList(key: StorageKey, values: string[]): void {
+  safeStorage.set(key, values);
 }
 
 function normalizeText(value: string): string {
@@ -49,7 +60,11 @@ function normalizeText(value: string): string {
 export function PresetPanel() {
   const [name, setName] = useState('Clean Practice');
   const [message, setMessage] = useState<string | null>(null);
-  const [presetJson, setPresetJson] = useState('');
+  const [pasteOpen, setPasteOpen] = useState(false);
+  /** 충돌을 하나씩 묻는 중인 가져오기. `resolutions` 는 지금까지 고른 것(충돌 순서대로). */
+  const [pendingImport, setPendingImport] = useState<{ plan: ImportPlan; resolutions: ConflictResolution[] } | null>(null);
+  /** 같은 이름이 있어 묻는 중인 저장. 누른 순간의 체인·음량 보정을 들고 있다(대화상자가 열린 사이에 바뀌어도 누른 때의 것을 저장한다). */
+  const [pendingSave, setPendingSave] = useState<{ name: string; pedals: PedalState[]; trimDb: number } | null>(null);
   const [activeLibraryId, setActiveLibraryId] = useState('all');
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -57,13 +72,16 @@ export function PresetPanel() {
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => readStringList(FAVORITES_KEY));
   const [recentIds, setRecentIds] = useState<string[]>(() => readStringList(RECENTS_KEY));
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const pedals = usePedalStore((state) => state.pedals);
-  const resetPedalOrder = usePedalStore((state) => state.resetPedalOrder);
+  const [measuring, setMeasuring] = useState(false);
+  const presetTrimDb = usePedalStore((state) => state.presetTrimDb);
+  const setPresetTrimDb = usePedalStore((state) => state.setPresetTrimDb);
   const presets = usePresetStore((state) => state.presets);
   const savePreset = usePresetStore((state) => state.savePreset);
   const deletePreset = usePresetStore((state) => state.deletePreset);
+  const restoreDeletedPreset = usePresetStore((state) => state.restoreDeletedPreset);
   const exportPresets = usePresetStore((state) => state.exportPresets);
-  const importPresets = usePresetStore((state) => state.importPresets);
+  const planImport = usePresetStore((state) => state.planImport);
+  const commitImport = usePresetStore((state) => state.commitImport);
   const slotA = usePresetStore((state) => state.slotA);
   const slotB = usePresetStore((state) => state.slotB);
   const activeSlot = usePresetStore((state) => state.activeSlot);
@@ -146,61 +164,180 @@ export function PresetPanel() {
   }, []);
 
   const loadPreset = useCallback((preset: PresetListItem) => {
-    applyPresetPedals(preset.pedals);
+    applyPresetPedals(preset.pedals, preset.trimDb);
     setName(preset.name);
     setActivePresetId(preset.id);
     rememberRecent(preset.id);
-    setMessage(`${preset.name} 프리셋을 불러왔습니다.`);
+    setMessage(ko.preset.loaded(preset.name));
   }, [rememberRecent]);
 
   const captureComparisonSlot = useCallback((slot: PresetComparisonSlot) => {
     captureCurrentToSlot(slot);
     setActivePresetId(null);
-    setMessage(`${slot} 슬롯에 현재 체인을 저장했습니다.`);
+    setMessage(ko.preset.slotCaptured(slot));
   }, [captureCurrentToSlot]);
 
   const activateComparisonSlot = useCallback((slot: PresetComparisonSlot) => {
     if (!activateSlot(slot)) return;
     setActivePresetId(null);
-    setMessage(`${slot} 슬롯을 활성화했습니다.`);
+    setMessage(ko.preset.slotActivated(slot));
   }, [activateSlot]);
 
-  const saveCurrentPreset = () => {
-    if (!name.trim()) { setMessage('프리셋 이름을 입력해 주세요.'); return; }
-    if (presets.some((preset) => !preset.isFactory && preset.name === name.trim()) && !window.confirm('같은 이름의 프리셋이 있습니다. 덮어쓰시겠습니까?')) return;
-    savePreset(name, pedals);
+  const finishSave = () => {
     setActiveLibraryId('user');
-    setMessage('프리셋을 저장했습니다.');
+    setMessage(ko.preset.saved);
   };
 
-  const removePreset = useCallback((presetId: string) => {
-    const preset = presets.find((item) => item.id === presetId);
-    if (!preset || !window.confirm(`'${preset.name}' 프리셋을 삭제하시겠습니까?`)) return;
-    deletePreset(presetId);
-    setFavoriteIds((currentIds) => {
-      const nextIds = currentIds.filter((id) => id !== presetId);
-      writeStringList(FAVORITES_KEY, nextIds);
-      return nextIds;
-    });
-    setRecentIds((currentIds) => {
-      const nextIds = currentIds.filter((id) => id !== presetId);
-      writeStringList(RECENTS_KEY, nextIds);
-      return nextIds;
-    });
-  }, [deletePreset, presets]);
+  // 같은 이름이 있으면 스토어가 저장하지 않고 'exists' 를 돌려 준다(덮어쓰려면 `overwrite: true`). 그때 대화상자로 묻는다(S2.8).
+  const saveCurrentPreset = () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) { setMessage(ko.preset.nameRequired); return; }
+    const trimDb = presetTrimDb;
+    // 지금 보드는 저장하는 순간에 읽는다(구독하지 않는다 — 노브를 돌릴 때마다 이 패널이 다시 그려지지 않게, S4.3).
+    const snapshot = clonePedals(usePedalStore.getState().pedals);
+    if (savePreset(trimmedName, snapshot, trimDb) === 'exists') {
+      setPendingSave({ name: trimmedName, pedals: snapshot, trimDb });
+      return;
+    }
+    finishSave();
+  };
 
+  const overwritePendingSave = () => {
+    if (!pendingSave) return;
+    savePreset(pendingSave.name, pendingSave.pedals, pendingSave.trimDb, { overwrite: true });
+    setPendingSave(null);
+    finishSave();
+  };
+
+  const savePendingAs = (newName: string) => {
+    if (!pendingSave) return;
+    const result = savePreset(newName, pendingSave.pedals, pendingSave.trimDb);
+    setPendingSave(null);
+    if (result !== 'saved') {
+      setMessage(ko.preset.saveRaced);
+      return;
+    }
+    setName(newName);
+    finishSave();
+  };
+
+  // '음량 맞추기': 지금 체인에 기준 신호(REF-PC)를 4초 흘려 보내 평균 음량과 피크를 재고, 목표(−20 dBFS)에 맞는 보정값을 정한다.
+  // 순간 피크가 커서 목표까지 올리면 리미터가 1 dB 넘게 눌러야 하면 거기서 멈춘다(GS-7).
+  // 오프라인 렌더라 스피커로는 아무 소리도 나가지 않는다. 렌더 코드는 이 버튼을 누를 때만 불러온다.
+  const matchLoudness = async () => {
+    if (measuring) return;
+    setMeasuring(true);
+    setMessage(ko.preset.measuring);
+    try {
+      const { computeTrimForChain } = await import('../audio/offline/measureLoudness');
+      const sampleRate = AudioEngine.getInstance().readLatency().sampleRate || 48000;
+      const result = await computeTrimForChain(usePedalStore.getState().pedals, { sampleRate });
+      if (!result.audible) {
+        setMessage(ko.preset.inaudible);
+        return;
+      }
+      setPresetTrimDb(result.trimDb);
+      setMessage(
+        result.headroomLimited
+          ? ko.preset.trimSetLimited(formatTrimDb(result.trimDb), result.resultRmsDb.toFixed(1))
+          : ko.preset.trimSet(formatTrimDb(result.trimDb)),
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? ko.preset.measureFailedWith(error.message) : ko.preset.measureFailed);
+    } finally {
+      setMeasuring(false);
+    }
+  };
+
+  /**
+   * 즐겨찾기·최근 목록에서 `presetId` 를 빼고, 되돌릴 때 같은 자리에 넣을 기록을 돌려 준다(목록에 없었으면 null).
+   * 저장소를 기준으로 읽고 쓴다 — 되돌리기는 토스트에서 불리므로 그때 이 패널이 사라져 있을 수 있다.
+   */
+  const takeOutOfList = useCallback((key: StorageKey, setIds: (ids: string[]) => void, presetId: string): string[] | null => {
+    const ids = readStringList(key);
+    if (!ids.includes(presetId)) return null;
+    const following = idsAfter(ids, presetId);
+    const next = ids.filter((id) => id !== presetId);
+    writeStringList(key, next);
+    setIds(next);
+    return following;
+  }, []);
+
+  const putBackInList = useCallback((key: StorageKey, setIds: (ids: string[]) => void, presetId: string, following: string[] | null) => {
+    if (following === null) return;
+    const next = reinsertId(readStringList(key), presetId, following);
+    writeStringList(key, next);
+    setIds(next);
+  }, []);
+
+  // 내 프리셋 삭제: 확인을 묻지 않고 바로 지우고, 8초 동안 '실행 취소' 를 둔다(S2.8). 지움은 저장소에 바로 반영돼
+  // 창을 닫아도 그대로이고, 되돌리기는 원래 자리에 다시 끼운다(즐겨찾기·최근 목록의 자리도 함께).
+  const removePreset = useCallback((presetId: string) => {
+    const deleted = deletePreset(presetId);
+    if (!deleted) return;
+    const favoriteFollowing = takeOutOfList(FAVORITES_KEY, setFavoriteIds, presetId);
+    const recentFollowing = takeOutOfList(RECENTS_KEY, setRecentIds, presetId);
+
+    showToast({
+      message: ko.preset.deleted(deleted.preset.name),
+      kind: 'info',
+      key: `preset-deleted:${presetId}`,
+      durationMs: UNDO_TOAST_MS,
+      action: {
+        label: ko.common.undo,
+        onAction: () => {
+          const result = restoreDeletedPreset(deleted);
+          if (!result.restored || !result.preset) {
+            showToast({ message: ko.preset.restoreFailed, kind: 'warning', key: `preset-restore-failed:${presetId}` });
+            return;
+          }
+          putBackInList(FAVORITES_KEY, setFavoriteIds, presetId, favoriteFollowing);
+          putBackInList(RECENTS_KEY, setRecentIds, presetId, recentFollowing);
+          setMessage(
+            result.renamed
+              ? ko.preset.restoredRenamed(result.preset.name)
+              : ko.preset.restored(result.preset.name),
+          );
+        },
+      },
+    });
+  }, [deletePreset, putBackInList, restoreDeletedPreset, takeOutOfList]);
+
+  // 기본 페달 설정: 확인을 묻지 않고 바로 되돌리고, 직전 상태(노브·켜짐·순서·음량 보정·불러 둔 IR)를 기억해 8초 동안 '실행 취소' 를 둔다(S2.8).
   const reset = () => {
-    if (!window.confirm('모든 페달 설정을 기본값으로 되돌리시겠습니까?')) return;
-    AudioEngine.getInstance().clearAllCabinetIrs();
-    resetPedalOrder();
-    AudioEngine.getInstance().rebuildChain();
+    const before = captureChainSnapshot();
+    if (isDefaultChain(before)) {
+      setMessage(ko.preset.alreadyDefault);
+      return;
+    }
+    const previousPresetId = activePresetId;
+    resetToDefaultChain();
     setActivePresetId(null);
-    setMessage('기본 페달 설정으로 되돌렸습니다.');
+    setMessage(ko.preset.resetDone);
+    showToast({
+      message: ko.preset.resetToast,
+      kind: 'info',
+      key: 'chain-reset',
+      durationMs: UNDO_TOAST_MS,
+      action: {
+        label: ko.common.undo,
+        onAction: () => {
+          restoreChainSnapshot(before);
+          setActivePresetId(previousPresetId);
+          setMessage(ko.preset.resetUndone);
+        },
+      },
+    });
   };
 
   const exportJson = () => {
+    // 파일로만 내보낸다. 내 프리셋이 없으면 빈 파일을 만들지 않는다(S2.7).
     const json = exportPresets();
-    setPresetJson(json);
+    if (json === null) {
+      setMessage(ko.preset.nothingToExport);
+      return;
+    }
+    const count = presets.filter((preset) => !preset.isFactory).length;
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -208,29 +345,62 @@ export function PresetPanel() {
     link.download = `guitar-pedalboard-presets-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    setMessage('내 프리셋을 내보냈습니다.');
+    setMessage(ko.preset.exported(count));
   };
 
-  const importJsonText = () => {
-    if (!presetJson.trim()) { setMessage('가져올 JSON을 붙여 넣어 주세요.'); return; }
+  const finishImport = (plan: ImportPlan, resolutions: readonly ConflictResolution[]) => {
+    const result = commitImport(plan, resolutions);
+    if (result.imported > 0) setActiveLibraryId('user');
+    setMessage(formatImportSummary(result));
+  };
 
+  /** 가져올 글을 읽어 계획을 세운다. 충돌이 없으면 바로 저장하고, 있으면 하나씩 묻는다. 틀렸으면 메시지를 돌려 준다. */
+  const startImport = (text: string): string | null => {
     try {
-      const importedCount = importPresets(presetJson);
-      setActiveLibraryId('user');
-      setMessage(`${importedCount}개의 프리셋을 가져왔습니다.`);
+      const plan = planImport(text);
+      if (plan.conflicts.length === 0) finishImport(plan, []);
+      else setPendingImport({ plan, resolutions: [] });
+      return null;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '프리셋을 가져오지 못했습니다.');
+      return error instanceof Error ? error.message : ko.preset.importFailed;
     }
   };
 
   const importJson = async (file: File) => {
+    let text: string;
     try {
-      const importedCount = importPresets(await file.text());
-      setActiveLibraryId('user');
-      setMessage(`${importedCount}개의 프리셋을 가져왔습니다.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '프리셋을 가져오지 못했습니다.');
+      text = await file.text();
+    } catch {
+      setMessage(ko.preset.fileReadFailed);
+      return;
     }
+    const error = startImport(text);
+    if (error) setMessage(error);
+  };
+
+  const submitPastedJson = (text: string): string | null => {
+    const error = startImport(text);
+    if (error === null) setPasteOpen(false);
+    return error;
+  };
+
+  const resolveConflict = (resolution: ConflictResolution, applyToRest: boolean) => {
+    if (!pendingImport) return;
+    const { plan, resolutions } = pendingImport;
+    const chosen = [...resolutions, resolution];
+    const done = applyToRest || chosen.length >= plan.conflicts.length;
+    if (!done) {
+      setPendingImport({ plan, resolutions: chosen });
+      return;
+    }
+    const all = plan.conflicts.map((_, index) => chosen[index] ?? resolution);
+    setPendingImport(null);
+    finishImport(plan, all);
+  };
+
+  const cancelImport = () => {
+    setPendingImport(null);
+    setMessage(ko.preset.importCancelled);
   };
 
   return (
@@ -304,6 +474,21 @@ export function PresetPanel() {
               저장
             </button>
           </div>
+          <div className="preset-loudness" role="group" aria-label="프리셋 음량 보정">
+            <p className="preset-loudness-value" data-testid="preset-trim-value">
+              음량 보정 <strong>{formatTrimDb(presetTrimDb)}</strong>
+            </p>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void matchLoudness()}
+              disabled={measuring}
+              aria-busy={measuring}
+              title="기준 신호로 현재 체인의 음량을 재서 −20 dBFS 에 맞춥니다"
+            >
+              {measuring ? '재는 중…' : '음량 맞추기'}
+            </button>
+          </div>
           <div className="preset-actions">
             <button type="button" className="secondary-button" onClick={exportJson}>
               내보내기
@@ -323,14 +508,26 @@ export function PresetPanel() {
               }}
             />
           </div>
-          <button type="button" className="secondary-button" onClick={importJsonText}>붙여넣은 JSON 가져오기</button>
-          <textarea
-            value={presetJson}
-            onChange={(event) => setPresetJson(event.currentTarget.value)}
-            placeholder="프리셋 JSON 붙여넣기"
-            aria-label="가져올 프리셋 JSON"
-            rows={4}
-          />
+          <button type="button" className="secondary-button" onClick={() => setPasteOpen(true)}>텍스트로 붙여넣기</button>
+          {pasteOpen ? <PasteImportDialog onSubmit={submitPastedJson} onClose={() => setPasteOpen(false)} /> : null}
+          {pendingSave ? (
+            <SameNamePresetDialog
+              name={pendingSave.name}
+              takenNames={new Set(presets.filter((preset) => !preset.isFactory).map((preset) => preset.name))}
+              onOverwrite={overwritePendingSave}
+              onSaveAs={savePendingAs}
+              onCancel={() => setPendingSave(null)}
+            />
+          ) : null}
+          {pendingImport ? (
+            <ImportConflictDialog
+              conflict={pendingImport.plan.conflicts[pendingImport.resolutions.length]}
+              position={pendingImport.resolutions.length + 1}
+              total={pendingImport.plan.conflicts.length}
+              onResolve={resolveConflict}
+              onCancel={cancelImport}
+            />
+          ) : null}
         </div>
 
 

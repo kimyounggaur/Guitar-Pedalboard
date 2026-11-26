@@ -116,12 +116,13 @@
   align-items: end;
 }
 
-.header-tools .connect-panel .audio-file-upload > label {
+.header-tools .connect-panel .audio-file-upload > .file-section-title {
   grid-column: 1;
   grid-row: 1;
+  align-self: start;
 }
 
-.header-tools .connect-panel .audio-file-upload > input[type="file"] {
+.header-tools .connect-panel .audio-file-upload > .file-open-actions {
   grid-column: 1;
   grid-row: 2;
 }
@@ -148,11 +149,6 @@
 
 .header-tools .connect-panel .panic-button {
   width: 78px;
-}
-
-.header-tools .connect-panel .audio-file-upload input[type="file"]::file-selector-button {
-  height: 36px;
-  padding: 0 10px;
 }
 
 .header-tools .connect-panel .file-player,
@@ -376,7 +372,7 @@ h2 {
 
 .preset-library-list small {
   color: var(--ink-muted);
-  font-size: 0.66rem;
+  font-size: var(--fs-min);
   line-height: 1.2;
 }
 
@@ -388,7 +384,7 @@ h2 {
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.14);
   color: #aebbd0;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-style: normal;
   font-weight: 900;
 }
@@ -421,7 +417,7 @@ h2 {
 
 .preset-search span {
   color: var(--ink-muted);
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -509,7 +505,7 @@ h2 {
 
 .section-heading .preset-load-button small {
   color: var(--ink-muted);
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   line-height: 1.25;
 }
 
@@ -633,3 +629,266 @@ h2 {
   cursor: pointer;
 }
 .history-controls button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ============================================================================
+   S1.8 데스크톱 배치(설계서 4.10절) — 오른쪽 오디오 패널 서랍, 머리말 압축, 연결 후 한 줄 상태 표시줄
+   ========================================================================== */
+
+/* 실행 취소·다시 실행(왼쪽)과 오디오 패널 버튼(오른쪽)을 한 줄에 둔다. 휴대폰 배치에는 패널 버튼이 없어 이 상자가 아무것도 바꾸지 않는다. */
+.app-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 12px;
+}
+
+.app-toolbar.has-sidebar-toggle {
+  margin-bottom: 10px;
+}
+
+.app-toolbar .sidebar-toggle {
+  margin: 0 0 0 auto;
+}
+
+/* 768~1279px: 오른쪽 패널은 칸을 차지하지 않고(페달 보드가 전체 폭을 쓴다) 화면 위에 뜨는 서랍이다. */
+.workspace.sidebar-drawer-mode {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sidebar-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(3, 7, 14, 0.58);
+}
+
+.sidebar.is-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  width: min(440px, 94vw);
+  /* 서랍은 화면 높이로 고정이라 안의 내용이 더 길다. 행이 자동 크기면 '넘치면 안 보이는 칸'(프리셋 브라우저: min-height 0 + overflow hidden)의 행이 0 으로 접혀 프리셋 UI 가 통째로 사라진다. 행을 내용 높이로 못 박는다. */
+  grid-auto-rows: max-content;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px 28px;
+  border-left: 1px solid var(--border);
+  background: #0d131c;
+  box-shadow: -20px 0 48px rgba(0, 0, 0, 0.55);
+}
+
+/* 행을 내용 높이로 두면 프리셋 목록이 전부 펼쳐져 서랍이 몇 천 px 로 길어진다. 목록은 칸 안에서 스크롤한다. */
+.sidebar.is-drawer .preset-list {
+  max-height: 320px;
+}
+
+.sidebar-drawer-close {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  justify-self: end;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #73849e;
+  border-radius: 8px;
+  background: #1a2637;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* 데스크톱 머리말: 로고는 높이 56px, 안내 글자는 로고 옆, 연결 패널은 그 아래(연결하면 로고 옆으로 올라온다). */
+@media (min-width: 768px) {
+  .brand-lockup .app-logo-title img {
+    width: auto;
+    height: 56px;
+    max-height: 56px;
+  }
+
+  .brand-lockup .eyebrow {
+    margin-bottom: 2px;
+  }
+
+  .board-section > .section-heading {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "brand hint"
+      "panel panel";
+    align-items: end;
+    gap: 8px 16px;
+    margin-bottom: 12px;
+  }
+
+  .board-section > .section-heading > .brand-lockup {
+    grid-area: brand;
+  }
+
+  .board-section > .section-heading > .header-tools {
+    display: contents;
+  }
+
+  .board-section > .section-heading .hint {
+    grid-area: hint;
+    margin: 0;
+  }
+
+  .board-section > .section-heading .connect-panel {
+    grid-area: panel;
+  }
+
+  .board-section > .section-heading.is-connected {
+    grid-template-areas:
+      "brand panel"
+      "brand hint";
+    align-items: center;
+  }
+
+  .board-section > .section-heading.is-connected .hint {
+    align-self: start;
+  }
+}
+
+/* 연결한 뒤의 연결 패널: 장치·채널·지연·입력 트림·연결 해제·Panic 이 한 줄(좁으면 두 줄)로 이어지는 상태 표시줄 */
+.header-tools .connect-panel.is-connected {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.connect-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.connect-status-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 8px rgba(79, 209, 165, 0.7);
+}
+
+.connect-status-device,
+.connect-status-latency {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.connect-status-device {
+  flex: 1 1 120px;
+}
+
+.connect-status-latency {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.connect-status-key {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.connect-status-value {
+  overflow: hidden;
+  min-width: 0;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connect-status-channel {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.connect-status-channel label {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.connect-status-channel select {
+  width: auto;
+  min-width: 96px;
+  height: 32px;
+}
+
+.connect-status-channel .input-channel-note {
+  max-width: 190px;
+  overflow: hidden;
+  font-size: 0.74rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connect-status-bar .io-slider-control {
+  display: flex;
+  flex: 0 1 190px;
+  align-items: center;
+  gap: 8px;
+  min-width: 130px;
+}
+
+.connect-status-bar .io-slider-control .control-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.connect-status-bar .io-slider-control input[type="range"] {
+  flex: 1 1 60px;
+  min-width: 56px;
+}
+
+.header-tools .connect-panel.is-connected .connect-status-bar .danger-button,
+.header-tools .connect-panel.is-connected .connect-status-bar .panic-button,
+.header-tools .connect-panel.is-connected .connect-status-bar .secondary-button {
+  width: auto;
+  height: 34px;
+  /* 12 → 10 px: 'Panic' 이 '긴급 정지' 가 되며(S4.6) 단추가 넓어져, 1280 px 에서 '입력 설정' 이 다음 줄로 밀려 첫 페달 카드가 40 px 내려갔다(E-06). */
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.connect-panel.is-connected .connect-panel-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.connect-panel.is-connected .connect-panel-details > .panel-title,
+.connect-panel.is-connected .connect-panel-details > .audio-file-upload,
+.connect-panel.is-connected .connect-panel-details > .input-safety-controls {
+  grid-column: 1 / -1;
+}
+
+/* hidden 속성(접힘)이 위의 display: grid 에 눌리지 않도록 선택자 우선순위를 더 높인다 */
+.connect-panel.is-connected .connect-panel-details[hidden] {
+  display: none;
+}

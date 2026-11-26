@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Guitar Pedalboard">
+  <rect id="tile" width="512" height="512" rx="96" fill="#111b27"/>
+  <g id="pedal">
+    <rect x="101.5" y="55.5" width="309" height="401" rx="60" fill="#df8c42" stroke="#f7c47e" stroke-width="9"/>
+    <circle cx="184" cy="140" r="23.5" fill="#25303a"/>
+    <circle cx="256" cy="140" r="23.5" fill="#25303a"/>
+    <circle cx="328" cy="140" r="23.5" fill="#25303a"/>
+    <circle cx="256" cy="333" r="73" fill="#242e38" stroke="#ded5be" stroke-width="8"/>
+  </g>
+</svg>

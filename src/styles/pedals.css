@@ -44,11 +44,6 @@
   opacity: 1;
 }
 
-.pedal-card.is-disabled {
-  filter: grayscale(0.8);
-  opacity: 1;
-}
-
 .pedal-card.is-dragging {
   opacity: 0.6;
   transform: scale(1.03);
@@ -183,7 +178,7 @@
   gap: 5px;
   min-height: 10px;
   color: #ff302d;
-  font-size: 0.52rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   line-height: 1;
 }
@@ -209,7 +204,7 @@
   gap: 3px;
   min-width: 0;
   color: #ffffff;
-  font-size: 0.48rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -263,7 +258,7 @@
   overflow: hidden;
   max-width: 52px;
   color: rgba(255, 255, 255, 0.82);
-  font-size: 0.44rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   line-height: 1;
   text-overflow: ellipsis;
@@ -275,7 +270,7 @@
   grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 1px;
   color: rgba(255, 255, 255, 0.72);
-  font-size: 0.42rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
@@ -737,7 +732,7 @@
   min-height: 12px;
   color: rgba(2, 6, 4, 0.72);
   font-family: system-ui, sans-serif;
-  font-size: 0.49rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   line-height: 1;
   text-align: center;
@@ -816,7 +811,7 @@
   gap: 5px;
   min-width: 0;
   color: #142a18;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -1309,7 +1304,7 @@
   justify-items: center;
   gap: 2px;
   color: #d60f0f;
-  font-size: 0.44rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   line-height: 1;
   transform: translateX(-50%);
@@ -1337,7 +1332,7 @@
   gap: 4px;
   min-width: 0;
   color: #111719;
-  font-size: 0.52rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -1689,7 +1684,7 @@
   border-radius: 4px;
   color: rgba(255, 255, 255, 0.78);
   font: inherit;
-  font-size: 0.58rem;
+  font-size: var(--fs-min);
   letter-spacing: 0;
 }
 
@@ -1710,7 +1705,7 @@
 
 .tap-tempo-status {
   color: rgba(15, 24, 32, 0.72);
-  font-size: 0.58rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -1829,7 +1824,7 @@
   gap: 5px;
   min-width: 0;
   color: #ffffff;
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   text-transform: uppercase;
   text-shadow: 0 1px 1px rgba(0, 81, 84, 0.54);
@@ -1881,7 +1876,7 @@
 
 .reverb-knob output {
   color: rgba(255, 255, 255, 0.82);
-  font-size: 0.58rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   line-height: 1;
 }
@@ -2016,7 +2011,7 @@
 .cab-grille em {
   margin-top: 4px;
   color: #d4c0a0;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-style: normal;
   letter-spacing: 0.08em;
 }
@@ -2106,7 +2101,7 @@
   gap: 12px;
   margin: -5px 0 0;
   color: rgba(255, 244, 226, 0.68);
-  font-size: 0.66rem;
+  font-size: var(--fs-min);
 }
 
 .pedal-card-cab .pedal-switches {
@@ -2193,7 +2188,7 @@
   z-index: 1;
   margin-top: 43px;
   color: #ecfbff;
-  font-size: 0.65rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.24em;
   text-shadow: 0 0 10px rgba(126, 224, 248, 0.72);
 }
@@ -2211,7 +2206,7 @@
 
 .chorus-ui .knob-control-head {
   color: #effbfe;
-  font-size: 0.67rem;
+  font-size: var(--fs-min);
 }
 
 .chorus-ui .knob-control-head output {
@@ -2241,7 +2236,7 @@
 .chorus-voice-selector legend {
   padding: 0 5px;
   color: #e7f9fd;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -2305,7 +2300,7 @@
 
 .chorus-brand-plate span {
   color: rgba(223, 247, 253, 0.7);
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.08em;
 }
 
@@ -2391,7 +2386,7 @@
   z-index: 1;
   margin-top: 42px;
   color: #f3f7ff;
-  font-size: 0.64rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.22em;
   text-shadow: 0 0 11px rgba(164, 200, 255, 0.78);
 }
@@ -2409,7 +2404,7 @@
 
 .flanger-ui .knob-control-head {
   color: #f2f5ff;
-  font-size: 0.67rem;
+  font-size: var(--fs-min);
 }
 
 .flanger-ui .knob-control-head output {
@@ -2445,7 +2440,7 @@
 
 .flanger-brand-plate span {
   color: rgba(231, 238, 255, 0.72);
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.08em;
 }
 
@@ -2545,7 +2540,7 @@
   right: 10px;
   bottom: 7px;
   color: #f7ebff;
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.18em;
   text-shadow: 0 0 10px rgba(221, 170, 255, 0.74);
 }
@@ -2563,7 +2558,7 @@
 
 .phaser-ui .knob-control-head {
   color: #fbf4ff;
-  font-size: 0.67rem;
+  font-size: var(--fs-min);
 }
 
 .phaser-ui .knob-control-head output {
@@ -2593,7 +2588,7 @@
 .phaser-stage-selector legend {
   padding: 0 5px;
   color: #f8eeff;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -2658,7 +2653,7 @@
 
 .phaser-brand-plate span {
   color: rgba(241, 225, 251, 0.74);
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.08em;
 }
 
@@ -2750,7 +2745,7 @@
   right: 10px;
   bottom: 7px;
   color: #ffedc8;
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.18em;
   text-shadow: 0 0 10px rgba(255, 189, 82, 0.7);
 }
@@ -2770,7 +2765,7 @@
 .pedal-card-tremolo .select-control,
 .pedal-card-tremolo .toggle-switch {
   color: #3a210b;
-  font-size: 0.67rem;
+  font-size: var(--fs-min);
 }
 
 .tremolo-ui .knob-control-head output {
@@ -2800,7 +2795,7 @@
 .tremolo-shape-selector legend {
   padding: 0 5px;
   color: #3d220b;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -2890,7 +2885,7 @@
 
 .tremolo-brand-plate span {
   color: rgba(54, 30, 8, 0.7);
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.07em;
 }
 
@@ -2996,7 +2991,7 @@
   right: 10px;
   bottom: 7px;
   color: #dbffc1;
-  font-size: 0.61rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.15em;
   text-shadow: 0 0 10px rgba(143, 235, 78, 0.68);
 }
@@ -3014,7 +3009,7 @@
 .auto-wah-mode-selector legend {
   padding: 0 5px;
   color: #1d3b0d;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -3077,7 +3072,7 @@
 
 .auto-wah-ui .knob-control-head {
   color: #1a350c;
-  font-size: 0.67rem;
+  font-size: var(--fs-min);
 }
 
 .auto-wah-ui .knob-control-head output {
@@ -3123,7 +3118,7 @@
 
 .auto-wah-brand-plate span {
   color: rgba(21, 47, 9, 0.72);
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.07em;
 }
 
@@ -3178,7 +3173,7 @@
   border-radius: 8px;
   background: rgba(13, 21, 38, 0.74);
   color: #cbd7e9;
-  font-size: 0.59rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   letter-spacing: 0.08em;
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.34);
@@ -3216,7 +3211,7 @@
 .vertical-fader-label {
   min-height: 14px;
   overflow: hidden;
-  font-size: 0.58rem;
+  font-size: var(--fs-min);
   font-weight: 850;
   letter-spacing: -0.02em;
   text-overflow: ellipsis;
@@ -3277,7 +3272,10 @@
   transform: translate(-50%, -50%);
 }
 
-.vertical-fader input {
+/* F-1: 예전에는 이 규칙이 `.vertical-fader input` 이라 같은 칸의 숫자 입력(input.knob-number-input)까지 잡았다.
+   숫자 입력은 `.vertical-fader`(position 없음) 바깥의 가장 가까운 위치 지정 조상을 기준으로 inset:0 이 되어
+   투명한 상태로 화면 전체를 덮었고, 그 아래의 모든 포인터 클릭(스톰프 스위치 포함)을 가로챘다. 레일 안의 range 입력만 잡는다. */
+.vertical-fader-rail input {
   position: absolute;
   z-index: 3;
   inset: 0;
@@ -3290,16 +3288,36 @@
   writing-mode: vertical-lr;
 }
 
-.vertical-fader input:focus-visible {
+.vertical-fader-rail input:focus-visible {
   border-radius: 6px;
   outline: 2px solid #f6dc94;
   outline-offset: 3px;
 }
 
+/* F-1: 그래픽 EQ 페달 카드의 안쪽 배치를 바꾸지 않으려고 숫자 입력은 예전처럼 눈에 보이지 않게 두되,
+   자기 칸(.vertical-fader) 안에만 머물고 포인터는 받지 않는다. 키보드/스크린리더로 포커스가 오면 드러나서 쓸 수 있다. */
+.vertical-fader {
+  position: relative;
+}
+
+.vertical-fader > .knob-number-input {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vertical-fader > .knob-number-input:focus {
+  z-index: 4;
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .vertical-fader output {
   min-height: 13px;
   color: #d9e3f3;
-  font-size: 0.54rem;
+  font-size: var(--fs-min);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -3319,7 +3337,7 @@
   border-radius: 9px;
   background: rgba(219, 228, 243, 0.08);
   color: #eef3fb;
-  font-size: 0.65rem;
+  font-size: var(--fs-min);
   font-weight: 800;
 }
 
@@ -3363,7 +3381,7 @@
 
 .graphic-eq7-brand-plate span {
   color: #d7e1f0;
-  font-size: 0.58rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.12em;
 }
 
@@ -3380,7 +3398,9 @@
   display: grid;
   justify-items: center;
   gap: 6px;
+  /* 터치 영역 ≥ 44×44 px(설계서 4.10). 지금 상자는 이보다 훨씬 크지만, 안쪽 배치가 바뀌어도 이 아래로는 줄지 않게 못박는다. */
   min-width: 84px;
+  min-height: 44px;
   padding: 0;
   border: 0;
   border-radius: 8px;
@@ -3475,7 +3495,7 @@
   display: grid;
   gap: 1px;
   color: currentColor;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   letter-spacing: 0;
   line-height: 1.1;
@@ -3527,7 +3547,7 @@
 }
 
 .compressor-knob {
-  font-size: 0.44rem;
+  font-size: var(--fs-min);
 }
 
 .compressor-knob-shell {
@@ -3684,19 +3704,19 @@
 
 .pedal-card-eq .graphic-eq-fader > span:first-child {
   overflow: visible;
-  font-size: 11px;
+  font-size: var(--fs-label);
   white-space: normal;
   text-align: center;
 }
 
 .pedal-card-eq .graphic-eq-fader output {
   max-width: 100%;
-  font-size: 11px;
+  font-size: var(--fs-value);
 }
 
 .graphic-eq-fader {
   gap: 5px;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
 }
 
 .graphic-eq-slot {
@@ -3772,7 +3792,7 @@
 }
 
 .tube-brand-plate span {
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
 }
 
 .tube-footswitch-pad {
@@ -3896,7 +3916,7 @@
 
 .fuzz-io-row {
   top: 82px;
-  font-size: 0.62rem;
+  font-size: var(--fs-min);
 }
 
 .fuzz-logo {
@@ -4283,5 +4303,255 @@
 
 .cab-custom-ir input[type='file'] { max-width: 100%; min-width: 0; }
 .cab-custom-ir p { margin: 0; overflow-wrap: anywhere; }
-.cab-custom-ir small { line-height: 1.5; }
+.cab-custom-ir small { font-size: var(--fs-min); line-height: 1.5; }
 .cab-custom-ir [role='alert'] { color: #ffd0bf; }
+
+/* ============================================================================
+   S1.8 데스크톱 배치(설계서 4.10절, 보고서 R1-7) — 이 파일의 마지막 겹
+   ----------------------------------------------------------------------------
+   앞쪽 규칙은 같은 선택자를 여러 번 덮어 쓴 겹이라(Crunch 얼굴만 1000·3809·4189 줄), 거기를 고치지 않고 이 블록이 마지막에 덮는다.
+   원인: Crunch·Fuzz 얼굴은 로고·LED·입출력 글자를 `top: 98px` 같은 고정 좌표로 놓았는데, 나중에 노브마다 숫자 입력이 붙어
+   노브 줄이 그만큼 길어져 두 글자가 같은 자리를 차지했다. 그래서 장식을 노브 줄 아래에 차례로 쌓는(흐름 배치) 방식으로 바꾼다.
+   모양·색·글자 크기·순서는 그대로이고, 얼굴이 그만큼 세로로 늘어난다.
+   ========================================================================== */
+
+/* 카드 격자: 카드 폭은 300px 이상. 카드 자신의 폭이 컨테이너 쿼리의 기준이다. */
+.pedal-board {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+}
+
+.pedal-card {
+  container-type: inline-size;
+  container-name: pedal-card;
+}
+
+/* --- Compressor·EQ: 두 줄 제목의 줄 높이가 1 보다 작아 윗줄 아래와 아랫줄 위가 겹쳤다 --- */
+.pedal-card-compressor .compressor-brand-panel strong,
+.pedal-card-eq .graphic-eq-brand-panel strong {
+  line-height: 1.15;
+}
+
+/* 노브 칸(약 52px)보다 넓은 5rem 숫자 입력이 이웃 칸·덱 가장자리에 닿거나 잘렸다. 칸 안에 머물게 한다. */
+.pedal-card-compressor .compressor-knob > .knob-number-input,
+.pedal-card-eq .graphic-eq-fader > .knob-number-input {
+  width: calc(100% - 4px);
+  min-width: 0;
+  max-width: 5rem;
+}
+
+/* 맨 위(최댓값)에 놓인 페이더 손잡이가 위의 이름 글자를 덮었다. 이름과 레일 사이를 손잡이 반높이만큼 띄운다. */
+.pedal-card-eq .graphic-eq-slot {
+  margin-top: 14px;
+}
+
+/* --- Crunch: LED·로고·발스위치·OUT/IN·모드 글자를 노브 줄 아래에 쌓는다 --- */
+.pedal-card-crunch .crunch-face {
+  grid-template-rows: auto auto auto;
+  row-gap: 8px;
+  min-height: 0;
+  padding: 10px 12px 12px;
+}
+
+.pedal-card-crunch .crunch-face::before,
+.pedal-card-crunch .crunch-face::after {
+  content: none;
+}
+
+.pedal-card-crunch .crunch-center-row {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 18px;
+  align-items: center;
+  column-gap: 6px;
+}
+
+/* 양옆 잭: 예전에는 얼굴 가장자리의 고정 좌표였다. 이제 가운데 줄의 양끝에 붙어 얼굴 밖으로 10px 나온다. */
+.pedal-card-crunch .crunch-center-row::before,
+.pedal-card-crunch .crunch-center-row::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 28px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #2a2b28, #f5f0df 42%, #60615b 100%);
+  box-shadow: 0 2px 0 rgba(50, 19, 16, 0.35);
+  transform: translateY(-50%);
+}
+
+.pedal-card-crunch .crunch-center-row::before {
+  left: -22px;
+}
+
+.pedal-card-crunch .crunch-center-row::after {
+  right: -22px;
+}
+
+.pedal-card-crunch .crunch-center-stack {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.pedal-card-crunch .crunch-side-label {
+  position: static;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.pedal-card-crunch .crunch-side-out {
+  transform: rotate(180deg);
+}
+
+.pedal-card-crunch .crunch-side-in {
+  transform: none;
+}
+
+.pedal-card-crunch .crunch-led {
+  position: static;
+  width: 26px;
+  height: 26px;
+  border-width: 5px;
+  transform: none;
+}
+
+.pedal-card-crunch .crunch-brand {
+  position: static;
+  width: auto;
+  font-size: 1.2rem;
+  line-height: 1.1;
+  transform: rotate(1deg);
+}
+
+.pedal-card-crunch .crunch-footswitch {
+  position: static;
+  width: 44px;
+  height: 44px;
+  border-width: 4px;
+  transform: none;
+}
+
+.pedal-card-crunch .crunch-footswitch span {
+  width: 32px;
+  height: 32px;
+}
+
+.pedal-card-crunch .crunch-mode-label {
+  position: static;
+  font-size: 1.04rem;
+  line-height: 1.1;
+  text-align: center;
+  transform: rotate(-2deg);
+}
+
+/* --- Fuzz: 입출력 글자와 로고를 노브 줄 아래에 쌓는다('Classic' 값이 로고에 덮이던 자리) --- */
+.pedal-card-fuzz .fuzz-face {
+  grid-template-rows: auto auto auto;
+  row-gap: 6px;
+  min-height: 0;
+  padding: 10px 10px 10px;
+}
+
+.pedal-card-fuzz .fuzz-face::before,
+.pedal-card-fuzz .fuzz-face::after {
+  content: none;
+}
+
+.pedal-card-fuzz .fuzz-io-row {
+  position: relative;
+  top: auto;
+  right: auto;
+  left: auto;
+  align-items: center;
+  font-size: var(--fs-min);
+  line-height: 1.2;
+}
+
+.pedal-card-fuzz .fuzz-io-row::before,
+.pedal-card-fuzz .fuzz-io-row::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 26px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #2c2f2f, #e2e0d4 44%, #72756f 100%);
+  box-shadow: 0 2px 0 rgba(34, 40, 41, 0.26);
+  transform: translateY(-50%);
+}
+
+.pedal-card-fuzz .fuzz-io-row::before {
+  left: -19px;
+}
+
+.pedal-card-fuzz .fuzz-io-row::after {
+  right: -19px;
+}
+
+.pedal-card-fuzz .fuzz-logo {
+  position: static;
+  justify-self: center;
+  font-size: 1rem;
+  line-height: 1.15;
+  transform: none;
+}
+
+/* --- 좁은 카드(폭 340px 이하): 노브 줄 2열, 노브 이름 한 줄 + 말줄임, Tremolo SHAPE 선택 상자, MIDI 줄 분리 --- */
+.tremolo-shape-select {
+  display: none;
+  width: 100%;
+  min-height: 34px;
+}
+
+@container pedal-card (max-width: 340px) {
+  .cab-knob-grid,
+  .chorus-knob-grid,
+  .flanger-knob-grid,
+  .phaser-knob-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .knob-control-head > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tremolo-shape-selector > div {
+    display: none;
+  }
+
+  .tremolo-shape-select {
+    display: block;
+  }
+
+  .pedal-switches {
+    flex-wrap: wrap;
+  }
+
+  .midi-bypass-control {
+    flex: 1 1 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-items: stretch;
+    min-width: 0;
+  }
+
+  .midi-bypass-control .midi-mapping-status {
+    grid-column: 1 / -1;
+    max-width: none;
+    text-align: left;
+  }
+}
+
+/* F-4(S1.8): 노브의 장식 층(링·바늘·가운데 캡)은 투명한 range 입력 위에 겹쳐 그려져서, 입력의 가운데를 누르면 입력 대신 이 장식이 포인터를 받았다.
+   마우스로 노브 한가운데를 끌어도 값이 바뀌지 않았다(스캔: 데스크톱 range 입력 101개 중 13개). 장식은 포인터를 받지 않게 해서 입력이 받는다.
+   클래스 이름이 `…-knob-shell` 로 끝나는 노브 껍데기(Noise Gate·Compressor·Drive·Reverb·Crunch·Fuzz·Delay)와 공용 `.knob-control-shell` 이 모두 대상이다. */
+:is(.knob-control-shell, [class*="knob-shell"])::before,
+:is(.knob-control-shell, [class*="knob-shell"])::after,
+:is(.knob-control-shell, [class*="knob-shell"]) i,
+:is(.knob-control-shell, [class*="knob-shell"]) i::after {
+  pointer-events: none;
+}

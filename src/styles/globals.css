@@ -5,3 +5,6 @@
 @import './panels.css';
 @import './responsive.css';
 @import './accessibility.css';
+@import './type-scale.css';
+@import './contrast.css';
+@import './app-error.css';

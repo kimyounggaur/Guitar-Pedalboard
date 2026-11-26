@@ -1,10 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import type {
-  ButtonHTMLAttributes,
-  CSSProperties,
-  MouseEvent as ReactMouseEvent,
-  SyntheticEvent,
-} from 'react';
+import { memo } from 'react';
+import type { ButtonHTMLAttributes, CSSProperties, SyntheticEvent } from 'react';
 import type {
   AutoWahParams,
   CabParams,
@@ -24,12 +19,13 @@ import type {
   TremoloParams,
 } from '../audio/types';
 import { AudioEngine } from '../audio/AudioEngine';
-import { formatMidiMapping } from '../audio/midi';
-import { useAudioStore } from '../store/audioStore';
 import { usePedalStore } from '../store/pedalStore';
+import { useRenderCount } from '../testing/renderCount';
 import { SliderControl } from './SliderControl';
 import { knobDefault } from './knobDefaults';
-import { StompToggleSwitch } from './StompToggleSwitch';
+import { PedalFooter } from './PedalFooter';
+import { ParamScope } from './ParamScope';
+import { ko } from '../i18n/ko';
 import { NoiseGatePedal } from './effects/NoiseGatePedal';
 import { PhaserPedal } from './effects/PhaserPedal';
 import { CabPedal } from './effects/CabPedal';
@@ -70,41 +66,11 @@ const customPedalChrome = new Set<PedalState['type']>([
   'reverb',
 ]);
 
-export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalCardProps) {
-  const [isMidiMenuOpen, setIsMidiMenuOpen] = useState(false);
-  const midiMenuRef = useRef<HTMLDivElement>(null);
-  const midiMenuItemRef = useRef<HTMLButtonElement>(null);
+/** 같은 페달(참조)·같은 끌기 상태면 다시 그리지 않는다(S4.3). 페달 객체는 바뀐 것만 새로 만들어진다. */
+export const PedalCard = memo(function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalCardProps) {
+  useRenderCount(`PedalCard:${pedal.id}`);
   const setActivePedal = usePedalStore((state) => state.setActivePedal);
-  const setPedalBypass = usePedalStore((state) => state.setPedalBypass);
   const updatePedalParam = usePedalStore((state) => state.updatePedalParam);
-  const midiSupported = useAudioStore((state) => state.midiSupported);
-  const midiLearningPedalId = useAudioStore((state) => state.midiLearningPedalId);
-  const midiMapping = useAudioStore((state) => state.midiMappings[pedal.id]);
-  const startMidiLearn = useAudioStore((state) => state.startMidiLearn);
-  const cancelMidiLearn = useAudioStore((state) => state.cancelMidiLearn);
-  const setMidiMode = useAudioStore((state) => state.setMidiMode);
-  const removeMidiMapping = useAudioStore((state) => state.removeMidiMapping);
-  const isMidiLearning = midiLearningPedalId === pedal.id;
-
-  useEffect(() => {
-    if (!isMidiMenuOpen) return;
-
-    midiMenuItemRef.current?.focus();
-    const handlePointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && midiMenuRef.current?.contains(event.target)) return;
-      setIsMidiMenuOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsMidiMenuOpen(false);
-    };
-
-    window.addEventListener('pointerdown', handlePointerDown, true);
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown, true);
-      window.removeEventListener('keydown', handleKeyDown, true);
-    };
-  }, [isMidiMenuOpen]);
 
   const stopControlEvent = (event: SyntheticEvent) => {
     event.stopPropagation();
@@ -112,39 +78,15 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
 
 
   const commitParam = (key: string, value: number | string | boolean) => {
-    if ((key === 'bypass' || key === 'bypassed') && typeof value === 'boolean') {
-      setPedalBypass(pedal.id, value);
-      AudioEngine.getInstance().setPedalBypass(pedal.id, value);
-      return;
-    }
-
     updatePedalParam(pedal.id, key, value);
     AudioEngine.getInstance().setPedalParam(pedal.id, key, value);
   };
 
-  const openMidiMenu = (event: ReactMouseEvent<HTMLElement>) => {
-    if (!midiSupported) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setIsMidiMenuOpen(true);
-  };
-
-  const requestMidiLearn = () => {
-    setIsMidiMenuOpen(false);
-    void startMidiLearn(pedal.id);
-  };
-
-  const midiStatus = isMidiLearning
-    ? 'MIDI 입력 대기 중…'
-    : midiMapping
-      ? `매핑됨 · ${formatMidiMapping(midiMapping)}`
-      : 'MIDI 미매핑';
-
+  const koName = ko.pedal[pedal.type].name;
 
   return (
-    <article
-      role="group"
-      aria-label={`${pedal.name} 이펙터`}
+    <section
+      aria-label={`${koName} 이펙터`}
       className={`pedal-card${pedal.type === 'compressor' ? ' pedal-card-compressor' : ''}${
         pedal.type === 'drive' ? ' pedal-card-drive' : ''
       }${pedal.type === 'autoWah' ? ' pedal-card-auto-wah' : ''
@@ -154,7 +96,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         pedal.type === 'fuzz' ? ' pedal-card-fuzz' : ''
       }${pedal.type === 'graphicEQ' ? ' pedal-card-graphic-eq' : ''}${pedal.type === 'eq' ? ' pedal-card-eq' : ''}${pedal.type === 'cab' ? ' pedal-card-cab' : ''}${pedal.type === 'chorus' ? ' pedal-card-chorus' : ''}${pedal.type === 'flanger' ? ' pedal-card-flanger' : ''}${pedal.type === 'phaser' ? ' pedal-card-phaser' : ''}${pedal.type === 'tremolo' ? ' pedal-card-tremolo' : ''}${pedal.type === 'delay' ? ' pedal-card-delay' : ''}${
         pedal.type === 'reverb' ? ' pedal-card-reverb' : ''
-      }${pedal.bypassed ? ' is-bypassed' : ''}${!pedal.enabled ? ' is-disabled' : ''}${
+      }${!pedal.active ? ' is-bypassed' : ''}${
         isDragging ? ' is-dragging' : ''
       }`}
       style={{ '--pedal-color': pedal.color } as CSSProperties}
@@ -164,7 +106,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         <button
           className="drag-handle"
           type="button"
-          aria-label={`${pedal.name} 순서 변경`}
+          aria-label={`${koName} 순서 변경`}
           {...(dragHandleProps as ButtonHTMLAttributes<HTMLButtonElement>)}
         >
           ::
@@ -175,6 +117,7 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         </div>
       </header>
 
+      <ParamScope value={pedal.type}>
       <div
         className="pedal-controls"
         onPointerDown={stopControlEvent}
@@ -258,7 +201,6 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
         )}
         {pedal.type === 'cab' && (
           <CabPedal
-            pedalId={pedal.id}
             params={pedal.params as CabParams}
             onChange={(key, value) => commitParam(String(key), value)}
           />
@@ -302,73 +244,9 @@ export function PedalCard({ pedal, dragHandleProps, isDragging = false }: PedalC
           />
         )}
       </div>
+      </ParamScope>
 
-      <footer
-        className="pedal-switches"
-        onPointerDown={stopControlEvent}
-        onMouseDown={stopControlEvent}
-        onTouchStart={stopControlEvent}
-        onKeyDown={stopControlEvent}
-      >
-        <StompToggleSwitch label="효과" checked={pedal.enabled && !pedal.bypassed} onChange={(checked) => commitParam('bypassed', !checked)} />
-        {midiSupported ? (
-          <div className="midi-bypass-control">
-            <button type="button" className="midi-learn-button" aria-haspopup="menu" aria-expanded={isMidiMenuOpen} onClick={() => setIsMidiMenuOpen((open) => !open)} onContextMenu={openMidiMenu}>
-              MIDI 설정
-            </button>
-              <button
-                className="midi-learn-button"
-                type="button"
-                aria-label={`${pedal.name} MIDI 학습${isMidiLearning ? ' 취소' : ''}`}
-                onClick={isMidiLearning ? cancelMidiLearn : requestMidiLearn}
-              >
-                {isMidiLearning ? '학습 취소' : 'MIDI 학습'}
-              </button>
-              <span
-                className={`midi-mapping-status${isMidiLearning ? ' is-learning' : ''}`}
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                {midiStatus}
-              </span>
-              {midiMapping ? (
-                <button type="button" className="midi-learn-button" onClick={() => setMidiMode(pedal.id, midiMapping.mode === 'toggle' ? 'momentary' : 'toggle')}>
-                  방식: {midiMapping.mode === 'toggle' ? '토글' : '누름 유지'}
-                </button>
-              ) : null}
-              {isMidiMenuOpen ? (
-                <div
-                  ref={midiMenuRef}
-                  className="midi-learn-menu"
-                  role="menu"
-                  aria-label={`${pedal.name} MIDI 메뉴`}
-                >
-                  <button
-                    ref={midiMenuItemRef}
-                    type="button"
-                    role="menuitem"
-                    onClick={requestMidiLearn}
-                  >
-                    MIDI 학습
-                  </button>
-                  {midiMapping ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        removeMidiMapping(pedal.id);
-                        setIsMidiMenuOpen(false);
-                      }}
-                    >
-                      매핑 해제
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-          </div>
-        ) : null}
-      </footer>
-    </article>
+      <PedalFooter pedalId={pedal.id} pedalName={koName} active={pedal.active} />
+    </section>
   );
-}
+});

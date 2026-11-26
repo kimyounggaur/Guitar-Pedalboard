@@ -7,3 +7,15 @@ assets/
 .env
 .env.*
 !.env.example
+
+dist-probe/
+/e2e/fixtures/*.wav
+
+# Playwright (S0.4)
+test-results/
+playwright-report/
+blob-report/
+/playwright/.cache/
+
+# 참고 자료 폴더(S4.8, R4-8·D4): 이미지·제품 사진은 저장소에 넣지 않는다. AI 기획 문서는 docs/planning/ 에 있다.
+/Source/

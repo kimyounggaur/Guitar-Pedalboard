@@ -18,6 +18,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # 반응형 시험이 실제 Chrome 으로 모바일 배치를 잰다. CI 에서 이 파일이 없으면 시험이 실패한다.
+      CHROME_PATH: /usr/bin/google-chrome
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,14 +34,45 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # test:pwa 가 dist/ 를 읽으므로 시험보다 먼저 빌드한다.
       - name: Build
         run: npm run build
 
-      - name: Check and test
+      - name: Check Chrome
         run: |
-          npm run lint
-          npm test
-          npm run test:responsive-a11y
+          test -x "$CHROME_PATH"
+          "$CHROME_PATH" --version
+
+      # npm test 가 반응형 시험(test:responsive-a11y)과 오디오 렌더 프로브(test:probe)까지 포함해 모두 돌린다.
+      # 하나라도 실패하면 이 job 이 실패하고, deploy job(needs: build)은 실행되지 않는다.
+      - name: Test
+        run: npm test
+
+      # Playwright 의 Chromium 으로 가짜 마이크·서비스 워커·화면 크기 시나리오(E-xx)를 돌린다.
+      # 위에서 만든 dist/ 를 그대로 서비스한다(E2E_SKIP_BUILD). 반응형 시험이 쓰는 CHROME_PATH 와는 별개다.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E
+        run: npm run e2e
+        env:
+          E2E_SKIP_BUILD: '1'
+
+      - name: Upload E2E report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

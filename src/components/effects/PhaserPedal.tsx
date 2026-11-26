@@ -1,6 +1,8 @@
 import { knobDefault } from '../knobDefaults';
 import type { PedalParamValue, PhaserParams } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { ko } from '../../i18n/ko';
+import { useParamNames } from '../ParamScope';
 
 interface PhaserPedalProps {
   params: PhaserParams;
@@ -10,8 +12,9 @@ interface PhaserPedalProps {
 const stageOptions: PhaserParams['stages'][] = [4, 6, 8, 12];
 
 export function PhaserPedal({ params, onChange }: PhaserPedalProps) {
+  const stagesName = useParamNames('단 수').name;
   return (
-    <div className="phaser-ui" role="group" aria-label="페이저 컨트롤">
+    <div className="phaser-ui" role="group" aria-label={ko.pedal.phaser.controls}>
       <div className="phaser-orbit-panel" aria-hidden="true">
         <span />
         <span />
@@ -73,7 +76,7 @@ export function PhaserPedal({ params, onChange }: PhaserPedalProps) {
         />
       </div>
 
-      <fieldset className="phaser-stage-selector">
+      <fieldset className="phaser-stage-selector" aria-label={stagesName}>
         <legend>Stages</legend>
         <div>
           {stageOptions.map((stages) => (
@@ -91,7 +94,7 @@ export function PhaserPedal({ params, onChange }: PhaserPedalProps) {
 
       <div className="phaser-brand-plate">
         <strong>PHASER</strong>
-        <span>Multi Stage All-Pass</span>
+        <span>{ko.tagline.phaser}</span>
       </div>
     </div>
   );

@@ -28,7 +28,7 @@ globalThis.AudioWorkletNode = class extends Node {
   constructor(context, name, options) { super(); assert.equal(name, 'compressor-processor'); assert.deepEqual(options.outputChannelCount, [2]); nodes.push(this); }
 };
 const context = { currentTime: 0, createGain() { const node = new Node(); nodes.push(node); return node; } };
-const pedal = { id: 'compressor', type: 'compressor', enabled: true, bypassed: false,
+const pedal = { id: 'compressor', type: 'compressor', active: true,
   params: { mix: 45, level: 100, sustain: 50, threshold: -30, ratio: 4, attack: .003, release: .2, knee: 20 } };
 const effect = new CompressorEffect(context, pedal);
 const processorNode = nodes.at(-1);
@@ -38,7 +38,7 @@ const direct = [...effect.input.connections].find((node) => node.connections.has
 const gate = [...effect.input.connections].find((node) => node !== direct);
 const dry = [...gate.connections].find((node) => node !== [...nodes].find((n) => n.connections.has(processorNode)));
 assert.ok(dry, 'parallel direct path is connected without a delay node');
-effect.update({ ...pedal, bypassed: true });
+effect.update({ ...pedal, active: false });
 assert.equal(direct.gain.value, 1, 'bypass preserves direct signal');
 processorNode.port.onmessage({ data: { type: 'reduction', value: -7.5 } });
 assert.equal(effect.getGainReduction(), -7.5);

@@ -8,15 +8,58 @@
       content="브라우저에서 기타 톤을 만들고 연주할 수 있는 웹 기타 멀티 이펙터입니다."
     />
     <meta name="theme-color" content="#0b0f16" />
-    <link rel="preload" as="image" href="%BASE_URL%logo.webp" fetchpriority="high" />
-    <link rel="icon" href="%BASE_URL%favicon.ico" sizes="any" />
-    <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
-    <link rel="icon" href="%BASE_URL%favicon.ico" sizes="any" />
+    <link
+      rel="preload"
+      as="image"
+      href="%BASE_URL%logo-520.webp"
+      imagesrcset="%BASE_URL%logo-520.webp 520w, %BASE_URL%logo-1040.webp 1040w"
+      imagesizes="(min-width: 768px) 113px, min(520px, 62vw)"
+      fetchpriority="high"
+    />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
+    <link rel="icon" href="%BASE_URL%favicon.ico" sizes="32x32" />
     <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
     <title>Guitar Pedalboard - 웹 기타 멀티 이펙터</title>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>이 앱은 JavaScript가 필요합니다. 브라우저에서 JavaScript를 켠 뒤 다시 열어 주세요.</noscript>
+    <script>
+      // 앱 스크립트를 내려받지 못했거나 시작 중에 예외가 나서 React 가 뜨기 전에 멈추면 흰 화면 대신 안내를 보여 준다(S1.7).
+      // React 가 뜬 뒤에는 오류 경계(AppErrorBoundary)와 전역 오류 토스트가 맡으므로 #root 에 내용이 있으면 아무것도 하지 않는다.
+      // 나중에 앱이 정상으로 뜨면 React 가 이 안내를 대신한다.
+      (function () {
+        window.addEventListener(
+          'error',
+          function (event) {
+            var target = event.target;
+            var scriptFailed = !!target && target.tagName === 'SCRIPT';
+            var ownError = (!target || target === window) && (!event.filename || event.filename.indexOf(location.origin) === 0);
+            if (!scriptFailed && !ownError) return;
+            var root = document.getElementById('root');
+            if (!root || root.childElementCount > 0) return;
+            var main = document.createElement('main');
+            main.setAttribute('role', 'alert');
+            main.setAttribute('data-static-fallback', 'true');
+            main.style.cssText = 'padding:2rem;color:#e8edf4;background:#0b0f16;min-height:100vh;font-family:system-ui,sans-serif;line-height:1.6';
+            var title = document.createElement('h1');
+            title.textContent = '앱을 시작하지 못했습니다';
+            var body = document.createElement('p');
+            body.textContent = '브라우저가 이 앱을 실행하지 못했습니다. 페이지를 다시 불러오고, 계속 안 되면 브라우저를 최신 버전으로 업데이트하거나 다른 브라우저(Chrome, Edge, Safari)로 열어 보세요.';
+            var reload = document.createElement('button');
+            reload.type = 'button';
+            reload.textContent = '페이지 다시 불러오기';
+            reload.style.cssText = 'min-height:44px;padding:8px 16px;font:inherit;cursor:pointer';
+            reload.addEventListener('click', function () { location.reload(); });
+            main.appendChild(title);
+            main.appendChild(body);
+            main.appendChild(reload);
+            root.replaceChildren(main);
+          },
+          true
+        );
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,0 +1,2116 @@
+{
+  "schema": 1,
+  "description": "브라우저 시나리오(E-04·E-06)가 잰 값의 기준선. 두 시험 모두 정식 단언(S1.6·S1.8)이고, 이 파일은 사람이 값의 변화를 읽기 위한 기록이다. E2E_UPDATE_BASELINE=1 npm run e2e 로만 갱신하고 커밋 메시지는 `baseline: {Step ID} {이유}` 로 적는다.",
+  "generatedWith": {
+    "playwright": "1.63.0",
+    "note": "scripts/ 가 아니라 e2e/tests 의 E-04·E-06 시험이 잰 값을 쓴다"
+  },
+  "results": {
+    "E-04": {
+      "360x640": {
+        "dock-collapsed": {
+          "count": 15,
+          "reachable": 15,
+          "reachableRatio": 1,
+          "boxAboveDock": 15,
+          "reasons": {},
+          "blockedBy": {},
+          "minWidth": 54,
+          "minHeight": 101,
+          "freeHeight": 582,
+          "failed": [],
+          "firstScreenKnobs": 3,
+          "lastPedalGapAboveDock": 27.3
+        },
+        "dock-expanded": {
+          "count": 15,
+          "reachable": 15,
+          "reachableRatio": 1,
+          "boxAboveDock": 15,
+          "reasons": {},
+          "blockedBy": {},
+          "minWidth": 54,
+          "minHeight": 101,
+          "freeHeight": 320,
+          "failed": [],
+          "dockHeight": 320,
+          "lastPedalGapAboveDock": 27.3,
+          "tabs": {
+            "input": {
+              "reachable": 15,
+              "boxAboveDock": 15,
+              "dockHeight": 320,
+              "lastPedalGapAboveDock": 27.3
+            }
+          }
+        }
+      },
+      "390x844": {
+        "dock-collapsed": {
+          "count": 15,
+          "reachable": 15,
+          "reachableRatio": 1,
+          "boxAboveDock": 15,
+          "reasons": {},
+          "blockedBy": {},
+          "minWidth": 54,
+          "minHeight": 101,
+          "freeHeight": 786,
+          "failed": [],
+          "firstScreenKnobs": 5,
+          "lastPedalGapAboveDock": 27.3
+        },
+        "dock-expanded": {
+          "count": 15,
+          "reachable": 15,
+          "reachableRatio": 1,
+          "boxAboveDock": 15,
+          "reasons": {},
+          "blockedBy": {},
+          "minWidth": 54,
+          "minHeight": 101,
+          "freeHeight": 422,
+          "failed": [],
+          "dockHeight": 422,
+          "lastPedalGapAboveDock": 27.3,
+          "tabs": {
+            "input": {
+              "reachable": 15,
+              "boxAboveDock": 15,
+              "dockHeight": 422,
+              "lastPedalGapAboveDock": 27.3
+            }
+          }
+        }
+      },
+      "412x915": {
+        "dock-collapsed": {
+          "count": 15,
+          "reachable": 15,
+          "reachableRatio": 1,
+          "boxAboveDock": 15,
+          "reasons": {},
+          "blockedBy": {},
+          "minWidth": 54,
+          "minHeight": 101,
+          "freeHeight": 857,
+          "failed": [],
+          "firstScreenKnobs": 5,
+          "lastPedalGapAboveDock": 27.3
+        },
+        "dock-expanded": {
+          "count": 15,
+          "reachable": 15,
+          "reachableRatio": 1,
+          "boxAboveDock": 15,
+          "reasons": {},
+          "blockedBy": {},
+          "minWidth": 54,
+          "minHeight": 101,
+          "freeHeight": 457.5,
+          "failed": [],
+          "dockHeight": 458,
+          "lastPedalGapAboveDock": 27.8,
+          "tabs": {
+            "input": {
+              "reachable": 15,
+              "boxAboveDock": 15,
+              "dockHeight": 458,
+              "lastPedalGapAboveDock": 27.8
+            }
+          }
+        }
+      }
+    },
+    "E-06": {
+      "1024x768": {
+        "sidebar-collapsed": {
+          "panel": "drawer",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 3,
+          "cardWidthMin": 314,
+          "cardWidthMax": 314,
+          "boardWidth": 992,
+          "firstCardTop": 900.2
+        },
+        "sidebar-open": {
+          "panel": "drawer",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 0,
+            "reachableRatio": 0,
+            "reasons": {
+              "covered": 15
+            },
+            "blockedBy": {
+              "div.sidebar-scrim": 10,
+              "span.control-row": 2,
+              "div.waveform-panel": 2,
+              "p": 1
+            },
+            "visibleRatioMean": 0,
+            "visibleRatioMin": 0
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 3,
+          "cardWidthMin": 314,
+          "cardWidthMax": 314,
+          "boardWidth": 992,
+          "firstCardTop": 900.2
+        },
+        "connected": {
+          "firstCardTop": 280.9,
+          "firstCardTopBeforeConnect": 900.2,
+          "statusBarHeight": 72,
+          "logoHeight": 56,
+          "firstScreen": {
+            "rowCards": 3,
+            "visible": 0,
+            "firstCardTop": 281,
+            "firstSwitchBottom": 1135,
+            "viewportHeight": 768
+          },
+          "firstScreenBeforeConnect": {
+            "rowCards": 3,
+            "visible": 0,
+            "firstCardTop": 900,
+            "firstSwitchBottom": 1754,
+            "viewportHeight": 768
+          },
+          "horizontalOverflowPx": 0
+        }
+      },
+      "1280x800": {
+        "sidebar-collapsed": {
+          "panel": "docked",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 3,
+          "cardWidthMin": 399.3,
+          "cardWidthMax": 399.3,
+          "boardWidth": 1248,
+          "firstCardTop": 736.7
+        },
+        "sidebar-open": {
+          "panel": "docked",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 2,
+          "cardWidthMin": 344.1,
+          "cardWidthMax": 344.1,
+          "boardWidth": 728,
+          "firstCardTop": 770.1
+        },
+        "connected": {
+          "firstCardTop": 280.9,
+          "firstCardTopBeforeConnect": 770.1,
+          "statusBarHeight": 72,
+          "logoHeight": 56,
+          "firstScreen": {
+            "rowCards": 2,
+            "visible": 0,
+            "firstCardTop": 281,
+            "firstSwitchBottom": 1135,
+            "viewportHeight": 800
+          },
+          "firstScreenBeforeConnect": {
+            "rowCards": 2,
+            "visible": 0,
+            "firstCardTop": 770,
+            "firstSwitchBottom": 1624,
+            "viewportHeight": 800
+          },
+          "horizontalOverflowPx": 0
+        }
+      },
+      "1366x768": {
+        "sidebar-collapsed": {
+          "panel": "docked",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 4,
+          "cardWidthMin": 318.4,
+          "cardWidthMax": 318.4,
+          "boardWidth": 1334,
+          "firstCardTop": 736.7
+        },
+        "sidebar-open": {
+          "panel": "docked",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 2,
+          "cardWidthMin": 387.1,
+          "cardWidthMax": 387.1,
+          "boardWidth": 814,
+          "firstCardTop": 770.1
+        },
+        "connected": {
+          "firstCardTop": 280.9,
+          "firstCardTopBeforeConnect": 770.1,
+          "statusBarHeight": 72,
+          "logoHeight": 56,
+          "firstScreen": {
+            "rowCards": 2,
+            "visible": 0,
+            "firstCardTop": 281,
+            "firstSwitchBottom": 1135,
+            "viewportHeight": 768
+          },
+          "firstScreenBeforeConnect": {
+            "rowCards": 2,
+            "visible": 0,
+            "firstCardTop": 770,
+            "firstSwitchBottom": 1624,
+            "viewportHeight": 768
+          },
+          "horizontalOverflowPx": 0
+        }
+      },
+      "1440x900": {
+        "sidebar-collapsed": {
+          "panel": "docked",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 4,
+          "cardWidthMin": 336.9,
+          "cardWidthMax": 336.9,
+          "boardWidth": 1408,
+          "firstCardTop": 736.7
+        },
+        "sidebar-open": {
+          "panel": "docked",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 2,
+          "cardWidthMin": 424.1,
+          "cardWidthMax": 424.1,
+          "boardWidth": 888,
+          "firstCardTop": 752.2
+        },
+        "connected": {
+          "firstCardTop": 280.9,
+          "firstCardTopBeforeConnect": 752.2,
+          "statusBarHeight": 72,
+          "logoHeight": 56,
+          "firstScreen": {
+            "rowCards": 2,
+            "visible": 0,
+            "firstCardTop": 281,
+            "firstSwitchBottom": 1135,
+            "viewportHeight": 900
+          },
+          "firstScreenBeforeConnect": {
+            "rowCards": 2,
+            "visible": 0,
+            "firstCardTop": 752,
+            "firstSwitchBottom": 1606,
+            "viewportHeight": 900
+          },
+          "horizontalOverflowPx": 0
+        }
+      },
+      "1536x864": {
+        "sidebar-collapsed": {
+          "panel": "docked",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 4,
+          "cardWidthMin": 360.9,
+          "cardWidthMax": 360.9,
+          "boardWidth": 1504,
+          "firstCardTop": 736.7
+        },
+        "sidebar-open": {
+          "panel": "docked",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 3,
+          "cardWidthMin": 311.3,
+          "cardWidthMax": 311.3,
+          "boardWidth": 984,
+          "firstCardTop": 752.2
+        },
+        "connected": {
+          "firstCardTop": 280.9,
+          "firstCardTopBeforeConnect": 752.2,
+          "statusBarHeight": 72,
+          "logoHeight": 56,
+          "firstScreen": {
+            "rowCards": 3,
+            "visible": 0,
+            "firstCardTop": 281,
+            "firstSwitchBottom": 1135,
+            "viewportHeight": 864
+          },
+          "firstScreenBeforeConnect": {
+            "rowCards": 3,
+            "visible": 0,
+            "firstCardTop": 752,
+            "firstSwitchBottom": 1606,
+            "viewportHeight": 864
+          },
+          "horizontalOverflowPx": 0
+        }
+      },
+      "1920x1080": {
+        "sidebar-collapsed": {
+          "panel": "docked",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 6,
+          "cardWidthMin": 301.2,
+          "cardWidthMax": 301.2,
+          "boardWidth": 1888,
+          "firstCardTop": 736.7
+        },
+        "sidebar-open": {
+          "panel": "docked",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 4,
+          "cardWidthMin": 326.9,
+          "cardWidthMax": 326.9,
+          "boardWidth": 1368,
+          "firstCardTop": 736.7
+        },
+        "connected": {
+          "firstCardTop": 242.9,
+          "firstCardTopBeforeConnect": 736.7,
+          "statusBarHeight": 34,
+          "logoHeight": 56,
+          "firstScreen": {
+            "rowCards": 4,
+            "visible": 0,
+            "firstCardTop": 243,
+            "firstSwitchBottom": 1097,
+            "viewportHeight": 1080
+          },
+          "firstScreenBeforeConnect": {
+            "rowCards": 4,
+            "visible": 0,
+            "firstCardTop": 737,
+            "firstSwitchBottom": 1591,
+            "viewportHeight": 1080
+          },
+          "horizontalOverflowPx": 0
+        }
+      },
+      "768x1024": {
+        "sidebar-collapsed": {
+          "panel": "drawer",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 2,
+          "cardWidthMin": 348.1,
+          "cardWidthMax": 348.1,
+          "boardWidth": 736,
+          "firstCardTop": 900.2
+        },
+        "sidebar-open": {
+          "panel": "drawer",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 0,
+            "reachableRatio": 0,
+            "reasons": {
+              "covered": 15
+            },
+            "blockedBy": {
+              "div.sidebar-scrim": 8,
+              "label": 7
+            },
+            "visibleRatioMean": 0,
+            "visibleRatioMin": 0
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 2,
+          "cardWidthMin": 348.1,
+          "cardWidthMax": 348.1,
+          "boardWidth": 736,
+          "firstCardTop": 900.2
+        },
+        "connected": {
+          "firstCardTop": 280.9,
+          "firstCardTopBeforeConnect": 900.2,
+          "statusBarHeight": 72,
+          "logoHeight": 56,
+          "firstScreen": {
+            "rowCards": 2,
+            "visible": 0,
+            "firstCardTop": 281,
+            "firstSwitchBottom": 1135,
+            "viewportHeight": 1024
+          },
+          "firstScreenBeforeConnect": {
+            "rowCards": 2,
+            "visible": 0,
+            "firstCardTop": 900,
+            "firstSwitchBottom": 1754,
+            "viewportHeight": 1024
+          },
+          "horizontalOverflowPx": 0
+        }
+      },
+      "1680x1050": {
+        "connected": {
+          "firstCardTop": 282.9,
+          "firstCardTopBeforeConnect": 736.7,
+          "statusBarHeight": 74,
+          "logoHeight": 56,
+          "firstScreen": {
+            "rowCards": 3,
+            "visible": 0,
+            "firstCardTop": 283,
+            "firstSwitchBottom": 1137,
+            "viewportHeight": 1050
+          },
+          "firstScreenBeforeConnect": {
+            "rowCards": 3,
+            "visible": 0,
+            "firstCardTop": 737,
+            "firstSwitchBottom": 1591,
+            "viewportHeight": 1050
+          },
+          "horizontalOverflowPx": 0
+        },
+        "sidebar-collapsed": {
+          "panel": "docked",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 5,
+          "cardWidthMin": 315.4,
+          "cardWidthMax": 315.5,
+          "boardWidth": 1648,
+          "firstCardTop": 736.7
+        },
+        "sidebar-open": {
+          "panel": "docked",
+          "overlapTotal": 0,
+          "overlapCards": [],
+          "overlaps": [
+            {
+              "card": "Noise Gate",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Compressor",
+              "count": 0,
+              "boxes": 31,
+              "pairs": []
+            },
+            {
+              "card": "Auto Wah",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Drive",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Crunch",
+              "count": 0,
+              "boxes": 29,
+              "pairs": []
+            },
+            {
+              "card": "Fuzz",
+              "count": 0,
+              "boxes": 28,
+              "pairs": []
+            },
+            {
+              "card": "Graphic EQ",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "EQ",
+              "count": 0,
+              "boxes": 34,
+              "pairs": []
+            },
+            {
+              "card": "Cab",
+              "count": 0,
+              "boxes": 32,
+              "pairs": []
+            },
+            {
+              "card": "Chorus",
+              "count": 0,
+              "boxes": 27,
+              "pairs": []
+            },
+            {
+              "card": "Flanger",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            },
+            {
+              "card": "Phaser",
+              "count": 0,
+              "boxes": 26,
+              "pairs": []
+            },
+            {
+              "card": "Tremolo",
+              "count": 0,
+              "boxes": 30,
+              "pairs": []
+            },
+            {
+              "card": "Delay",
+              "count": 0,
+              "boxes": 33,
+              "pairs": []
+            },
+            {
+              "card": "Reverb",
+              "count": 0,
+              "boxes": 23,
+              "pairs": []
+            }
+          ],
+          "switches": {
+            "count": 15,
+            "reachable": 15,
+            "reachableRatio": 1,
+            "reasons": {},
+            "blockedBy": {},
+            "visibleRatioMean": 1,
+            "visibleRatioMin": 1
+          },
+          "horizontalOverflowPx": 0,
+          "columns": 3,
+          "cardWidthMin": 359.3,
+          "cardWidthMax": 359.3,
+          "boardWidth": 1128,
+          "firstCardTop": 736.7
+        }
+      }
+    }
+  }
+}

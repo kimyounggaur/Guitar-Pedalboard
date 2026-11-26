@@ -4,6 +4,8 @@ import { useAudioStore } from '../../store/audioStore';
 import { SliderControl } from '../SliderControl';
 import { TapTempoControl } from '../TapTempoControl';
 import { ToggleSwitch } from '../ToggleSwitch';
+import { ko } from '../../i18n/ko';
+import { useParamNames } from '../ParamScope';
 
 interface TremoloPedalProps {
   pedalId: string;
@@ -14,10 +16,12 @@ interface TremoloPedalProps {
 const shapeOptions: TremoloParams['shape'][] = ['sine', 'triangle', 'square'];
 
 export function TremoloPedal({ pedalId, params, onChange }: TremoloPedalProps) {
+  const shapeName = useParamNames('Shape').name;
+  const divisionName = useParamNames('Division').name;
   const setTempoSync = useAudioStore((state) => state.setTempoSync);
 
   return (
-    <div className="tremolo-ui" role="group" aria-label="트레몰로 컨트롤">
+    <div className="tremolo-ui" role="group" aria-label={ko.pedal.tremolo.controls}>
       <div className="tremolo-pulse-panel" aria-hidden="true">
         <span />
         <span />
@@ -70,7 +74,7 @@ export function TremoloPedal({ pedalId, params, onChange }: TremoloPedalProps) {
         />
       </div>
 
-      <fieldset className="tremolo-shape-selector">
+      <fieldset className="tremolo-shape-selector" aria-label={shapeName}>
         <legend>Shape</legend>
         <div>
           {shapeOptions.map((shape) => (
@@ -84,6 +88,19 @@ export function TremoloPedal({ pedalId, params, onChange }: TremoloPedalProps) {
             </button>
           ))}
         </div>
+        {/* 카드가 340px 이하로 좁아지면 세 버튼 대신 이 선택 상자만 보인다(S1.8, 컨테이너 쿼리). 둘 중 숨겨진 쪽은 접근성 트리에도 없다. */}
+        <select
+          className="tremolo-shape-select"
+          aria-label={shapeName}
+          value={params.shape}
+          onChange={(event) => onChange('shape', event.currentTarget.value)}
+        >
+          {shapeOptions.map((shape) => (
+            <option key={shape} value={shape}>
+              {shape}
+            </option>
+          ))}
+        </select>
       </fieldset>
 
       <div className="tremolo-sync-controls">
@@ -96,6 +113,7 @@ export function TremoloPedal({ pedalId, params, onChange }: TremoloPedalProps) {
         <label className="select-control tremolo-division-control">
           <span>Division</span>
           <select
+            aria-label={divisionName}
             value={params.division}
             onChange={(event) => onChange('division', event.currentTarget.value)}
           >
@@ -109,7 +127,7 @@ export function TremoloPedal({ pedalId, params, onChange }: TremoloPedalProps) {
 
       <div className="tremolo-brand-plate">
         <strong>TREMOLO</strong>
-        <span>Click-Safe Amplitude Modulation</span>
+        <span>{ko.tagline.tremolo}</span>
       </div>
     </div>
   );

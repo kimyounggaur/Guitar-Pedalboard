@@ -11,7 +11,6 @@ import {
   normalizeAutoWahParams,
 } from '../audio/nodes/AutoWahEffect';
 import {
-  CHORUS_LFO_BANK_SIZE,
   CHORUS_VOICE_BANK_SIZE,
   normalizeChorusParams,
 } from '../audio/nodes/ChorusEffect';
@@ -169,7 +168,7 @@ function assertCurrentPresetPreserved(preset: Preset | undefined, label: string)
   assert(compressor?.params.level === 2, `${label} Level 2% 보존`);
   assert(compressor?.params.attack === 0.006, `${label} Attack 보존`);
   assert(
-    autoWah?.bypassed === true &&
+    autoWah?.active === false &&
       autoWah.params.sensitivity === 55 &&
       autoWah.params.range === 60 &&
       autoWah.params.resonance === 45 &&
@@ -179,19 +178,19 @@ function assertCurrentPresetPreserved(preset: Preset | undefined, label: string)
   );
   assert(cab?.params.model === 'v30-4x12', `${label} Cab 보존`);
   assert(
-    chorus?.bypassed === true &&
+    chorus?.active === false &&
       chorus.params.voices === 3 &&
       chorus.params.depth === 45,
     `${label} Chorus 기본값 보존`,
   );
   assert(
-    flanger?.bypassed === true &&
+    flanger?.active === false &&
       flanger.params.rate === 0.25 &&
       flanger.params.feedback === 60,
     `${label} Flanger 기본값 보존`,
   );
   assert(
-    graphicEQ?.bypassed === true &&
+    graphicEQ?.active === false &&
       graphicEQ.params.mix === 91 &&
       graphicEQ.params.level === 111 &&
       graphicEQ.params.band100 === -7.5 &&
@@ -200,14 +199,14 @@ function assertCurrentPresetPreserved(preset: Preset | undefined, label: string)
     `${label} Graphic EQ 값 보존`,
   );
   assert(
-    phaser?.bypassed === true &&
+    phaser?.active === false &&
       phaser.params.rate === 0.5 &&
       phaser.params.stages === 6 &&
       phaser.params.feedback === 40,
     `${label} Phaser 기본값 보존`,
   );
   assert(
-    tremolo?.bypassed === true &&
+    tremolo?.active === false &&
       tremolo.params.rate === 5 &&
       tremolo.params.depth === 50 &&
       tremolo.params.shape === 'sine' &&
@@ -721,28 +720,28 @@ export function runMigrationChecks(): void {
     assert(compressor?.params.level === 80, `${label} Level 변환`);
     assert(compressor?.params.attack === 0.006, `${label} Attack 보존`);
     assert(
-      autoWah?.bypassed === true &&
+      autoWah?.active === false &&
         autoWah.params.sensitivity === 55 &&
         autoWah.params.mode === 'auto',
       `${label} Auto Wah 삽입`,
     );
     assert(cab?.params.model === 'v30-4x12', `${label} Cab 삽입`);
-    assert(chorus?.bypassed === true && chorus.params.voices === 3, `${label} Chorus 삽입`);
+    assert(chorus?.active === false && chorus.params.voices === 3, `${label} Chorus 삽입`);
     assert(
-      flanger?.bypassed === true && flanger.params.feedback === 60,
+      flanger?.active === false && flanger.params.feedback === 60,
       `${label} Flanger 삽입`,
     );
     assert(
-      graphicEQ?.bypassed === true &&
+      graphicEQ?.active === false &&
         GRAPHIC_EQ_BAND_KEYS.every((key) => graphicEQ.params[key] === 0),
       `${label} Graphic EQ 삽입`,
     );
     assert(
-      phaser?.bypassed === true && phaser.params.stages === 6,
+      phaser?.active === false && phaser.params.stages === 6,
       `${label} Phaser 삽입`,
     );
     assert(
-      tremolo?.bypassed === true &&
+      tremolo?.active === false &&
         tremolo.params.rate === 5 &&
         tremolo.params.shape === 'sine',
       `${label} Tremolo 삽입`,
@@ -758,12 +757,12 @@ export function runMigrationChecks(): void {
     const graphicEQ = preset.pedals.find((pedal) => pedal.id === 'graphic-eq');
     const phaser = preset.pedals.find((pedal) => pedal.id === 'phaser');
     const tremolo = preset.pedals.find((pedal) => pedal.id === 'tremolo');
-    assert(autoWah?.bypassed === true, `${preset.name} Auto Wah 자동 Bypass`);
-    assert(chorus?.bypassed === true, `${preset.name} Chorus 자동 Bypass`);
-    assert(flanger?.bypassed === true, `${preset.name} Flanger 자동 Bypass`);
-    assert(graphicEQ?.bypassed === true, `${preset.name} Graphic EQ 자동 Bypass`);
-    assert(phaser?.bypassed === true, `${preset.name} Phaser 자동 Bypass`);
-    assert(tremolo?.bypassed === true, `${preset.name} Tremolo 자동 Bypass`);
+    assert(autoWah?.active === false, `${preset.name} Auto Wah 자동 Bypass`);
+    assert(chorus?.active === false, `${preset.name} Chorus 자동 Bypass`);
+    assert(flanger?.active === false, `${preset.name} Flanger 자동 Bypass`);
+    assert(graphicEQ?.active === false, `${preset.name} Graphic EQ 자동 Bypass`);
+    assert(phaser?.active === false, `${preset.name} Phaser 자동 Bypass`);
+    assert(tremolo?.active === false, `${preset.name} Tremolo 자동 Bypass`);
   });
 
   const invalidGraphicEQParams = normalizeGraphicEQParams({
@@ -854,8 +853,8 @@ export function runMigrationChecks(): void {
     'Chorus 극단값 클램프',
   );
   assert(
-    CHORUS_VOICE_BANK_SIZE === 4 && CHORUS_LFO_BANK_SIZE === 9,
-    'Chorus 고정 노드 뱅크 크기',
+    CHORUS_VOICE_BANK_SIZE === 4,
+    'Chorus 고정 보이스 뱅크 크기',
   );
 
   const invalidFlangerParams = normalizeFlangerParams({

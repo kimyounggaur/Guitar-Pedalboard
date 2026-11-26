@@ -29,11 +29,11 @@ export class ReverbEffect extends BaseEffect {
   private pendingSwap: PendingSwap | null = null;
 
   constructor(
-    context: AudioContext,
+    context: BaseAudioContext,
     pedal: PedalState,
     private readonly impulseCache: ImpulseCache,
   ) {
-    super(context, pedal);
+    super(context, pedal, { mixLaw: 'additive' });
     this.preDelay = context.createDelay(0.25);
     this.convolver = context.createConvolver();
     this.lowCut = context.createBiquadFilter();
