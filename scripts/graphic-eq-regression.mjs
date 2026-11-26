@@ -1,48 +1,16 @@
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { openApp } from './lib/app-browser.mjs';
 import { createEngineHarness } from './lib/engine-harness.mjs';
 import { workerUrlStub } from './lib/esbuild-plugins.mjs';
+import { byClass, byRole, byTag, find, findAll, textContent } from './lib/html-tree.mjs';
+import { createSsrHarness } from './lib/ssr-harness.mjs';
 
 // S4.7: 이펙터·엔진 쪽 단언은 가짜 오디오 위에서 진짜 GraphicEQEffect·AudioEngine 을 돌려 확인한다(아래 '이펙터 동작').
-// 화면(JSX·CSS) 쪽 단언은 아래 UI 절에서 따로 확인한다.
-const [pedalSource, faderSource, cardSource, iconSource, styleSource] = await Promise.all([
-  readFile(new URL('../src/components/effects/GraphicEQPedal.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/VerticalFader.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/PedalCard.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/PedalIcon.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/styles/pedals.css', import.meta.url), 'utf8'),
-]);
-
-assert.match(pedalSource, /min=\{-12\}/);
-assert.match(pedalSource, /max=\{12\}/);
-assert.match(pedalSource, /step=\{0\.5\}/);
-assert.match(pedalSource, /ariaValueText=\{`\$\{frequency\} 헤르츠, \$\{shownValue\}`\}/);
-assert.doesNotMatch(pedalSource, /SliderControl/, '기존 SliderControl을 재사용했습니다.');
-assert.match(faderSource, /type="range"/);
-assert.match(faderSource, /aria-orientation="vertical"/);
-assert.match(faderSource, /aria-valuetext=\{`\$\{accessibleName\} \$\{ariaValueText\}`\}/);
-assert.match(faderSource, /onChange=\{\(event\) => onChange\(Number\(event\.currentTarget\.value\)\)\}/);
-assert.doesNotMatch(faderSource, /tabIndex=\{-1\}/, '키보드 접근이 차단되었습니다.');
-assert.match(cardSource, /'graphicEQ'/);
-assert.match(cardSource, /pedal-card-graphic-eq/);
-assert.match(cardSource, /<GraphicEQPedal/);
-assert.match(iconSource, /case 'graphicEQ':/);
-assert.match(styleSource, /\.pedal-card-graphic-eq/);
-assert.match(styleSource, /\.graphic-eq7-fader-bank/);
-assert.match(styleSource, /\.vertical-fader-rail input:focus-visible/);
-// F-1: 레일 안의 range 입력만 투명 오버레이로 만든다. 같은 칸의 숫자 입력(input.knob-number-input)이 화면을 덮으면 안 된다.
-assert.doesNotMatch(styleSource, /\.vertical-fader input\s*[,{]/, '`.vertical-fader input` 규칙이 숫자 입력까지 투명 오버레이로 만듭니다(F-1).');
-assert.match(styleSource, /\.vertical-fader\s*\{\s*position:\s*relative;/, '.vertical-fader 가 숫자 입력의 기준 상자가 아닙니다(F-1).');
-assert.match(
-  styleSource,
-  /\.vertical-fader > \.knob-number-input\s*\{[^}]*position:\s*absolute;[^}]*opacity:\s*0;[^}]*pointer-events:\s*none;/,
-  '그래픽 EQ 숫자 입력이 포인터를 받지 않는 칸 안의 요소여야 합니다(F-1).',
-);
-
+// 화면 쪽 단언은 페달을 서버 렌더해 요소·접근성 속성을 묻고, 스타일은 실제 Chrome 의 계산된 값으로 확인한다(아래 '화면').
 // 이펙터 동작: 진짜 GraphicEQEffect·AudioEngine 을 가짜 오디오 위에서 돌린다.
 const harness = await createEngineHarness({
   extraExports: [
@@ -197,6 +165,180 @@ assert.ok(engineEffect instanceof GraphicEQEffect, "엔진이 'graphicEQ' 페달
 assert.equal(engineEffect.filters.length, 7);
 engineEffect.dispose();
 harness.restore();
+
+// ── 화면 ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+// 소스 글자를 읽는 대신 그래픽 EQ 페달·페달 카드·아이콘을 실제로 그려(서버 렌더) 요소와 접근성 속성을 묻고, 처리기를 직접 부른다.
+const uiHarness = await createSsrHarness({
+  extraExports: [
+    "{ GraphicEQPedal } from './components/effects/GraphicEQPedal.tsx'",
+    "{ PedalCard } from './components/PedalCard.tsx'",
+    "{ PedalIcon } from './components/PedalIcon.tsx'",
+    "{ initialPedals } from './presets/initialPedals.ts'",
+    "{ ko } from './i18n/ko.ts'",
+  ],
+  windowOverrides: { matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }) },
+});
+{
+  const { GraphicEQPedal, PedalCard, PedalIcon, initialPedals, ko } = uiHarness.exports;
+  const graphicEqPedal = initialPedals.find((candidate) => candidate.type === 'graphicEQ');
+  assert.ok(graphicEqPedal, '처음 페달 목록에 그래픽 EQ 가 있다');
+
+  // 일곱 칸 페이더: 범위·간격·접근성 이름과 값 문구가 밴드마다 맞는다.
+  const bandRows = [
+    ['band100', '100 Hz', 100, -12, '-12 dB'],
+    ['band200', '200 Hz', 200, -3.5, '-3.5 dB'],
+    ['band400', '400 Hz', 400, 0, '0 dB'],
+    ['band800', '800 Hz', 800, 0.5, '+0.5 dB'],
+    ['band1600', '1.6k Hz', 1600, 6, '+6 dB'],
+    ['band3200', '3.2k Hz', 3200, 12, '+12 dB'],
+    ['band6400', '6.4k Hz', 6400, -0.5, '-0.5 dB'],
+  ];
+  const shownParams = { ...graphicEqPedal.params, ...Object.fromEntries(bandRows.map(([key, , , value]) => [key, value])) };
+  const changes = [];
+  const pedalTree = uiHarness.render(GraphicEQPedal, { params: shownParams, onChange: (key, value) => changes.push([key, value]) });
+  const group = find(pedalTree, byRole('group'));
+  assert.equal(group.attrs['aria-label'], ko.pedal.graphicEQ.controls, '페달 전체를 묶는 그룹 이름');
+  const faders = findAll(pedalTree, byClass('vertical-fader'));
+  assert.equal(faders.length, 7, '밴드 일곱 개가 모두 세로 페이더다(기존 가로 슬라이더를 재사용하지 않는다)');
+  assert.equal(findAll(find(pedalTree, byClass('graphic-eq7-fader-bank')), byClass('vertical-fader')).length, 7, '페이더는 페이더 뱅크 안에 있다');
+  faders.forEach((fader, index) => {
+    const [, label, frequency, value, shown] = bandRows[index];
+    const range = find(fader, (node) => node.tag === 'input' && node.attrs.type === 'range');
+    assert.deepEqual(
+      [range.attrs.min, range.attrs.max, range.attrs.step, range.attrs.value],
+      ['-12', '12', '0.5', String(value)],
+      `${label}: 범위 ±12 dB, 간격 0.5`,
+    );
+    assert.equal(range.attrs['aria-orientation'], 'vertical', `${label}: 세로 방향`);
+    assert.equal(range.attrs['aria-label'], label, `${label}: 접근성 이름`);
+    assert.equal(range.attrs['aria-valuetext'], `${label} ${frequency} 헤르츠, ${shown}`, `${label}: 값 문구`);
+    assert.equal('tabindex' in range.attrs, false, `${label}: 키보드 접근이 차단되면 안 된다`);
+    assert.equal(textContent(find(fader, byTag('output'))), shown, `${label}: 눈에 보이는 값`);
+  });
+  // 처리기: 각 페이더의 변경이 자기 밴드 키로 숫자 값을 알린다.
+  const verticalRanges = uiHarness.findHosts('input', (props) => props['aria-orientation'] === 'vertical');
+  assert.equal(verticalRanges.length, 7);
+  verticalRanges.forEach((host, index) => host.props.onChange({ currentTarget: { value: String(index - 3 + 0.5) } }));
+  assert.deepEqual(changes, bandRows.map(([key], index) => [key, index - 3 + 0.5]));
+  // 믹스·레벨은 가로 슬라이더이고 세로 방향 표시가 없다.
+  const utilityRanges = findAll(find(pedalTree, byClass('graphic-eq7-utility-controls')), (node) => node.tag === 'input' && node.attrs.type === 'range');
+  assert.deepEqual(utilityRanges.map((node) => [node.attrs.min, node.attrs.max, 'aria-orientation' in node.attrs]), [['0', '100', false], ['0', '200', false]]);
+
+  // 페달 카드: 그래픽 EQ 카드만 전용 모양과 페달 화면을 갖는다.
+  const eqCard = uiHarness.render(PedalCard, { pedal: graphicEqPedal });
+  const eqRoot = find(eqCard, byClass('pedal-card-graphic-eq'));
+  assert.ok(eqRoot, "'graphicEQ' 카드는 pedal-card-graphic-eq 모양이다");
+  assert.equal(findAll(eqRoot, byClass('vertical-fader')).length, 7, '카드 안에 그래픽 EQ 페달(페이더 7개)이 그려진다');
+  assert.ok(find(eqRoot, (node) => node.attrs?.role === 'group' && node.attrs['aria-label'] === ko.pedal.graphicEQ.controls));
+  for (const other of initialPedals.filter((candidate) => candidate.type !== 'graphicEQ')) {
+    const otherCard = uiHarness.render(PedalCard, { pedal: other });
+    assert.equal(find(otherCard, byClass('pedal-card-graphic-eq')), null, `${other.type}: 그래픽 EQ 모양이 아니다`);
+    assert.equal(find(otherCard, byClass('graphic-eq7-ui')), null, `${other.type}: 그래픽 EQ 화면을 그리지 않는다`);
+  }
+
+  // 아이콘: 그래픽 EQ 만의 그림이 있다(없으면 기본 네모 그림으로 떨어진다).
+  const iconOf = (type) => uiHarness.html(PedalIcon, { type });
+  const graphicIcon = iconOf('graphicEQ');
+  assert.notEqual(graphicIcon, iconOf('not-a-pedal-type'), '그래픽 EQ 아이콘이 기본 그림이 아니다');
+  for (const other of initialPedals.filter((candidate) => candidate.type !== 'graphicEQ')) {
+    assert.notEqual(graphicIcon, iconOf(other.type), `${other.type} 아이콘과 같지 않다`);
+  }
+}
+uiHarness.restore();
+
+// 스타일은 브라우저가 계산한 값으로 본다. F-1: 레일 안의 range 입력만 투명 오버레이이고, 같은 칸의 숫자 입력은 칸 안에 머물며 포인터를 받지 않는다.
+await verifyGraphicEqInBrowser();
+
+async function verifyGraphicEqInBrowser() {
+  const app = await openApp({ purpose: '그래픽 EQ 스타일', viewport: { width: 1280, height: 1000 }, waitFor: '.pedal-card-graphic-eq' });
+  if (!app) return;
+  try {
+    await app.evaluate(`document.querySelector('.pedal-card-graphic-eq').scrollIntoView({ block: 'center' })`);
+    const report = await app.evaluate(`(() => {
+      const card = document.querySelector('.pedal-card-graphic-eq');
+      const bank = card.querySelector('.graphic-eq7-fader-bank');
+      const cardStyle = getComputedStyle(card);
+      const bankStyle = getComputedStyle(bank);
+      const center = (element) => {
+        const rect = element.getBoundingClientRect();
+        return [rect.left + rect.width / 2, rect.top + rect.height / 2];
+      };
+      const faders = [...bank.querySelectorAll('.vertical-fader')].map((fader) => {
+        const rail = fader.querySelector('.vertical-fader-rail');
+        const range = rail.querySelector('input');
+        const number = fader.querySelector(':scope > .knob-number-input');
+        const faderRect = fader.getBoundingClientRect();
+        const numberRect = number.getBoundingClientRect();
+        const numberStyle = getComputedStyle(number);
+        const rangeStyle = getComputedStyle(range);
+        const [x, y] = center(rail);
+        return {
+          faderPosition: getComputedStyle(fader).position,
+          numberPosition: numberStyle.position,
+          numberOpacity: numberStyle.opacity,
+          numberPointerEvents: numberStyle.pointerEvents,
+          numberInsideFader: numberRect.left >= faderRect.left - 1 && numberRect.right <= faderRect.right + 1 && numberRect.top >= faderRect.top - 1 && numberRect.bottom <= faderRect.bottom + 1,
+          rangePosition: rangeStyle.position,
+          rangeOpacity: rangeStyle.opacity,
+          hitInRail: rail.contains(document.elementFromPoint(x, y)),
+        };
+      });
+      const stomp = card.querySelector('.stomp-toggle-switch');
+      const [sx, sy] = center(stomp);
+      const hit = document.elementFromPoint(sx, sy);
+      return {
+        overflow: cardStyle.overflow,
+        backgroundHasGradient: cardStyle.backgroundImage.includes('linear-gradient'),
+        bankDisplay: bankStyle.display,
+        bankColumns: bankStyle.gridTemplateColumns.split(' ').length,
+        faders,
+        stompHitInsideStomp: Boolean(hit) && stomp.contains(hit),
+      };
+    })()`);
+    assert.equal(report.overflow, 'hidden');
+    assert.equal(report.backgroundHasGradient, true);
+    assert.equal(report.bankDisplay, 'grid');
+    assert.equal(report.bankColumns, 7, '페이더 뱅크는 일곱 칸');
+    assert.equal(report.faders.length, 7);
+    for (const [index, fader] of report.faders.entries()) {
+      assert.equal(fader.faderPosition, 'relative', `${index}: .vertical-fader 가 숫자 입력의 기준 상자다(F-1)`);
+      assert.equal(fader.numberPosition, 'absolute', `${index}: 숫자 입력은 칸 안에 놓인다(F-1)`);
+      assert.equal(fader.numberOpacity, '0', `${index}: 숫자 입력은 눈에 보이지 않는다`);
+      assert.equal(fader.numberPointerEvents, 'none', `${index}: 숫자 입력은 포인터를 받지 않는다(F-1)`);
+      assert.equal(fader.numberInsideFader, true, `${index}: 숫자 입력이 자기 칸 밖으로 나가 화면을 덮지 않는다(F-1)`);
+      assert.equal(fader.rangePosition, 'absolute', `${index}: 레일 안 range 입력은 투명 오버레이`);
+      assert.equal(fader.rangeOpacity, '0', `${index}: 레일 안 range 입력은 투명`);
+      assert.equal(fader.hitInRail, true, `${index}: 레일 한가운데를 누르면 레일(끌기 처리기)이 포인터를 받고, 숫자 입력이 가로채지 않는다`);
+    }
+    assert.equal(report.stompHitInsideStomp, true, '스톰프 스위치 위의 클릭이 가려지지 않는다(F-1)');
+
+    // 키보드로 포커스가 오면 레일 둘레에 눈에 띄는 테두리가 생긴다.
+    await app.press('Tab');
+    const focus = await app.evaluate(`(() => {
+      const range = document.querySelector('.pedal-card-graphic-eq .vertical-fader-rail input');
+      range.focus();
+      const style = getComputedStyle(range);
+      return {
+        focusVisible: range.matches(':focus-visible'),
+        outlineStyle: style.outlineStyle,
+        outlineWidth: style.outlineWidth,
+        outlineColor: style.outlineColor,
+        outlineOffset: style.outlineOffset,
+        radius: style.borderTopLeftRadius,
+      };
+    })()`);
+    assert.deepEqual(focus, {
+      focusVisible: true,
+      outlineStyle: 'solid',
+      outlineWidth: '2px',
+      outlineColor: 'rgb(246, 220, 148)',
+      outlineOffset: '3px',
+      radius: '6px',
+    });
+  } finally {
+    await app.close();
+  }
+}
 
 const migrationBundle = await build({
   plugins: [workerUrlStub],
