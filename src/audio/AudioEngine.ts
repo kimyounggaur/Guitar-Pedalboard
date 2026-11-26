@@ -556,6 +556,17 @@ export class AudioEngine {
     return result;
   }
 
+  /**
+   * 저장소를 다시 읽는다. 다른 탭이 올리거나 지운 IR 을 이 탭이 모르는 채 '내 IR' 을 고르면, 저장돼 있는 IR 을 없다고 안내하게 되기 때문이다.
+   * 바뀐 것이 있으면 오디오가 돌고 있을 때 새 IR 을 준비해 Cab 에 알린다.
+   */
+  async syncCabinetIrFromStore(): Promise<void> {
+    if (!(await this.cabinetIrs.refresh())) return;
+    const context = this.liveContext();
+    if (context) await this.cabinetIrs.prepare(context.sampleRate);
+    this.refreshCabinetIr();
+  }
+
   /** 저장된 사용자 IR 을 지운다. '내 IR' 을 고른 Cab 은 기본 캐비닛으로 대신한다. */
   async removeCabinetIr(): Promise<void> {
     await this.cabinetIrs.remove();

@@ -50,6 +50,8 @@ interface Prepared extends UserCabinetImpulse {
  */
 export class CabinetIrLibrary {
   private stored: StoredCabinetIr | null = null;
+  /** `stored` 가 저장소에도 있는가. 저장에 실패한 이번 접속 한정 IR 은 false 라서 다른 탭의 저장소 내용이 덮어쓰지 못한다. */
+  private persisted = true;
   private loaded: Promise<void> | null = null;
   /** 저장된 IR 이 바뀔 때마다 오른다. 오래 걸리는 준비가 끝났을 때 그 사이 IR 이 바뀌었는지 보는 용도. */
   private revision = 0;
@@ -78,6 +80,7 @@ export class CabinetIrLibrary {
         // 읽는 동안 사용자가 새 IR 을 불러왔으면 그것이 더 새롭다.
         if (this.revision === 0 && record) {
           this.stored = record;
+          this.persisted = true;
           this.revision += 1;
           this.onChange();
         }
@@ -111,12 +114,36 @@ export class CabinetIrLibrary {
       savedAt: Date.now(),
     };
     this.stored = record;
+    this.persisted = true;
     this.revision += 1;
     this.prepared = null;
     let persisted = true;
     try { await this.store.save(record); } catch { persisted = false; }
+    // 저장하는 사이에 더 새로운 가져오기·지우기가 있었으면 그 쪽이 이 값을 대신한다.
+    if (token === this.importToken) this.persisted = persisted;
     this.onChange();
     return { info: this.info() as CabinetIrInfo, persisted };
+  }
+
+  /**
+   * 저장소를 다시 읽어 다른 탭에서 올리거나 지운 IR 을 따라간다. 바뀌어 이 탭의 IR 이 달라졌으면 true.
+   * 이 탭이 방금 가져오는·지우는 중이면(읽는 사이에 값이 바뀌었으면) 저장소의 값이 이미 낡은 것이라 건드리지 않고,
+   * 저장에 실패한 이번 접속 한정 IR 은 저장소가 비어 있어도 지키며, 저장소를 읽지 못하면 지금 값을 그대로 둔다.
+   */
+  async refresh(): Promise<boolean> {
+    await this.load();
+    const token = this.importToken;
+    const revision = this.revision;
+    let record: StoredCabinetIr | null;
+    try { record = await this.store.load(); } catch { return false; }
+    if (token !== this.importToken || revision !== this.revision) return false;
+    if (!this.persisted) return false;
+    if (record === null ? this.stored === null : this.stored?.savedAt === record.savedAt && this.stored.name === record.name) return false;
+    this.stored = record;
+    this.revision += 1;
+    this.prepared = null;
+    this.onChange();
+    return true;
   }
 
   /** 저장된 IR 을 지운다. 저장소를 못 지워도 이번 접속에서는 쓰지 않는다. */

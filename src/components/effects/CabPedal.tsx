@@ -41,6 +41,13 @@ export function CabPedal({ params, onChange }: CabPedalProps) {
     return () => window.removeEventListener('cab-ir-change', refresh);
   }, []);
   const usesMyIr = params.model === 'my-ir';
+  // '내 IR' 을 쓰기 시작할 때(고르거나, 저장된 모델이 '내 IR' 인 채로 열 때) 저장소를 다시 읽는다. 다른 탭이 그 사이에 올리거나 지웠을 수 있어서,
+  // 저장돼 있는 IR 을 없다고 안내하거나 지워진 IR 을 '저장되어 유지된다' 고 안내하는 일이 없게 한다.
+  useEffect(() => {
+    if (!usesMyIr) return;
+    const engine = AudioEngine.getInstance();
+    void engine.syncCabinetIrFromStore().then(() => setIrInfo(engine.getCabinetIrInfo()));
+  }, [usesMyIr]);
   return (
     <div className="cab-sim-ui" role="group" aria-label={ko.pedal.cab.controls}>
       <div className="cab-grille" aria-hidden="true">

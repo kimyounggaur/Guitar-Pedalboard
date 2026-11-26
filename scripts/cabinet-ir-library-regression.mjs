@@ -252,6 +252,95 @@ function createWorld({ stored = null, saveFails = false, loadFails = false, deco
   assert.equal(racing.library.info().name, 'fresh.wav', '새로 가져온 IR 이 저장소의 옛 IR 보다 우선한다');
 }
 
+// ── 다른 탭이 바꾼 저장소 따라가기(refresh) ──
+{
+  const record = (name, savedAt) => ({ name, sampleRate: 48000, cut: false, originalSeconds: 0.1, channels: [impulse(4800)], savedAt });
+
+  // 다른 탭이 IR 을 올렸다: 이 탭은 모르고 있다가 다시 읽으면 따라간다.
+  const world = createWorld();
+  await world.library.load();
+  assert.equal(world.library.info(), null);
+  world.stored = record('other-tab.wav', 11);
+  const changesBefore = world.changes;
+  assert.equal(await world.library.refresh(), true, '저장소에 새 IR 이 있으면 따라간다');
+  assert.equal(world.library.info().name, 'other-tab.wav');
+  assert.equal(world.changes, changesBefore + 1, '화면에 알린다');
+  assert.equal(world.library.ready(48000), null, '이전에 준비한 것은 쓰지 않는다');
+  assert.ok(await world.library.prepare(48000), '따라간 IR 을 준비할 수 있다');
+
+  // 달라진 것이 없으면 아무 일도 없다(화면을 다시 그리지도 않는다).
+  const quietChanges = world.changes;
+  assert.equal(await world.library.refresh(), false);
+  assert.equal(world.changes, quietChanges, '같은 기록이면 알리지 않는다');
+
+  // 다른 탭이 IR 을 바꿨다 → 새 것을 따라가고, 지웠다 → 이 탭도 없다고 본다.
+  world.stored = record('replaced.wav', 12);
+  assert.equal(await world.library.refresh(), true);
+  assert.equal(world.library.info().name, 'replaced.wav');
+  world.stored = null;
+  assert.equal(await world.library.refresh(), true, '다른 탭이 지웠으면 이 탭도 지운 것으로 본다');
+  assert.equal(world.library.info(), null);
+  assert.equal(await world.library.prepare(48000), null);
+
+  // 저장하지 못한 이번 접속 한정 IR 은 저장소가 비어 있어도(또는 다른 IR 이 있어도) 덮이지 않는다.
+  const sessionOnly = createWorld({ saveFails: true });
+  await sessionOnly.library.importFile(wavFile('only-here.wav'), 48000);
+  assert.equal(await sessionOnly.library.refresh(), false, '저장 실패로 이번 접속에만 있는 IR 은 지킨다');
+  assert.equal(sessionOnly.library.info().name, 'only-here.wav');
+  sessionOnly.stored = record('someone-else.wav', 99);
+  assert.equal(await sessionOnly.library.refresh(), false);
+  assert.equal(sessionOnly.library.info().name, 'only-here.wav');
+  // 그 뒤 저장에 성공하는 IR 을 가져오면 다시 저장소를 따른다.
+  sessionOnly.saveFails = false;
+  await sessionOnly.library.importFile(wavFile('now-saved.wav'), 48000);
+  sessionOnly.stored = record('after.wav', 100);
+  assert.equal(await sessionOnly.library.refresh(), true);
+  assert.equal(sessionOnly.library.info().name, 'after.wav');
+
+  // 저장소를 읽지 못하면 지금 값을 그대로 둔다.
+  const unreadable = createWorld();
+  await unreadable.library.importFile(wavFile('keep.wav'), 48000);
+  unreadable.loadFails = true;
+  assert.equal(await unreadable.library.refresh(), false);
+  assert.equal(unreadable.library.info().name, 'keep.wav');
+
+  // 읽는 사이에 이 탭이 새 IR 을 가져오면, 읽어 온 옛 기록이 새 IR 을 덮지 못한다.
+  const racing = createWorld({ stored: record('old-in-store.wav', 1) });
+  await racing.library.load();
+  let release;
+  const originalLoad = racing.library.store.load;
+  racing.library.store.load = async () => {
+    const value = await originalLoad.call(racing.library.store);
+    await new Promise((resolve) => { release = resolve; });
+    return value;
+  };
+  const pending = racing.library.refresh();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  racing.library.store.load = originalLoad;
+  await racing.library.importFile(wavFile('typed-now.wav'), 48000);
+  release();
+  assert.equal(await pending, false, '읽는 사이에 가져온 IR 이 있으면 읽어 온 기록은 버린다');
+  assert.equal(racing.library.info().name, 'typed-now.wav');
+
+  // 읽는 사이에 이 탭이 지웠어도 마찬가지다.
+  const removing = createWorld({ stored: record('to-remove.wav', 1) });
+  await removing.library.load();
+  let releaseRemove;
+  const slowLoad = removing.library.store.load;
+  removing.library.store.load = async () => {
+    const value = await slowLoad.call(removing.library.store);
+    await new Promise((resolve) => { releaseRemove = resolve; });
+    return value;
+  };
+  const pendingRemove = removing.library.refresh();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  removing.library.store.load = slowLoad;
+  await removing.library.remove();
+  releaseRemove();
+  assert.equal(await pendingRemove, false);
+  assert.equal(removing.library.info(), null, '지운 IR 이 되살아나지 않는다');
+}
+
 // ── 지우기는 저장소가 실패해도 이번 접속에서 쓰지 않게 한다 ──
 {
   const world = createWorld();
