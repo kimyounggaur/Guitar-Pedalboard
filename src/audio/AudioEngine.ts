@@ -45,7 +45,7 @@ import { clampTrimDb, PRESET_TRIM_RAMP_SECONDS } from './offline/loudnessSpec';
 import { clamp, dbToGain } from './utils/db';
 import { MAX_CAB_IR_BYTES, validateCabinetWav, validateDecodedCabinetIr } from './utils/cabinetIr';
 import { ImpulseCache } from './utils/impulseCache';
-import { rampParam, smoothVolume } from './utils/smoothing';
+import { fadeParam, rampParam, smoothVolume } from './utils/smoothing';
 import { noiseGateProcessorSource } from './worklets/noise-gate-processor';
 import { envelopeFollowerProcessorSource } from './worklets/envelope-follower-processor';
 import { tunerProcessorSource } from './worklets/tuner-processor';
@@ -72,6 +72,11 @@ const NOOP_MONITOR_SINK: MonitorSink = {
   setInputWarning: () => undefined,
   reset: () => undefined,
 };
+/**
+ * 체인 연결을 바꿀 때 마스터 게인을 0 으로 내렸다 올리는 시간(초). 순서 바꾸기·켜고 끄기·프리셋 불러오기와 그 실행 취소가 이 길을 탄다.
+ * 반드시 `fadeParam` 으로 옮긴다 — `rampParam` 은 실제 Chrome 에서 이 8 ms 를 기다리지 않고 한 표본에 목표로 건너뛰어
+ * (측정: 표본 차 0.9, 신호 자체의 기울기는 0.029) 내릴 때와 올릴 때 두 번 클릭이 난다(REFACTOR_LOG L-222 F-5, S5.3).
+ */
 const CHAIN_FADE_SECONDS = 0.008;
 const CHAIN_RECONNECT_WAIT_MS = 12;
 /** 정지할 때 출력 이득을 0 으로 낮추는 시정수(초). 10 ms 면 약 −29 dB, 20 ms 면 약 −58 dB. */
@@ -243,14 +248,15 @@ export class AudioEngine {
   }
 
   /**
-   * 프리셋 음량 보정을 바꾼다(GS-2). 프리셋을 바꿀 때 소리가 튀지 않도록 30 ms 램프로 옮긴다.
+   * 프리셋 음량 보정을 바꾼다(GS-2). 프리셋을 바꿀 때(그리고 그것을 되돌릴 때) 소리가 튀지 않도록 30 ms 램프로 옮긴다.
+   * `fadeParam` 을 쓴다 — `rampParam` 은 Chrome 에서 램프가 아니라 계단이라 보정이 바뀌는 프리셋 전환마다 클릭이 난다(S5.3).
    * 오디오가 꺼져 있으면 할 일이 없다. 다음에 그래프를 만들 때 provider 값을 처음 값으로 쓴다.
    */
   setPresetTrimDb(db: number): void {
     const trim = this.presetTrimNode;
     const context = this.context;
     if (!trim || !context || context.state === 'closed') return;
-    rampParam(trim.gain, dbToGain(clampTrimDb(db)), context, PRESET_TRIM_RAMP_SECONDS);
+    fadeParam(trim.gain, dbToGain(clampTrimDb(db)), context, PRESET_TRIM_RAMP_SECONDS);
   }
 
   get isRunning(): boolean {
@@ -1141,7 +1147,7 @@ export class AudioEngine {
         return;
       }
 
-      rampParam(masterGain.gain, 0, context, CHAIN_FADE_SECONDS);
+      fadeParam(masterGain.gain, 0, context, CHAIN_FADE_SECONDS);
       await wait(CHAIN_RECONNECT_WAIT_MS);
 
       if (!this.isCurrentGraph(context, chainInput, masterGain, generation)) {
@@ -1157,7 +1163,7 @@ export class AudioEngine {
       committed = true;
       retiredEffects.forEach((effect) => effect.dispose());
 
-      rampParam(masterGain.gain, this.masterVolume, context, CHAIN_FADE_SECONDS);
+      fadeParam(masterGain.gain, this.masterVolume, context, CHAIN_FADE_SECONDS);
     } catch (error) {
       if (!committed) {
         createdEffects.forEach((effect) => effect.dispose());
