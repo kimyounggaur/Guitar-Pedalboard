@@ -17,8 +17,8 @@ interface DrivePedalProps {
 }
 
 const presets: Record<string, Pick<DriveParams, 'mode' | 'drive' | 'tone' | 'level' | 'mix' | 'bias'>> = {
-  'TS Clean': { mode: 'overdrive', drive: 28, tone: 54, level: 96, mix: 82, bias: 0.1 },
-  'TS Boost': { mode: 'overdrive', drive: 42, tone: 58, level: 100, mix: 88, bias: 0.12 },
+  'Mid Clean': { mode: 'overdrive', drive: 28, tone: 54, level: 96, mix: 82, bias: 0.1 },
+  'Mid Boost': { mode: 'overdrive', drive: 42, tone: 58, level: 100, mix: 88, bias: 0.12 },
   Crunch: { mode: 'crunch', drive: 62, tone: 62, level: 92, mix: 90, bias: 0.04 },
 };
 

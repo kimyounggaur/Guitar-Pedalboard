@@ -52,6 +52,13 @@ const PINNED_CONTAINS = [
   'No file chosen',
 ];
 
+/**
+ * 실제 제품명·상표를 떠올리게 하는 표기(S4.8, R4-8·D3). 화면의 글자·접근성 이름 어디에도 없어야 한다(대소문자 무시).
+ * 부록 C 대체표: TS-9·Tube Screamer → 'Mid …'(미드 부스트 오버드라이브), Crunch Box → 'Crunch'.
+ * 'Plexi'·'British' 같은 프리셋 이름은 일반 장르어일 수 있어 여기 넣지 않았다(사람이 정할 일, 단계 보고서 S4.8).
+ */
+const BRAND_TERMS = ['TS-9', 'TS9', 'TS Clean', 'TS Boost', 'Tube Screamer', 'Crunch Box'];
+
 /** 접근성 이름이 이 영어 꼬리로 끝나면 안 된다(예전에는 'Drive controls', 'Drive icon' 이었다) */
 const PINNED_SUFFIX = / (controls|icon)$/;
 
@@ -111,6 +118,7 @@ function violations(state: string, seen: Seen[]): string[] {
     if (PINNED_EXACT.includes(text)) found.push(`영어 시스템 문구 — ${label}`);
     for (const phrase of PINNED_CONTAINS) if (text.includes(phrase)) found.push(`영어 시스템 문구 — ${label}`);
     if (kind !== 'text' && PINNED_SUFFIX.test(text)) found.push(`영어 꼬리(controls·icon) — ${label}`);
+    for (const term of BRAND_TERMS) if (text.toLowerCase().includes(term.toLowerCase())) found.push(`상표 표기 — ${label}`);
     if (INTERNAL_ID.test(text.replace(UNITS, ''))) found.push(`내부 이름 — ${label}`);
     for (const key of EFFECT_KEYS) {
       // 한 낱말로 단독 표기된 소문자 이펙터 키만 내부 이름으로 본다(페달 얼굴의 'Drive' 같은 대문자 표기는 얼굴 글자다).
