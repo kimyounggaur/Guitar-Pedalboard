@@ -20,6 +20,8 @@ export class FakeParam {
   constructor(value = 0, name = '') {
     this.#value = value;
     this.name = name;
+    /** 노드를 만들 때 옵션으로 받은 첫 값(예약 호출이 덮어쓰기 전). 첫 값의 부호·크기가 틀리면 소리가 튀는 경로를 볼 때 쓴다. */
+    this.initialValue = value;
     this.directAssignments = 0;
     this.automation = [];
   }
@@ -167,6 +169,17 @@ export function createFakeAudio() {
     this.release = new FakeParam(options.release ?? 0.25, 'release');
     this.reduction = 0;
   });
+  define('AnalyserNode', function build(options) {
+    this.fftSize = options.fftSize ?? 2048;
+    this.smoothingTimeConstant = options.smoothingTimeConstant ?? 0.8;
+    this.minDecibels = options.minDecibels ?? -100;
+    this.maxDecibels = options.maxDecibels ?? -30;
+    this.frequencyBinCount = this.fftSize / 2;
+  });
+  classes.AnalyserNode.prototype.getFloatTimeDomainData = function getFloatTimeDomainData(array) { array.fill(0); };
+  classes.AnalyserNode.prototype.getByteTimeDomainData = function getByteTimeDomainData(array) { array.fill(128); };
+  classes.AnalyserNode.prototype.getFloatFrequencyData = function getFloatFrequencyData(array) { array.fill(-120); };
+  classes.AnalyserNode.prototype.getByteFrequencyData = function getByteFrequencyData(array) { array.fill(0); };
   define('ConvolverNode', function build(options) {
     this.buffer = options.buffer ?? null;
     this.normalize = options.disableNormalization === undefined ? true : !options.disableNormalization;
@@ -186,7 +199,9 @@ export function createFakeAudio() {
       this.port = {
         onmessage: null,
         messages: this.messages,
+        closeCount: 0,
         postMessage: (message) => { this.messages.push(message); },
+        close() { this.closeCount += 1; },
       };
       this.parameterMap = new Map();
       this.parameters = {
@@ -236,6 +251,7 @@ export function createFakeAudio() {
       context.createChannelMerger = (numberOfInputs) => new classes.ChannelMergerNode(context, { numberOfInputs });
       context.createDynamicsCompressor = factory('DynamicsCompressorNode');
       context.createConvolver = factory('ConvolverNode');
+      context.createAnalyser = factory('AnalyserNode');
       context.createPeriodicWave = (real, imag, constraints) => ({ real, imag, constraints });
       return context;
     },
