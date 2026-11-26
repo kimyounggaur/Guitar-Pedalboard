@@ -41,10 +41,15 @@ function impulse(frames, gain = 0.02) {
 function createWorld({ stored = null, saveFails = false, loadFails = false, decodeFails = false } = {}) {
   const world = {
     stored, saves: [], clears: 0, loads: 0, decodes: [], resamples: [], buffers: [], changes: 0,
-    nextDecode: null, saveFails, loadFails, decodeFails, saveGate: null,
+    nextDecode: null, saveFails, loadFails, decodeFails, saveGate: null, loadGate: null,
   };
   const store = {
-    async load() { world.loads += 1; if (world.loadFails) throw new Error('읽기 실패'); return world.stored; },
+    async load() {
+      world.loads += 1; const value = world.stored;
+      if (world.loadGate) await world.loadGate;
+      if (world.loadFails) throw new Error('읽기 실패');
+      return value;
+    },
     async save(record) {
       if (world.saveGate) await world.saveGate;
       if (world.saveFails) throw new Error('쓰기 실패');
@@ -81,6 +86,19 @@ function createWorld({ stored = null, saveFails = false, loadFails = false, deco
     await assert.rejects(library.importFile(file, 48000), (error) => error.message === ko.cabinetIr.fileTooBig, label);
   }
   await assert.rejects(library.importFile(new File([new ArrayBuffer(100)], 'bad.wav'), 48000), (error) => error.message === ko.cabinetIr.fileTooBig || error.message === ko.cabinetIr.notWav, '깨진 WAV');
+  {
+    // 4 MB 가 넘는 파일은 읽지도 않고 거절한다(메모리에 올리기 전에 막는다).
+    const big = new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'huge.wav');
+    let read = false;
+    big.arrayBuffer = async () => { read = true; return new ArrayBuffer(0); };
+    await assert.rejects(library.importFile(big, 48000), (error) => error.message === ko.cabinetIr.fileTooBig);
+    assert.equal(read, false, '너무 큰 파일은 바이트를 읽지 않는다');
+    const named = new File([new ArrayBuffer(100)], 'ir.txt');
+    let readNamed = false;
+    named.arrayBuffer = async () => { readNamed = true; return new ArrayBuffer(0); };
+    await assert.rejects(library.importFile(named, 48000), (error) => error.message === ko.cabinetIr.fileTooBig);
+    assert.equal(readNamed, false, '.wav 가 아닌 파일도 읽지 않는다');
+  }
   assert.equal(world.decodes.length, 0, '검사에 걸린 파일은 디코딩하지 않는다');
   assert.equal(world.saves.length, 0, '검사에 걸린 파일은 저장하지 않는다');
   assert.equal(library.info(), null);
@@ -189,6 +207,23 @@ function createWorld({ stored = null, saveFails = false, loadFails = false, deco
   await world2.library.importFile(wavFile('y.wav'), 48000);
   const [a, b] = await Promise.all([world2.library.prepare(48000), world2.library.prepare(48000)]);
   assert.equal(a, b); assert.equal(world2.buffers.length, 1, '동시 준비는 한 번만 만든다');
+
+  // 리샘플이 필요한 준비는 비동기라서, 동시에 부르면 합쳐지지 않을 때 리샘플을 두 번 한다.
+  const world3 = createWorld();
+  await world3.library.importFile(wavFile('w.wav'), 48000);
+  const [c, d] = await Promise.all([world3.library.prepare(44100), world3.library.prepare(44100)]);
+  assert.equal(c, d, '같은 준비는 같은 결과를 돌려준다');
+  assert.equal(world3.resamples.length, 1, '동시에 같은 샘플레이트를 준비해도 리샘플은 한 번');
+  assert.equal(world3.buffers.length, 1);
+  // 다른 샘플레이트 준비는 합치지 않는다.
+  const [e, f] = await Promise.all([world3.library.prepare(32000), world3.library.prepare(22050)]);
+  assert.equal(e.buffer.sampleRate, 32000); assert.equal(f.buffer.sampleRate, 22050);
+
+  // 준비된 것의 세대가 IR 세대와 어긋나면(방어선) 쓰지 않는다.
+  const stale = await world3.library.prepare(44100);
+  assert.equal(world3.library.ready(44100), stale);
+  world3.library.revision += 1;
+  assert.equal(world3.library.ready(44100), null, '세대가 달라진 준비물은 동기로 내주지 않는다');
 }
 
 // ── 준비하는 사이에 IR 이 바뀌면 새 IR 로 다시 준비한다 / 지우면 준비된 것도 사라진다 ──
@@ -250,6 +285,20 @@ function createWorld({ stored = null, saveFails = false, loadFails = false, deco
   await racing.library.importFile(wavFile('fresh.wav'), 48000);
   await slowLoad;
   assert.equal(racing.library.info().name, 'fresh.wav', '새로 가져온 IR 이 저장소의 옛 IR 보다 우선한다');
+
+  // 저장소 읽기를 붙잡아 두고 그 사이에 가져오기를 끝낸다: 늦게 돌아온 옛 기록이 새 IR 을 덮으면 안 된다.
+  const gated = createWorld({ stored: record });
+  let openLoad;
+  gated.loadGate = new Promise((resolve) => { openLoad = resolve; });
+  const pendingLoad = gated.library.load();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await gated.library.importFile(wavFile('typed.wav'), 48000);
+  openLoad();
+  await pendingLoad;
+  assert.equal(gated.library.info().name, 'typed.wav', '읽기가 늦게 끝나도 새로 가져온 IR 이 남는다');
+  assert.equal(gated.stored.name, 'typed.wav', '저장소의 내용도 새 IR');
+  assert.equal(gated.library.ready(48000), null);
+  assert.equal((await gated.library.prepare(48000)).buffer.length, 4800, '준비되는 것도 새 IR');
 }
 
 // ── 다른 탭이 바꾼 저장소 따라가기(refresh) ──
@@ -339,6 +388,55 @@ function createWorld({ stored = null, saveFails = false, loadFails = false, deco
   releaseRemove();
   assert.equal(await pendingRemove, false);
   assert.equal(removing.library.info(), null, '지운 IR 이 되살아나지 않는다');
+}
+
+// ── 가져오는 도중에 지우면 되살아나지 않는다 ──
+{
+  const world = createWorld();
+  const { library } = world;
+  let release = null;
+  const originalDecode = library.audio.decode;
+  library.audio.decode = async (bytes, rate) => {
+    if (!release) await new Promise((resolve) => { release = resolve; });
+    return originalDecode(bytes, rate);
+  };
+  const importing = library.importFile(wavFile('late.wav'), 48000);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.ok(release, '가져오기가 디코딩에서 멈춰 있다');
+  await library.remove();
+  release();
+  await assert.rejects(importing, (error) => error.message === ko.cabinetIr.cancelled, '지운 뒤에 끝난 가져오기는 취소된다');
+  assert.equal(library.info(), null, '지운 IR 이 되살아나지 않는다');
+  assert.equal(world.saves.length, 0, '취소된 가져오기는 저장하지 않는다');
+  assert.equal(world.stored, null);
+}
+
+// ── 저장 결과가 뒤늦게 돌아와도 더 새로운 가져오기의 저장 상태를 덮지 않는다 ──
+{
+  const record = (name, savedAt) => ({ name, sampleRate: 48000, cut: false, originalSeconds: 0.1, channels: [impulse(4800)], savedAt });
+  const world = createWorld();
+  const { library } = world;
+  let saveCalls = 0, releaseFirst;
+  const firstSave = new Promise((resolve) => { releaseFirst = resolve; });
+  const originalSave = library.store.save;
+  library.store.save = async (value) => {
+    saveCalls += 1;
+    if (saveCalls === 1) { await firstSave; throw new Error('쓰기 실패'); } // 첫 저장은 오래 걸리다 실패한다
+    return originalSave.call(library.store, value);
+  };
+  const first = library.importFile(wavFile('a.wav'), 48000);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(saveCalls, 1, '첫 가져오기가 저장에서 멈춰 있다');
+  const second = await library.importFile(wavFile('b.wav'), 48000);
+  assert.equal(second.persisted, true, '두 번째 가져오기는 저장에 성공했다');
+  releaseFirst();
+  const late = await first;
+  assert.equal(late.persisted, false, '첫 가져오기 자신의 결과는 저장 실패');
+  assert.equal(library.info().name, 'b.wav', '화면에 남는 것은 나중에 가져온 IR');
+  // 이 탭의 IR(b)은 저장소에 있으므로, 다른 탭이 바꾼 저장소를 따라가야 한다. 첫 저장의 늦은 실패가 이 상태를 지우면 안 된다.
+  world.stored = record('other-tab.wav', 99);
+  assert.equal(await library.refresh(), true, '뒤늦은 저장 실패가 더 새로운 IR 의 저장 상태를 덮지 않는다');
+  assert.equal(library.info().name, 'other-tab.wav');
 }
 
 // ── 지우기는 저장소가 실패해도 이번 접속에서 쓰지 않게 한다 ──

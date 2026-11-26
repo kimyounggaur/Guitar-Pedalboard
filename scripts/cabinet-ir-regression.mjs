@@ -11,6 +11,7 @@ const pure = await build({
     contents: [
       "export { validateCabinetWav, validateImpulseSamples, limitImpulseLength, channelsOf, MAX_CAB_IR_BYTES, MAX_CAB_IR_SECONDS, MAX_CAB_IR_FILE_SECONDS, CAB_IR_CUT_FADE_SECONDS } from './audio/utils/cabinetIr.ts';",
       "export { normalizeUserImpulse, MAX_CAB_MAKEUP_DB } from './audio/utils/cabinet.ts';",
+      "export { ko } from './i18n/ko.ts';",
     ].join('\n'),
     resolveDir: srcDir, sourcefile: 'cabinet-ir-pure.ts',
   },
@@ -19,7 +20,7 @@ const pure = await build({
 const {
   validateCabinetWav, validateImpulseSamples, limitImpulseLength, channelsOf,
   MAX_CAB_IR_BYTES, MAX_CAB_IR_SECONDS, MAX_CAB_IR_FILE_SECONDS, CAB_IR_CUT_FADE_SECONDS,
-  normalizeUserImpulse, MAX_CAB_MAKEUP_DB,
+  normalizeUserImpulse, MAX_CAB_MAKEUP_DB, ko,
 } = await import(`data:text/javascript;base64,${Buffer.from(pure.outputFiles[0].text).toString('base64')}`);
 
 function wav({ channels = 1, sampleRate = 48000, bits = 16, seconds = .1, format = 1 } = {}) {
@@ -45,6 +46,49 @@ for (const data of [wav({ seconds: MAX_CAB_IR_FILE_SECONDS + 0.01 }), wav({ chan
 }
 const truncated = wav(); new DataView(truncated).setUint32(40, 0xffffffff, true);
 assert.throws(() => validateCabinetWav(truncated));
+
+// 거절 이유까지 본다 — 어떤 검사가 막았는지 하나씩 따로 확인해, 한 검사가 빠져도 다른 검사가 대신 막아 주는 일이 없게 한다.
+const messageOf = (data) => {
+  try { validateCabinetWav(data); return null; } catch (error) { return error.message; }
+};
+{
+  const riffMismatch = wav(); new DataView(riffMismatch).setUint32(4, 1234, true);
+  assert.equal(messageOf(riffMismatch), ko.cabinetIr.notWav, 'RIFF 길이가 파일 길이와 다르면 WAV 가 아니다');
+  const noWave = wav(); new Uint8Array(noWave).set([88, 88, 88, 88], 8);
+  assert.equal(messageOf(noWave), ko.cabinetIr.notWav, "'WAVE' 표지가 없으면 WAV 가 아니다");
+  assert.equal(messageOf(new ArrayBuffer(43)), ko.cabinetIr.fileTooBig, '헤더보다 짧은 파일');
+  assert.equal(messageOf(wav({ channels: 3 })), ko.cabinetIr.unsupportedFormat, '3채널은 받지 않는다(블록 크기가 맞아도)');
+  assert.equal(messageOf(wav({ channels: 4 })), ko.cabinetIr.unsupportedFormat);
+  assert.equal(messageOf(wav({ format: 6 })), ko.cabinetIr.unsupportedFormat, 'PCM·float 이 아닌 형식');
+  assert.equal(messageOf(wav({ format: 3, bits: 16 })), ko.cabinetIr.unsupportedFormat, 'float 은 32비트만');
+  assert.equal(messageOf(wav({ bits: 12 })), ko.cabinetIr.unsupportedFormat, '12비트 PCM');
+  assert.equal(messageOf(wav({ sampleRate: 7999 })), ko.cabinetIr.unsupportedFormat, '샘플레이트 하한');
+  assert.equal(messageOf(wav({ sampleRate: 192001 })), ko.cabinetIr.unsupportedFormat, '샘플레이트 상한');
+  validateCabinetWav(wav({ sampleRate: 8000 })); validateCabinetWav(wav({ sampleRate: 192000 })); // 경계는 받는다
+  for (const bits of [8, 16, 24, 32]) validateCabinetWav(wav({ bits }));
+  const badAlign = wav(); new DataView(badAlign).setUint16(32, 3, true);
+  assert.equal(messageOf(badAlign), ko.cabinetIr.unsupportedFormat, '블록 크기가 채널×비트와 다르면 받지 않는다');
+  const badAlignStereo = wav({ channels: 2 }); new DataView(badAlignStereo).setUint16(32, 2, true);
+  assert.equal(messageOf(badAlignStereo), ko.cabinetIr.unsupportedFormat);
+  assert.equal(messageOf(truncated), ko.cabinetIr.corrupted, '청크 크기가 파일보다 크면 손상된 파일이다');
+  // 청크 종류와 상관없이 크기가 파일을 넘으면 먼저 손상된 파일로 본다(중복 fmt 같은 다른 이유로 둘러대지 않는다).
+  const hugeDuplicateFmt = wav(); const hugeView = new DataView(hugeDuplicateFmt);
+  new Uint8Array(hugeDuplicateFmt).set([102, 109, 116, 32], 36); hugeView.setUint32(40, 0xffffffff, true); // 'fmt '
+  assert.equal(messageOf(hugeDuplicateFmt), ko.cabinetIr.corrupted, '크기가 파일을 넘는 중복 fmt 청크');
+  const hugeSecondData = wav({ seconds: 0.001 }); new DataView(hugeSecondData).setUint32(16, 0x7fffffff, true); // fmt 청크 크기를 부풀린다
+  assert.equal(messageOf(hugeSecondData), ko.cabinetIr.corrupted, '크기가 파일을 넘는 fmt 청크');
+  assert.equal(messageOf(wav({ seconds: MAX_CAB_IR_FILE_SECONDS + 0.01 })), ko.cabinetIr.tooLong);
+  const oddData = wav(); new DataView(oddData).setUint32(40, 3, true);
+  assert.equal(messageOf(oddData), ko.cabinetIr.tooLong, '데이터 크기가 블록의 배수가 아니면 받지 않는다(길이 검사 문구를 쓴다)');
+  const emptyData = wav(); new DataView(emptyData).setUint32(40, 0, true);
+  assert.equal(messageOf(emptyData), ko.cabinetIr.tooLong, '데이터가 비어 있으면 받지 않는다');
+  // 4 MiB: 딱 그 크기는 받고, 1 바이트 넘으면 거절한다. (192 kHz 모노 float32 로 파일 길이를 정확히 맞춘다.)
+  const frames = (MAX_CAB_IR_BYTES - 44) / 4;
+  const exact = wav({ sampleRate: 192000, format: 3, bits: 32, seconds: frames / 192000 });
+  assert.equal(exact.byteLength, MAX_CAB_IR_BYTES, '시험용 파일이 정확히 4 MiB');
+  assert.equal(messageOf(exact), null, '정확히 4 MiB 는 받는다');
+  assert.equal(messageOf(new ArrayBuffer(MAX_CAB_IR_BYTES + 1)), ko.cabinetIr.fileTooBig, '4 MiB 를 1 바이트 넘으면 거절한다');
+}
 
 // ── 2. 1초 넘게 자르기 ──────────────────────────────────────────────────────────────────────
 const ones = (frames, channels = 1) => ({ sampleRate: 48000, channels: Array.from({ length: channels }, () => new Float32Array(frames).fill(1)) });
