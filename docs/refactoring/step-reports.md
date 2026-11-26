@@ -2319,3 +2319,40 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - 가드의 소스 읽기 판별은 경로 글자(`src/`·`index.html`·`*.ts` …)를 따라가는 방식이라 아주 우회적인 경로 조립(예: 환경 변수로 폴더 이름 만들기)은 못 본다.
 
 ---
+
+## S4.8 상표명·저작물 정리
+
+- 브랜치·병합: `refactor/s4-8-trademarks` → `phase/4`. 커밋: `0746fa4`, `7ab41a4`
+- 해결 항목: R4-8, D3(기본안 적용 — 부록 C 의 표시 이름), D4(이미지는 이미 없음), D8(히스토리 정리 안 함). 설계서 '현재' 서술이 낡았다 — 세 표기와 `Source/` 이미지는 시작 때 이미 없었다(L-333).
+- 변경 파일(`git diff --shortstat phase/4 HEAD`, 이 문서 커밋 전): 7 files changed, 14 insertions(+), 3 deletions(-). 제품 — `DrivePedal.tsx`(단추 이름 2개)뿐. 시험 — `e22-copy.spec.ts`(상표 표기 검사). 저장소 — `Source/*.md` 3개 → `docs/planning/`, `.gitignore`, `README.md`.
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| `src/`·`public/`·`index.html` 에서 'TS-9'·'Tube Screamer'·'Crunch Box' 0건 | **충족** | 시작 때 이미 0건, 'TS-9' 의 줄임말이던 'TS Clean'·'TS Boost' 2곳을 'Mid …' 로 바꿨고 E-22 가 화면에서 지킨다(변이 2/2) |
+| `git ls-files Source` 에서 이미지 확장자 0줄 | **충족** | 시작 때 이미 0줄. 이제 `Source/` 는 추적 파일이 0개(`git check-ignore Source/x.png` 로 무시 확인) |
+
+**전후**
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| 'TS-9'·'Tube Screamer'·'Crunch Box' (`src`·`public`·`index.html`) | 0곳 | 0곳 |
+| 'TS Clean'·'TS Boost' (Drive 빠른 프리셋 단추) | 2곳 | 0곳('Mid Clean'·'Mid Boost') |
+| 화면 상표 표기 검사 | 없음 | E-22 에 있음(변이 2/2 잡음) |
+| `git ls-files Source` | 3개(AI 기획 문서) | 0개 — `docs/planning/` 3개 |
+| `npm test` | 53개 통과(S4.7, 577초) | 53개 통과(589초) |
+| 전체 e2e | 333개 통과(S4.6) | 333개 통과(21.8분) — 시험 개수는 그대로, E-22 안의 검사만 늘었다 |
+| 프로브 | 30개, 값 2,468개 | 다시 돌리지 않음 — `src/audio`·`src/config`·기준선 불변(`npm test` 안의 `test:probe` 는 통과) |
+
+- 검증(최종 커밋 + 문서 변경 위에서)
+  - `npx tsc -b --noEmit`·`npx tsc -p tsconfig.e2e.json --noEmit`·`npx eslint e2e`·`npm run build`·`npm run lint` 오류 0, 정규식 단언 목록 `regex-assertions.md` 그대로(0곳).
+  - `npm test` 53개 통과(589초), 전체 e2e 333개 통과(21.8분).
+  - **새 검사가 정말 잡는지**: 변이 2개(L-334) 모두 실패 → 되돌린 뒤 통과.
+- 만난 문제
+  - `git mv` 가 스테이징한 이름 변경 3개가 Drive 단추 커밋에 섞여 들어갔다(L-335). 기록은 다시 쓰지 않고 적어 둔다.
+- 사람 확인 필요
+  - 'Plexi Lead'·'British Crunch'·Cab 라벨·Fuzz 'Velcro' 표기, Cab 내부 id, `docs/planning/` 공개 여부, 옛 Git 기록의 이미지(D8)(L-336~L-338).
+- 남은 위험
+  - 부록 C 에 없는 제품 연상 표현(L-337)과 Cab 내부 id(L-336)는 그대로다. 이 문서는 법률 판단이 아니다.
+  - 옛 Git 기록에 이미지가 남아 있다.
+
+---
