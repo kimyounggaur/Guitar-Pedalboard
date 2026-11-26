@@ -2434,3 +2434,41 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - `ScriptProcessorNode` 는 오래된 API 다. 5분 WAV 는 메모리를 약 115 MB 쓴다. S4.3 노브 시간 시험은 부하에서 4 ms 상한에 가까운 값이 나올 수 있다(이번 4.2 ms, 이전 1.4~3.3 ms).
 
 ---
+
+## S5.2 MIDI 확장
+
+- 브랜치·병합: `refactor/s5-2-midi-expression` → `phase/5`. 커밋: `97fe606`(마스터 볼륨 스무딩 수정 + test:volume-smoothing), `d0c38bc`(PC·CC 시험)
+- 해결 항목: R5-2(RX-2). 설계의 'ParamDef 로 대상 고르기'는 하지 않았다(L-350). 시험 중 찾은 마스터 볼륨 계단을 고쳤다(L-351).
+- 변경 파일(`git diff --shortstat phase/5 HEAD`, 이 문서 커밋 전): 6 files changed, 332 insertions(+), 2 deletions(-). 제품 — `src/audio/utils/smoothing.ts`(`smoothVolume`·`VOLUME_SMOOTHING_SECONDS`)·`src/audio/AudioEngine.ts`(`setMasterVolume` 한 줄). 시험 — `scripts/volume-smoothing-regression.mjs` 신설, `scripts/midi-regression.mjs` 단언 추가, `e2e/tests/s5-2-midi-expression.spec.ts` 신설. `package.json` 스크립트 1줄.
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| PC 로 프리셋 전환 ≤ 50 ms | **화면 반영까지 충족** | 메시지 → 화면 반영 8~13 ms(오디오 연결 중). 소리까지의 시간은 재지 못함(L-352) |
+| 익스프레션 CC 0~127 이 대상 범위 전체를 움직인다 | **충족** | 와우 0~100 의 모든 정수·볼륨 0~1(`test:midi`), e2e 로 0·64·127 이 화면에 반영 |
+| 지퍼 잡음이 없다 | **마스터 볼륨 충족** | 실제 Chrome 에서 CC 스윕 표본 간 최대 변화 0.000041·거꾸로 간 곳 0(옛 방식은 한 번에 0.668). 와우는 `smoothParam` 12 ms 를 이미 사용 |
+
+**전후**
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| 마스터 볼륨 1 → 0.2 한 번(Chrome) | 첫 표본 차 0.668(계단) | 0.0033(20 ms 뒤 98%) |
+| MIDI·슬라이더 볼륨 방식 | `rampParam`(cancelAndHold 뒤 선형 램프) | `smoothVolume`(`setTargetAtTime`) |
+| `npm test` | 54개 통과(S5.1, 563초) | 55개 통과(602초) |
+| 전체 e2e | 341개(S5.1) | 346개(24.5분) 모두 통과(실패 0, 재시도 없음) |
+| 프로브 | 30개, 값 2,468개 | 그대로 — `npm test` 안의 `test:probe` 통과(오디오 그래프의 이펙터는 불변) |
+
+- 검증(최종 커밋 위에서)
+  - `npx tsc -b --noEmit`·`npx tsc -p tsconfig.e2e.json --noEmit`·`npx eslint e2e`·`npm run build`·`npm run lint` 오류 0, 정규식 단언 목록 그대로(0곳), `npm test` 55개 통과.
+  - 전체 e2e 346개 모두 통과(실패 0, 재시도 없음).
+  - **새 검사가 정말 잡는지**: 스무딩 변이 6/6, e2e 변이 7/7, `test:midi` 변이 4/4(L-353).
+- 만난 문제
+  - 처음에 `rampParam` 이 Chrome 에서 계단이라는 것은 Cab(S3.2, L-222)에서 이미 찾은 일이다. 이번에 마스터 볼륨이 같은 길을 쓰는 것을 확인해 이 Step 의 '지퍼 잡음 없음'을 위해 고쳤다.
+  - e2e 에서 와우 모드는 선택 상자가 아니라 '동작 방식' 버튼 그룹(`auto`·`manual`)이었다.
+  - 실시간 `AudioContext` 의 출력을 `ScriptProcessor` 로 받아 계단을 재려던 시도는 헤드리스에서 버퍼가 끊겨 믿을 수 없어 버렸다(오프라인 렌더로 쟀다).
+- 사람 확인 필요
+  - 실제 MIDI 컨트롤러·익스프레션 페달 소리, PC 로 바뀌는 소리의 시간, 체인 재구성 중에 볼륨 CC 가 끼어들 때의 소리, 대상을 ParamDef 로 고르게 확장할지.
+- 남은 위험
+  - F-5(같은 `rampParam` 계단)는 입력 게인·프리셋 trim·체인 페이드·`InputStage` 램프·리버브 웻 페이드·`BaseEffect.setRoutingParam` 에 남아 있다. 특히 체인 페이드는 S5.3(실행 취소 시 클릭 없음)과 겹친다.
+  - `setMasterVolume` 이 체인 재구성 페이드 구간에 끼어들 수 있다(이전부터).
+
+---

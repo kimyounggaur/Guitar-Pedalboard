@@ -344,6 +344,30 @@ inputOne.emit([0xb1, 11, 0]);
 assert.deepEqual(advancedActions, [['program', 'preset-1'], ['volume', 1], ['wah', 0]]);
 assert.equal(activeCalls.length, beforeAdvanced, '익스프레션 CC가 페달 스위치에도 적용되었습니다.');
 
+// S5.2: CC 0~127 이 대상 범위 전체를 움직인다 — 볼륨은 0~1, 와우 수동 위치는 0~100 의 모든 정수에 닿고, 값이 커지면 커진다(거꾸로 가지 않는다).
+{
+  const volumes = [];
+  const wahs = [];
+  const sweep = { program: () => {}, volume: (value) => volumes.push(value), wah: (value) => wahs.push(value) };
+  for (let cc = 0; cc <= 127; cc += 1) {
+    assert.equal(dispatchAdvancedMessage([0xb1, 20, cc], advanced, sweep), true);
+    assert.equal(dispatchAdvancedMessage([0xb1, 11, cc], advanced, sweep), true);
+  }
+  assert.equal(volumes.length, 128);
+  assert.equal(wahs.length, 128);
+  assert.equal(volumes[0], 0, '볼륨 CC 0 은 0');
+  assert.equal(volumes[127], 1, '볼륨 CC 127 은 1');
+  assert.ok(volumes.every((value, index) => value >= 0 && value <= 1 && (index === 0 || value > volumes[index - 1])), '볼륨은 0~1 안에서 CC 가 커질수록 커진다');
+  assert.equal(wahs[0], 0, '와우 CC 0 은 0');
+  assert.equal(wahs[127], 100, '와우 CC 127 은 100');
+  assert.ok(wahs.every((value, index) => Number.isInteger(value) && (index === 0 || value >= wahs[index - 1])), '와우는 정수이고 거꾸로 가지 않는다');
+  assert.deepEqual([...new Set(wahs)], Array.from({ length: 101 }, (_, index) => index), '와우 수동 위치 0~100 의 모든 값에 닿는다');
+  // 범위 밖 값(128 이상·음수)은 처리하지 않는다.
+  assert.equal(dispatchAdvancedMessage([0xb1, 20, 128], advanced, sweep), false);
+  assert.equal(dispatchAdvancedMessage([0xb1, 20, -1], advanced, sweep), false);
+  assert.equal(volumes.length, 128);
+}
+
 let advancedMount = null;
 const clone = (value) => JSON.parse(JSON.stringify(value));
 // 같은 설정을 화면(MidiAdvancedControls)이 저장소에서 읽어 처리기를 등록한다: 프로그램 변경 → 프리셋 적용, CC → 마스터 볼륨·수동 와우.

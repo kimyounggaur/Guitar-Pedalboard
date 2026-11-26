@@ -11,7 +11,7 @@
 
 ```bash
 npm run build                         # 시험은 빌드 결과(dist/)를 vite preview 로 서비스한다
-npm run e2e                           # 빌드까지 알아서 한다. 전체 341개, 약 24분
+npm run e2e                           # 빌드까지 알아서 한다. 전체 346개, 약 25분
 E2E_SKIP_BUILD=1 npm run e2e          # dist/ 가 이미 있을 때(CI 는 앞 단계에서 빌드해 이렇게 돌린다)
 npm run e2e -- --grep "E-23"          # 일부만
 E2E_UPDATE_BASELINE=1 npm run e2e     # 기준선(e2e.json)과 대표 스크린샷 갱신 (의도한 변화일 때만)
