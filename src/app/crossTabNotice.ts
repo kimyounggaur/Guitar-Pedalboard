@@ -9,9 +9,10 @@
 //   · 옛 탭은 노브를 돌릴 때마다 쓴다. 연주 중에 같은 경고가 계속 끼어들지 않도록 한 번 띄운 뒤에는 일정 시간 다시 띄우지 않는다.
 //   · 이 안내는 v2 모드로 열린 탭에서만 의미가 있다. 옛 방식(v1) 모드로 연 탭은 v1 키에 쓰는 것이 정상이다 — 설치 여부는 main.tsx 가 정한다.
 import { STORAGE_KEYS } from '../persistence/keys';
+import { ko } from '../i18n/ko';
 import { showToast, type ToastInput } from '../store/toastStore';
 
-export const OLD_VERSION_TAB_MESSAGE = '다른 탭에서 이전 버전이 열려 있습니다. 그 탭을 닫고 새로고침해 주세요.';
+export const OLD_VERSION_TAB_MESSAGE: string = ko.notice.oldVersionTab;
 export const OLD_VERSION_TAB_TOAST_KEY = 'storage:old-version-tab';
 /** 한 번 띄운 뒤 같은 안내를 다시 띄우지 않는 시간 */
 export const OLD_VERSION_TAB_COOLDOWN_MS = 5 * 60 * 1000;

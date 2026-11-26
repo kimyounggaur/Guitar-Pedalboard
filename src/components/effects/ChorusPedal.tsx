@@ -1,6 +1,8 @@
 import { knobDefault } from '../knobDefaults';
 import type { ChorusParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { ko } from '../../i18n/ko';
+import { useParamNames } from '../ParamScope';
 
 interface ChorusPedalProps {
   params: ChorusParams;
@@ -10,8 +12,9 @@ interface ChorusPedalProps {
 const voiceOptions: ChorusParams['voices'][] = [2, 3, 4];
 
 export function ChorusPedal({ params, onChange }: ChorusPedalProps) {
+  const voicesName = useParamNames('목소리 수').name;
   return (
-    <div className="chorus-ui" role="group" aria-label="코러스 컨트롤">
+    <div className="chorus-ui" role="group" aria-label={ko.pedal.chorus.controls}>
       <div className="chorus-wave-panel" aria-hidden="true">
         <span />
         <span />
@@ -82,7 +85,7 @@ export function ChorusPedal({ params, onChange }: ChorusPedalProps) {
         />
       </div>
 
-      <fieldset className="chorus-voice-selector">
+      <fieldset className="chorus-voice-selector" aria-label={voicesName}>
         <legend>Voices</legend>
         <div>
           {voiceOptions.map((voices) => (
@@ -100,7 +103,7 @@ export function ChorusPedal({ params, onChange }: ChorusPedalProps) {
 
       <div className="chorus-brand-plate">
         <strong>CHORUS</strong>
-        <span>Multi Voice Modulation</span>
+        <span>{ko.tagline.chorus}</span>
       </div>
     </div>
   );

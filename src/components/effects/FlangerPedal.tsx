@@ -1,6 +1,7 @@
 import { knobDefault } from '../knobDefaults';
 import type { FlangerParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { ko } from '../../i18n/ko';
 
 interface FlangerPedalProps {
   params: FlangerParams;
@@ -14,7 +15,7 @@ function signedPercent(value: number): string {
 
 export function FlangerPedal({ params, onChange }: FlangerPedalProps) {
   return (
-    <div className="flanger-ui" role="group" aria-label="플랜저 컨트롤">
+    <div className="flanger-ui" role="group" aria-label={ko.pedal.flanger.controls}>
       <div className="flanger-jet-panel" aria-hidden="true">
         <span className="flanger-jet-line flanger-jet-line-a" />
         <span className="flanger-jet-line flanger-jet-line-b" />
@@ -86,7 +87,7 @@ export function FlangerPedal({ params, onChange }: FlangerPedalProps) {
 
       <div className="flanger-brand-plate">
         <strong>FLANGER</strong>
-        <span>Regenerative Jet Modulation</span>
+        <span>{ko.tagline.flanger}</span>
       </div>
     </div>
   );

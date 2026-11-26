@@ -5,6 +5,8 @@ import type { CrunchParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 import { useKnobDrag } from '../../hooks/useKnobDrag';
 import { initialPedals } from '../../store/pedalStore';
+import { useParamNames } from '../ParamScope';
+import { ko } from '../../i18n/ko';
 
 interface CrunchPedalProps {
   params: CrunchParams;
@@ -21,6 +23,7 @@ interface CrunchKnobProps {
 }
 
 function CrunchKnob({ label, value, min, max, step, onChange }: CrunchKnobProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const progress = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(progress, 0), 1) * 270;
   const defaults = initialPedals.find((pedal) => pedal.type === 'crunch')!.params as CrunchParams;
@@ -40,21 +43,21 @@ function CrunchKnob({ label, value, min, max, step, onChange }: CrunchKnobProps)
           max={max}
           step={step}
           value={value}
-          aria-label={label}
-          aria-valuetext={`${label} ${Math.round(value)}%`}
+          aria-label={accessibleName}
+          aria-valuetext={`${accessibleName} ${Math.round(value)}%`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
-      <strong>{label}</strong>
+      <strong title={tip}>{label}</strong>
       <output>{Math.round(value)}%</output>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} onChange={onChange} />
     </div>
   );
 }
 
 export function CrunchPedal({ params, onChange }: CrunchPedalProps) {
   return (
-    <div className="crunch-box-ui" role="group" aria-label="Crunch controls">
+    <div className="crunch-box-ui" role="group" aria-label={ko.pedal.crunch.controls}>
       <section className="crunch-face">
         <div className="crunch-knob-layout">
           <CrunchKnob

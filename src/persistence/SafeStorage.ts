@@ -10,6 +10,7 @@
 //
 // 이 파일은 React·zustand 에 기대지 않는다. 안내를 보여 주는 방법은 `notify` 로 받는다(앱에서는 토스트, 시험에서는 기록).
 import { APP_STORAGE_PREFIX, CORRUPT_KEY_INFIX, KEPT_ON_RESET_KEYS, STORAGE_KEYS, type StorageKey } from './keys';
+import { ko } from '../i18n/ko';
 
 export type WriteFailureReason = 'blocked' | 'quota' | 'unknown';
 export type WriteResult = { ok: true } | { ok: false; reason: WriteFailureReason };
@@ -19,11 +20,10 @@ export type StorageNoticeKind = 'blocked' | 'quota' | 'corrupt' | 'unknown';
 
 /** 안내 문구(설계서 4.8절 표 그대로, unknown 만 이 Step 에서 더했다 — REFACTOR_LOG). */
 export const STORAGE_NOTICE_MESSAGES: Readonly<Record<StorageNoticeKind, string>> = {
-  blocked: '브라우저 설정 때문에 설정을 저장할 수 없습니다. 이번 방문 동안만 유지됩니다.',
-  quota:
-    '저장 공간이 가득 차 설정이 저장되지 않았습니다. 같은 주소(kimyounggaur.github.io)에 올린 다른 앱의 데이터가 공간을 쓰고 있을 수 있습니다.',
-  corrupt: '저장된 설정 일부를 읽지 못해 기본값으로 시작합니다.',
-  unknown: '설정을 저장하지 못했습니다. 이번 방문 동안만 유지됩니다.',
+  blocked: ko.storage.blocked,
+  quota: ko.storage.quota,
+  corrupt: ko.storage.corrupt,
+  unknown: ko.storage.unknown,
 };
 
 /** localStorage 가 가진 표면 중 이 파일이 쓰는 것. 시험에서는 가짜를 꽂는다. `removeItem`·`key`·`length` 는 없어도 된다. */

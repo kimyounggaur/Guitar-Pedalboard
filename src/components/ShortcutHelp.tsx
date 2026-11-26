@@ -1,5 +1,6 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { SHORTCUT_HELP_ROWS } from '../input/shortcutKeys';
+import { ko } from '../i18n/ko';
 
 interface ShortcutHelpProps {
   onClose: () => void;
@@ -88,7 +89,7 @@ export function ShortcutHelp({ onClose }: ShortcutHelpProps) {
       >
         <header className="shortcut-help-header">
           <div>
-            <p className="eyebrow">Keyboard</p>
+            <p className="eyebrow">{ko.app.eyebrow.keyboard}</p>
             <h2 id="shortcut-help-title">키보드 단축키</h2>
           </div>
           <button

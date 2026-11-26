@@ -21,6 +21,7 @@ import { useChainItems, usePedalIds } from '../store/pedalSelectors';
 import { useRenderCount } from '../testing/renderCount';
 import { PedalIcon } from './PedalIcon';
 import { SortablePedal } from './SortablePedal';
+import { ko } from '../i18n/ko';
 
 // 로고는 표시 폭(데스크톱 높이 56 px ≈ 113 px, 좁은 화면 최대 520 px)에 맞춰 520 px·1040 px 두 가지만 둔다(S4.1).
 // srcset·sizes 는 index.html 의 preload(imagesrcset·imagesizes)와 같은 값이어야 미리 받은 그림을 그대로 쓴다 — E-19 가 한 번만 받는지 본다.
@@ -126,13 +127,13 @@ export function PedalBoard({ inputPanel }: PedalBoardProps) {
     <section id="pedal-board-section" className="board-section" aria-label="페달보드">
       <div className={`section-heading${inputPanel && isLiveConnected ? ' is-connected' : ''}`}>
         <div className="brand-lockup">
-          <p className="eyebrow">Pedalboard</p>
+          <p className="eyebrow">{ko.app.eyebrow.pedalboard}</p>
           <h1 className="app-logo-title">
             <img
               src={logoUrl}
               srcSet={logoSrcSet}
               sizes={logoSizes}
-              alt="Guitar Pedal Board"
+              alt={ko.app.logoAlt}
               width="520"
               height="259"
               loading="eager"
@@ -167,7 +168,7 @@ export function PedalBoard({ inputPanel }: PedalBoardProps) {
 
       {showChainToast && (
         <div className="chain-toast" role="status">
-          페달 순서가 변경되었습니다.
+          {ko.chain.reordered}
         </div>
       )}
     </section>

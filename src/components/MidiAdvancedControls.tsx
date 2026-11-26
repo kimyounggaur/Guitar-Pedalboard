@@ -3,6 +3,7 @@ import { AudioEngine } from '../audio/AudioEngine';
 import { dispatchAdvancedMessage, parseAdvancedMessage, validateMidiAdvanced, type MidiAdvancedConfig } from '../audio/midiAdvanced';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { registerMidiAdvancedHandler, useAudioStore } from '../store/audioStore';
+import { ko } from '../i18n/ko';
 import { usePedalStore } from '../store/pedalStore';
 import { applyPresetPedals, usePresetStore } from '../store/presetStore';
 
@@ -25,9 +26,9 @@ export function MidiAdvancedControls() {
   const save = (next: MidiAdvancedConfig) => {
     const checked = validateMidiAdvanced(next);
     const collision = Object.values(mappings).some((mapping) => mapping.channel === checked.channel && 'cc' in mapping && (mapping.cc === checked.volumeCc || mapping.cc === checked.wahCc));
-    if (collision) { setNotice('선택한 채널과 CC가 페달 MIDI 스위치와 겹칩니다. 다른 CC를 선택하세요.'); return; }
-    if (next.volumeCc !== null && next.volumeCc === next.wahCc) { setNotice('볼륨과 와우에는 서로 다른 CC를 지정하세요.'); return; }
-    setNotice('설정을 저장했습니다.');
+    if (collision) { setNotice(ko.midi.advancedCollision); return; }
+    if (next.volumeCc !== null && next.volumeCc === next.wahCc) { setNotice(ko.midi.advancedSameCc); return; }
+    setNotice(ko.midi.advancedSaved);
     configRef.current = checked;
     setConfig(checked);
     safeStorage.set(STORAGE_KEYS.midiAdvanced, checked);
@@ -40,9 +41,9 @@ export function MidiAdvancedControls() {
     const handle = (data: Uint8Array) => dispatchAdvancedMessage(data, configRef.current, {
       program: (id) => {
         const preset = usePresetStore.getState().presets.find((item) => item.id === id);
-        if (!preset) { setNotice('지정된 프리셋을 찾을 수 없습니다. 매핑을 다시 설정하세요.'); return; }
+        if (!preset) { setNotice(ko.midi.programMissing); return; }
         applyPresetPedals(preset.pedals, preset.trimDb);
-        setNotice(`MIDI: ${preset.name} 프리셋을 불러왔습니다.`);
+        setNotice(ko.midi.programLoaded(preset.name));
       },
       volume: (value) => {
         AudioEngine.getInstance().setMasterVolume(value);
@@ -54,7 +55,7 @@ export function MidiAdvancedControls() {
       },
       wah: (value) => {
         const pedal = usePedalStore.getState().pedals.find((item) => item.type === 'autoWah');
-        if (!pedal) { setNotice('와우 페달이 없어 익스프레션을 적용할 수 없습니다.'); return; }
+        if (!pedal) { setNotice(ko.midi.wahMissing); return; }
         const pedalStore = usePedalStore.getState();
         if ('mode' in pedal.params && pedal.params.mode !== 'manual') {
           pedalStore.updatePedalParam(pedal.id, 'mode', 'manual');

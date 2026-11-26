@@ -6,6 +6,8 @@ import type { PedalParamValue, ReverbParams } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 import { formatParamValue, getParamDef } from '../../audio/params';
 import { ToggleSwitch } from '../ToggleSwitch';
+import { useParamNames } from '../ParamScope';
+import { ko } from '../../i18n/ko';
 
 const decayDef = getParamDef('reverb', 'decay');
 
@@ -26,6 +28,7 @@ interface ReverbKnobProps {
 }
 
 function ReverbKnob({ label, value, min, max, step, displayValue, ariaValueText, onChange }: ReverbKnobProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const progress = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(progress, 0), 1) * 270;
   const key = ({ Level: 'level', Decay: 'decay', Tone: 'highCut', Mix: 'mix' } as Record<string, string>)[label];
@@ -33,7 +36,7 @@ function ReverbKnob({ label, value, min, max, step, displayValue, ariaValueText,
 
   return (
     <div className="reverb-knob">
-      <span>{label}</span>
+      <span title={tip}>{label}</span>
       <span
         className="reverb-knob-shell" {...dragHandlers}
         style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}
@@ -45,20 +48,21 @@ function ReverbKnob({ label, value, min, max, step, displayValue, ariaValueText,
           max={max}
           step={step}
           value={value}
-          aria-label={label}
-          aria-valuetext={`${label} ${ariaValueText ?? displayValue}`}
+          aria-label={accessibleName}
+          aria-valuetext={`${accessibleName} ${ariaValueText ?? displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
       <output>{displayValue}</output>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} onChange={onChange} />
     </div>
   );
 }
 
 export function ReverbPedal({ params, onChange }: ReverbPedalProps) {
+  const modeName = useParamNames('Mode').name;
   return (
-    <div className="reverb-stomp-ui" role="group" aria-label="Reverb controls">
+    <div className="reverb-stomp-ui" role="group" aria-label={ko.pedal.reverb.controls}>
       <div className="reverb-wave-panel">
         <div className="reverb-led" aria-hidden="true" />
         <div className="reverb-knob-grid">
@@ -110,7 +114,7 @@ export function ReverbPedal({ params, onChange }: ReverbPedalProps) {
       <div className="reverb-utility-controls">
         <label className="select-control">
           <span>Mode</span>
-          <select value={params.mode} onChange={(event) => onChange('mode', event.currentTarget.value)}>
+          <select aria-label={modeName} value={params.mode} onChange={(event) => onChange('mode', event.currentTarget.value)}>
             <option value="room">Room</option>
             <option value="hall">Hall</option>
             <option value="plate">Plate</option>

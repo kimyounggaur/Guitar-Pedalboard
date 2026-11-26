@@ -15,6 +15,7 @@ import { startDistServer, type DistServer } from '../helpers/dist-server';
 import { repoRoot } from '../helpers/env';
 import { expect, test } from '../helpers/fixtures';
 import { PEDALS, idOfPedal, pedalGroup } from '../helpers/storage';
+import { pedalRegionName } from '../helpers/ko-names';
 
 const DIST_DIR = process.env.E2E_DIST_DIR ?? join(repoRoot, 'dist');
 /** 설계서 수용 기준: CPU 4배 느림에서 한 칸 처리 ≤ 4 ms */
@@ -86,8 +87,8 @@ interface StepTime {
 /** 카드의 첫 노브(range 입력)를 `steps` 칸 움직이며 칸마다 걸린 시간을 잰다 */
 async function measureKnobSteps(page: Page, pedalName: string, steps: number): Promise<StepTime[]> {
   return page.evaluate(
-    async ({ name, count }) => {
-      const card = document.querySelector(`.pedal-board section.pedal-card[aria-label="${name} 이펙터"]`);
+    async ({ regionName, name, count }) => {
+      const card = document.querySelector(`.pedal-board section.pedal-card[aria-label="${regionName}"]`);
       const input = card?.querySelector('input[type="range"]') as HTMLInputElement | null;
       if (!input) throw new Error(`노브를 찾지 못했습니다: ${name}`);
       const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
@@ -112,7 +113,7 @@ async function measureKnobSteps(page: Page, pedalName: string, steps: number): P
       }
       return times;
     },
-    { name: pedalName, count: steps },
+    { regionName: pedalRegionName(pedalName), name: pedalName, count: steps },
   );
 }
 

@@ -18,6 +18,7 @@ import { fixturesDir, repoRoot } from '../helpers/env';
 import { expect, test } from '../helpers/fixtures';
 import { mockStorage, readAudioTracking, trackAudioContexts } from '../helpers/mocks';
 import { pasteImport } from '../helpers/preset-io';
+import { knobKoName, pedalRegionName } from '../helpers/ko-names';
 
 // 서비스 워커가 가운데서 요청을 받아 가면 page.route 가 닿지 않으므로(정적 안내 시험), 이 파일 전체에서 서비스 워커를 쓰지 않는다.
 test.use({ serviceWorkers: 'block' });
@@ -36,9 +37,9 @@ const corruptFixture = JSON.parse(readFileSync(join(fixturesDir, 'storage-v1', '
 const toastOf = (page: Page, key: string): Locator => page.locator(`.toast[data-toast-key="${key}"]`);
 const appErrorScreen = (page: Page): Locator => page.locator('main[data-app-error]');
 const staticFallback = (page: Page): Locator => page.locator('main[data-static-fallback]');
-const pedalGroup = (page: Page, name: string): Locator => page.getByRole('region', { name: `${name} 이펙터`, exact: true });
+const pedalGroup = (page: Page, name: string): Locator => page.getByRole('region', { name: pedalRegionName(name), exact: true });
 const stompOf = (page: Page, name: string): Locator => pedalGroup(page, name).locator('.stomp-toggle-switch');
-const chorusRate = (page: Page): Locator => pedalGroup(page, 'Chorus').getByRole('slider', { name: 'Rate', exact: true });
+const chorusRate = (page: Page): Locator => pedalGroup(page, 'Chorus').getByRole('slider', { name: knobKoName('Chorus', 'Rate'), exact: true });
 
 /** 페이지에서 처리되지 않은 예외(pageerror)를 모은다. 흰 화면 대신 알림으로 다뤄야 하는 시험은 마지막에 비어 있어야 한다. */
 function watchPageErrors(page: Page): string[] {
@@ -64,7 +65,7 @@ async function expectAppUsable(page: Page): Promise<void> {
   await expect(drive).toHaveAttribute('aria-pressed', 'true');
 
   // 노브: 돌린 값이 화면에 남는다
-  const knob = pedalGroup(page, 'Drive').getByRole('slider', { name: 'Drive', exact: true });
+  const knob = pedalGroup(page, 'Drive').getByRole('slider', { name: knobKoName('Drive', 'Drive'), exact: true });
   await knob.fill('61');
   await expect(knob).toHaveValue('61');
 

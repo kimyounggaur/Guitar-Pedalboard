@@ -22,6 +22,7 @@ import factoryTrims from '../presets/factoryTrims.json';
 import { clonePedals, initialPedals, usePedalStore } from './pedalStore';
 import { useAudioStore } from './audioStore';
 import { showToast } from './toastStore';
+import { ko } from '../i18n/ko';
 
 const FACTORY_TIMESTAMP = 1767225600000;
 
@@ -577,9 +578,9 @@ export function announceFactoryCopies(): void {
     key: 'storage:factory-copies',
     kind: 'info',
     durationMs: 0,
-    message: `팩토리 프리셋과 똑같은 사본 ${copyIds.length}개가 있습니다. 정리할까요?`,
+    message: ko.preset.duplicatesFound(copyIds.length),
     action: {
-      label: '정리',
+      label: ko.preset.duplicatesClean,
       onAction: () => {
         const store = usePresetStore.getState();
         const stillCopies = new Set(findFactoryCopies(store.presets.filter((preset) => !preset.isFactory), defaultPresets));

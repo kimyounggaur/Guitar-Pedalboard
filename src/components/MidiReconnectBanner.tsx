@@ -1,3 +1,4 @@
+import { ko } from '../i18n/ko';
 import { useAudioStore } from '../store/audioStore';
 
 /**
@@ -16,11 +17,9 @@ export function MidiReconnectBanner() {
 
   return (
     <div className="offline-notice midi-reconnect-notice" role="status" aria-live="polite">
-      <strong>{needsPermission ? '저장된 MIDI 풋스위치가 아직 연결되지 않았습니다.' : 'MIDI 연결이 막혀 있습니다.'}</strong>
+      <strong>{needsPermission ? ko.midi.bannerNeedsPermissionTitle : ko.midi.bannerDeniedTitle}</strong>
       <span>
-        {needsPermission
-          ? '브라우저가 MIDI 사용을 묻는 창은 이 버튼을 눌렀을 때만 나옵니다.'
-          : '브라우저의 사이트 설정에서 이 사이트의 MIDI 접근을 허용한 뒤 다시 연결해 주세요.'}
+        {needsPermission ? ko.midi.bannerNeedsPermissionBody : ko.midi.bannerDeniedBody}
       </span>
       <button type="button" className="secondary-button" onClick={() => void connectSavedMidi({ force: true, userAction: true })}>
         MIDI 풋스위치 다시 연결

@@ -4,6 +4,8 @@ import { useKnobDrag } from '../../hooks/useKnobDrag';
 import { getParamDef } from '../../audio/params';
 import type { EQParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { useParamNames } from '../ParamScope';
+import { ko } from '../../i18n/ko';
 
 interface EQPedalProps {
   params: EQParams;
@@ -28,6 +30,7 @@ const presets: Record<string, Partial<EQParams>> = {
 };
 
 function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFaderProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const progress = max === min ? 0 : (value - min) / (max - min);
   const clampedProgress = Math.min(Math.max(progress, 0), 1);
   const position = 100 - clampedProgress * 100;
@@ -36,7 +39,7 @@ function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFad
 
   return (
     <div className="graphic-eq-fader">
-      <span>{label}</span>
+      <span title={tip}>{label}</span>
       <span className="graphic-eq-slot" {...dragHandlers}>
         <span className="graphic-eq-scale" aria-hidden="true" />
         <span className="graphic-eq-thumb" style={{ top: `${position}%` }} aria-hidden="true" />
@@ -46,13 +49,13 @@ function EQFader({ label, value, min, max, step, displayValue, onChange }: EQFad
           max={max}
           step={step}
           value={value}
-          aria-label={label}
-          aria-valuetext={`${label} ${displayValue}`}
+          aria-label={accessibleName}
+          aria-valuetext={`${accessibleName} ${displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
       <output>{displayValue}</output>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} onChange={onChange} />
     </div>
   );
 }
@@ -68,7 +71,7 @@ export function EQPedal({ params, onChange }: EQPedalProps) {
   };
 
   return (
-    <div className="graphic-eq-ui" role="group" aria-label="Graphic Equalizer controls">
+    <div className="graphic-eq-ui" role="group" aria-label={ko.pedal.eq.controls}>
       <section className="graphic-eq-slider-panel">
         <div className="graphic-eq-led" aria-hidden="true" />
         <div className="graphic-eq-fader-bank">

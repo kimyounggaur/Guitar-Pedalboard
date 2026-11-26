@@ -11,6 +11,7 @@ import type { BrowserContext, Page } from '@playwright/test';
 import { openApp } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { SCHEMA_KEY, STATE_KEY, V1_PEDALS_KEY, V1_PRESETS_KEY, loadV1Fixture, pedalGroup, seedStorage, stompOf, toastOf } from '../helpers/storage';
+import { knobKoName } from '../helpers/ko-names';
 
 const TOAST_KEY = 'storage:old-version-tab';
 /** 설계서 4.7 변환 절차 6번의 문구 그대로 */
@@ -105,7 +106,7 @@ test.describe('S2.4 두 탭 — 옛 버전 탭이 v1 키를 쓰면 알린다', (
     await settle(tabA);
     // 노브도 돌린다 → 300 ms 뒤 한 번 쓰는 다른 길도 v2 작업 상태 키에만 쓴다(v1 키에 쓰면 탭 A 가 경고를 띄운다).
     const stateWritesBeforeKnob = await countStorageEvents(tabA, STATE_KEY, true);
-    await pedalGroup(tabB, 'Drive').getByRole('slider', { name: 'Drive', exact: true }).fill('61');
+    await pedalGroup(tabB, 'Drive').getByRole('slider', { name: knobKoName('Drive', 'Drive'), exact: true }).fill('61');
     await waitForStorageEvents(tabA, STATE_KEY, true, stateWritesBeforeKnob + 1);
     // v1 키가 지워진다(브라우저의 사이트 데이터 정리 등) — 쓰기가 아니라 삭제다.
     await tabB.evaluate((storageKey) => window.localStorage.removeItem(storageKey), V1_PEDALS_KEY);

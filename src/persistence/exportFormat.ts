@@ -22,6 +22,7 @@ import {
   type PresetCarry,
   type PresetV2,
 } from './schema';
+import { ko } from '../i18n/ko';
 
 export const EXPORT_FORMAT = 'guitar-pedalboard-presets' as const;
 /** 앱이 팩토리 프리셋에만 쓰는 id 머리말. 사용자 프리셋의 id 는 이 머리말을 쓰지 않는다. */
@@ -81,22 +82,22 @@ export function parseImportFile(text: string): ParsedImportFile {
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error('JSON 파일을 읽을 수 없습니다. 형식을 확인해 주세요.');
+    throw new Error(ko.importFile.unreadable);
   }
 
   // v2 파일은 `format` 이나 `schemaVersion` 을 가진 객체다. v1 객체는 `version` 만 가진다.
   if (isRecord(parsed) && (parsed.format !== undefined || parsed.schemaVersion !== undefined)) {
-    if (parsed.format !== EXPORT_FORMAT) throw new Error('이 앱이 내보낸 프리셋 파일이 아닙니다.');
+    if (parsed.format !== EXPORT_FORMAT) throw new Error(ko.importFile.notOurs);
     if (parsed.schemaVersion !== SCHEMA_V2) {
-      throw new Error(`지원하지 않는 프리셋 파일 버전입니다: ${String(parsed.schemaVersion)}. 더 새로운 앱에서 만든 파일일 수 있습니다.`);
+      throw new Error(ko.importFile.unsupportedVersion(String(parsed.schemaVersion)));
     }
-    if (!Array.isArray(parsed.presets)) throw new Error('프리셋 JSON 형식이 올바르지 않습니다.');
+    if (!Array.isArray(parsed.presets)) throw new Error(ko.importFile.badFormat);
     const candidates = parsed.presets.map((entry): ImportCandidate => {
       let preset: PresetV2;
       try {
         preset = toPresetV2(entry);
       } catch {
-        throw new Error('프리셋 항목이 올바르지 않습니다.');
+        throw new Error(ko.importFile.badEntry);
       }
       return { preset: presetFromV2(preset), origin: preset.origin };
     });
@@ -258,5 +259,5 @@ export function applyImport(
 
 /** 결과 한 줄: 'N개 가져옴 · M개 건너뜀' */
 export function formatImportSummary(result: Pick<ImportResult, 'imported' | 'skipped'>): string {
-  return `${result.imported}개 가져옴 · ${result.skipped}개 건너뜀`;
+  return ko.importFile.summary(result.imported, result.skipped);
 }

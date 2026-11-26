@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { fixturesDir } from './env';
+import { pedalRegionName } from './ko-names';
 
 /** 저장 형식 버전(문자열 `2`). 변환이 끝난 뒤 맨 마지막에 쓴다. */
 export const SCHEMA_KEY = 'guitar-pedalboard:schema';
@@ -51,7 +52,7 @@ export function inBoardOrder(names: readonly string[]): string[] {
 }
 
 /** 페달 카드(`<section aria-label>` = region, 이름은 '<이름> 이펙터') */
-export const pedalGroup = (page: Page, name: string): Locator => page.getByRole('region', { name: `${name} 이펙터`, exact: true });
+export const pedalGroup = (page: Page, name: string): Locator => page.getByRole('region', { name: pedalRegionName(name), exact: true });
 /** 카드 안의 켜고 끄는 발스위치 */
 export const stompOf = (page: Page, name: string): Locator => pedalGroup(page, name).locator('.stomp-toggle-switch');
 /** 알림(토스트) — 같은 key 는 한 장만 뜬다 */

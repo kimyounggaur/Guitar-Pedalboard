@@ -24,6 +24,8 @@ import { useRenderCount } from '../testing/renderCount';
 import { SliderControl } from './SliderControl';
 import { knobDefault } from './knobDefaults';
 import { PedalFooter } from './PedalFooter';
+import { ParamScope } from './ParamScope';
+import { ko } from '../i18n/ko';
 import { NoiseGatePedal } from './effects/NoiseGatePedal';
 import { PhaserPedal } from './effects/PhaserPedal';
 import { CabPedal } from './effects/CabPedal';
@@ -80,9 +82,11 @@ export const PedalCard = memo(function PedalCard({ pedal, dragHandleProps, isDra
     AudioEngine.getInstance().setPedalParam(pedal.id, key, value);
   };
 
+  const koName = ko.pedal[pedal.type].name;
+
   return (
     <section
-      aria-label={`${pedal.name} 이펙터`}
+      aria-label={`${koName} 이펙터`}
       className={`pedal-card${pedal.type === 'compressor' ? ' pedal-card-compressor' : ''}${
         pedal.type === 'drive' ? ' pedal-card-drive' : ''
       }${pedal.type === 'autoWah' ? ' pedal-card-auto-wah' : ''
@@ -102,7 +106,7 @@ export const PedalCard = memo(function PedalCard({ pedal, dragHandleProps, isDra
         <button
           className="drag-handle"
           type="button"
-          aria-label={`${pedal.name} 순서 변경`}
+          aria-label={`${koName} 순서 변경`}
           {...(dragHandleProps as ButtonHTMLAttributes<HTMLButtonElement>)}
         >
           ::
@@ -113,6 +117,7 @@ export const PedalCard = memo(function PedalCard({ pedal, dragHandleProps, isDra
         </div>
       </header>
 
+      <ParamScope value={pedal.type}>
       <div
         className="pedal-controls"
         onPointerDown={stopControlEvent}
@@ -240,8 +245,9 @@ export const PedalCard = memo(function PedalCard({ pedal, dragHandleProps, isDra
           />
         )}
       </div>
+      </ParamScope>
 
-      <PedalFooter pedalId={pedal.id} pedalName={pedal.name} active={pedal.active} />
+      <PedalFooter pedalId={pedal.id} pedalName={koName} active={pedal.active} />
     </section>
   );
 });

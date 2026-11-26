@@ -375,7 +375,8 @@ const [engineSource, storeSource, panelSource, errorsSource] = await Promise.all
 const count = (text, needle) => text.split(needle).length - 1;
 ok(engineSource.includes('throw new WorkletLoadError({ cause: error })'), '엔진: addModule 실패를 WorkletLoadError 로 감싼다');
 ok(engineSource.includes("globalThis.isSecureContext === false") && engineSource.includes("'SecurityError'"), '엔진: 비보안 출처는 SecurityError 로 던진다');
-ok(engineSource.includes("throw new Error('이 브라우저는 오디오 입력을 지원하지 않습니다.')"), '엔진: 보안 출처인데 입력이 없으면 브라우저 탓으로 안내한다');
+ok(engineSource.includes('throw new Error(ko.engine.inputUnsupported)'), '엔진: 보안 출처인데 입력이 없으면 브라우저 탓으로 안내한다');
+equal(ko.engine.inputUnsupported, '이 브라우저는 오디오 입력을 지원하지 않습니다.', '엔진: 그 안내 문구');
 ok(!storeSource.includes('toErrorMessage'), '스토어: 옛 toErrorMessage 가 없다');
 equal(count(storeSource, 'connectErrorMessage(error)'), 2, '스토어: 연결(start)·장치 바꾸기(setSelectedDevice)만 4.13 문구를 쓴다');
 equal(count(storeSource, 'audioErrorMessage(error)'), 4, '스토어: 장치 목록·음원 파일 시작·재생·녹음은 연결이 아닌 안내를 쓴다');

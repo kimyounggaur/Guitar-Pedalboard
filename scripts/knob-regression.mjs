@@ -8,11 +8,11 @@ import { fileURLToPath, URL } from 'node:url';
 
 const result = await build({
   plugins: [workerUrlStub],
-  stdin: { contents: "export { knobDragValue } from './src/hooks/useKnobDrag.ts'; export { usePedalStore, initialPedals } from './src/store/pedalStore.ts'; export { knobDefault } from './src/components/knobDefaults.ts'; export { DelayPedal } from './src/components/effects/DelayPedal.tsx'; export { createElement } from 'react'; export { renderToStaticMarkup } from 'react-dom/server';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' },
+  stdin: { contents: "export { knobDragValue } from './src/hooks/useKnobDrag.ts'; export { usePedalStore, initialPedals } from './src/store/pedalStore.ts'; export { knobDefault } from './src/components/knobDefaults.ts'; export { DelayPedal } from './src/components/effects/DelayPedal.tsx'; export { ParamScope } from './src/components/ParamScope.tsx'; export { createElement } from 'react'; export { renderToStaticMarkup } from 'react-dom/server';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' },
   bundle: true, platform: 'node', format: 'esm', jsx: 'automatic', write: false,
   banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(process.cwd() + '/package.json');" },
 });
-const { knobDragValue, usePedalStore, knobDefault, initialPedals, DelayPedal, createElement, renderToStaticMarkup } = await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`);
+const { knobDragValue, usePedalStore, knobDefault, initialPedals, DelayPedal, ParamScope, createElement, renderToStaticMarkup } = await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`);
 assert.equal(knobDragValue(50, 20, 0, 100, 1), 60);
 assert.equal(knobDragValue(50, -20, 0, 100, 1), 40);
 assert.equal(knobDragValue(50, 1000, 0, 100, 1), 100);
@@ -48,12 +48,14 @@ assert.equal(knobDefault('drive', 'tone'), 55);
 assert.equal(knobDefault('reverb', 'decay'), 1.8);
 assert.throws(() => knobDefault('drive', 'invalid'));
 const delay = initialPedals.find((pedal) => pedal.type === 'delay');
-const syncMarkup = renderToStaticMarkup(createElement(DelayPedal, { pedalId: delay.id, params: { ...delay.params, sync: true }, onChange() {} }));
+// 화면에서는 페달 카드가 ParamScope 로 감싼다. 노브의 접근성 이름은 스키마의 한국어 이름이다(S4.6: D.Time → 지연 시간).
+const inCard = (params) => renderToStaticMarkup(createElement(ParamScope, { value: 'delay' }, createElement(DelayPedal, { pedalId: delay.id, params, onChange() {} })));
+const syncMarkup = inCard({ ...delay.params, sync: true });
 const syncInputs = [...syncMarkup.matchAll(/<input\b[^>]*>/g)].map((match) => match[0]);
-assert.ok(syncInputs.some((input) => input.includes('aria-label="D.Time"') && input.includes('disabled')));
-assert.ok(syncInputs.some((input) => input.includes('aria-label="D.Time 값 직접 입력"') && input.includes('disabled')));
-const freeMarkup = renderToStaticMarkup(createElement(DelayPedal, { pedalId: delay.id, params: { ...delay.params, sync: false }, onChange() {} }));
-const freeInput = [...freeMarkup.matchAll(/<input\b[^>]*>/g)].map((match) => match[0]).find((input) => input.includes('aria-label="D.Time 값 직접 입력"'));
+assert.ok(syncInputs.some((input) => input.includes('aria-label="지연 시간"') && input.includes('disabled')));
+assert.ok(syncInputs.some((input) => input.includes('aria-label="지연 시간 값 직접 입력"') && input.includes('disabled')));
+const freeMarkup = inCard({ ...delay.params, sync: false });
+const freeInput = [...freeMarkup.matchAll(/<input\b[^>]*>/g)].map((match) => match[0]).find((input) => input.includes('aria-label="지연 시간 값 직접 입력"'));
 assert.ok(freeInput && !freeInput.includes('disabled'));
 assert.ok(freeMarkup.includes('data-knob-drag'), 'Delay 노브의 끌기 껍데기에 표지가 있다(S4.4: 포인터는 입력이 아니라 껍데기가 받는다)');
 assert.ok(![...freeMarkup.matchAll(/<input\b[^>]*>/g)].some((match) => match[0].includes('data-knob-drag')), '끌기 핸들러는 range 입력이 아니라 껍데기에 있다');

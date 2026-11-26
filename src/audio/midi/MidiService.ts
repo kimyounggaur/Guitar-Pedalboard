@@ -4,6 +4,7 @@
 // 가장 중요한 규칙: **사용자 동작 없이는 권한 창을 띄우지 않는다.** 페이지를 열 때(`connectIfAllowed`)는 권한이 이미 허용(granted)일 때만
 // 연결하고, 아니면 '연결이 필요함' 상태로 두어 화면이 버튼을 보여 주게 한다. 권한 창이 떠도 되는 길은 사용자가 누른 버튼(`connect`)뿐이다.
 import type { MidiDeviceInfo } from './mapping';
+import { ko } from '../../i18n/ko';
 
 /** 브라우저가 알려 주는 MIDI 권한. `unknown`: 권한 조회를 지원하지 않거나 조회에 실패했다(Firefox·Safari 등). */
 export type MidiPermission = 'granted' | 'prompt' | 'denied' | 'unknown';
@@ -94,7 +95,7 @@ export class MidiService {
     }
     if (!this.supported) {
       this.update({ link: 'unsupported' });
-      throw new Error('Web MIDI를 지원하지 않는 브라우저입니다.');
+      throw new Error(ko.midi.unsupported);
     }
 
     const generation = this.generationValue;

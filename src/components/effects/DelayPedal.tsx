@@ -10,6 +10,8 @@ import { useKnobDrag } from '../../hooks/useKnobDrag';
 import { initialPedals } from '../../store/pedalStore';
 import { getParamDef } from '../../audio/params';
 import { delaySyncedLabel, delayTimeSeconds } from '../../audio/params/definitions/delay';
+import { useParamNames } from '../ParamScope';
+import { ko } from '../../i18n/ko';
 
 interface DelayPedalProps {
   pedalId: string;
@@ -29,6 +31,8 @@ const delayModeLabels: Record<DelayParams['mode'], string> = {
 const timeDef = getParamDef('delay', 'timeMs');
 
 export function DelayPedal({ pedalId, params, onChange }: DelayPedalProps) {
+  const modeName = useParamNames('Mode').name;
+  const divisionName = useParamNames('Division').name;
   const modeIndex = delayModes.indexOf(params.mode);
   const setTempoSync = useAudioStore((state) => state.setTempoSync);
   // Sync 가 시간을 정할 때(Slapback 은 Sync 를 무시한다)는 D.Time 을 막고, 엔진이 실제로 쓰는 값('1/4 · 500 ms')을 보여 준다.
@@ -36,7 +40,7 @@ export function DelayPedal({ pedalId, params, onChange }: DelayPedalProps) {
   const syncedMilliseconds = Math.round(delayTimeSeconds(params) * 1000);
 
   return (
-    <div className="delay-echo-ui" role="group" aria-label="Delay Echo controls">
+    <div className="delay-echo-ui" role="group" aria-label={ko.pedal.delay.controls}>
       <div className="delay-led" aria-hidden="true" />
 
       <div className="delay-knob-grid">
@@ -87,7 +91,7 @@ export function DelayPedal({ pedalId, params, onChange }: DelayPedalProps) {
       <div className="delay-utility-controls">
         <label className="select-control">
           <span>Mode</span>
-          <select value={params.mode} onChange={(event) => onChange('mode', event.currentTarget.value)}>
+          <select aria-label={modeName} value={params.mode} onChange={(event) => onChange('mode', event.currentTarget.value)}>
             <option value="digital">Digital</option>
             <option value="analog">Analog</option>
             <option value="tape">Tape</option>
@@ -118,7 +122,7 @@ export function DelayPedal({ pedalId, params, onChange }: DelayPedalProps) {
         <TapTempoControl />
         <label className="select-control">
           <span>Division</span>
-          <select value={params.division} onChange={(event) => onChange('division', event.currentTarget.value)}>
+          <select aria-label={divisionName} value={params.division} onChange={(event) => onChange('division', event.currentTarget.value)}>
             <option value="1/4">1/4</option>
             <option value="1/8">1/8</option>
             <option value="dotted1/8">Dotted 1/8</option>
@@ -142,6 +146,7 @@ interface DelayKnobProps {
 }
 
 function DelayKnob({ label, value, min, max, step = 1, ariaValueText, disabled = false, onChange }: DelayKnobProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const normalized = (value - min) / (max - min);
   const rotation = -135 + normalized * 270;
   const defaults = initialPedals.find((pedal) => pedal.type === 'delay')!.params as DelayParams;
@@ -159,15 +164,15 @@ function DelayKnob({ label, value, min, max, step = 1, ariaValueText, disabled =
           value={value}
           disabled={disabled}
           aria-disabled={disabled || undefined}
-          aria-label={label}
-          aria-valuetext={`${label} ${ariaValueText}`}
+          aria-label={accessibleName}
+          aria-valuetext={`${accessibleName} ${ariaValueText}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
         <i />
       </span>
-      <span>{label}</span>
+      <span title={tip}>{label}</span>
       <output>{ariaValueText}</output>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} disabled={disabled} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} disabled={disabled} onChange={onChange} />
     </div>
   );
 }

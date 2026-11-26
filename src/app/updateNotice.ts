@@ -7,9 +7,10 @@
 //   · 이 앱은 새 버전을 찾으러 다니지 않는다(연주 중에 새 네트워크 요청이 생기지 않게). 브라우저가 알아챌 때(탭을 새로 열거나 새로고침할 때,
 //     브라우저의 주기 확인)에만 이 알림이 온다. 이 알림이 처음 들어간 배포 이전부터 열려 있던 탭은 옛 스크립트라서 알림을 띄우지 못한다.
 import { showToast, type ToastInput } from '../store/toastStore';
+import { ko } from '../i18n/ko';
 
-export const UPDATE_NOTICE_MESSAGE = '새 버전이 있습니다 — 연주를 마친 뒤 새로고침';
-export const UPDATE_NOTICE_ACTION_LABEL = '새로고침';
+export const UPDATE_NOTICE_MESSAGE: string = ko.notice.updateAvailable;
+export const UPDATE_NOTICE_ACTION_LABEL: string = ko.notice.reload;
 export const UPDATE_NOTICE_TOAST_KEY = 'app:update-available';
 
 export type ServiceWorkerContainerLike = Pick<ServiceWorkerContainer, 'controller' | 'addEventListener' | 'removeEventListener'>;

@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useKnobDrag } from '../hooks/useKnobDrag';
 import { KnobNumberInput } from './KnobNumberInput';
+import { useParamNames } from './ParamScope';
 
 interface SliderControlProps {
   label: string;
@@ -16,6 +17,7 @@ interface SliderControlProps {
 }
 
 export function SliderControl({ label, value, min, max, step, unit = '', displayValue, ariaValueText, onChange, defaultValue }: SliderControlProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const shownValue = displayValue ?? `${Number(value.toFixed(2))}${unit}`;
   const accessibleValue = ariaValueText ?? shownValue;
   const progress = max === min ? 0 : (value - min) / (max - min);
@@ -27,15 +29,15 @@ export function SliderControl({ label, value, min, max, step, unit = '', display
     <div className="slider-control knob-control">
       <span className="knob-control-head">
         {/* 좁은 카드에서는 이름이 한 줄로 줄어들며 말줄임표가 붙는다(S1.8). 전체 이름은 title 과 range 입력의 aria-label 로 남는다. */}
-        <span title={label}>{label}</span>
+        <span title={tip}>{label}</span>
         <output>{shownValue}</output>
       </span>
       <span className="knob-control-shell" {...dragHandlers} style={{ '--knob-rotation': `${rotation}deg`, '--knob-fill': `${clampedProgress * 75}%` } as CSSProperties}>
         <i aria-hidden="true" />
-        <input type="range" min={min} max={max} step={step} value={value} aria-label={label}
-          aria-valuetext={`${label} ${accessibleValue}`} onChange={(event) => onChange(Number(event.currentTarget.value))} />
+        <input type="range" min={min} max={max} step={step} value={value} aria-label={accessibleName}
+          aria-valuetext={`${accessibleName} ${accessibleValue}`} onChange={(event) => onChange(Number(event.currentTarget.value))} />
       </span>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} onChange={onChange} />
     </div>
   );
 }

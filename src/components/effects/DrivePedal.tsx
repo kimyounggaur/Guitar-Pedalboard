@@ -6,6 +6,8 @@ import { SliderControl } from '../SliderControl';
 import { useKnobDrag } from '../../hooks/useKnobDrag';
 import { initialPedals } from '../../store/pedalStore';
 import { formatParamValue, getParamDef } from '../../audio/params';
+import { useParamNames } from '../ParamScope';
+import { ko } from '../../i18n/ko';
 
 const biasDef = getParamDef('drive', 'bias')!;
 
@@ -21,13 +23,14 @@ const presets: Record<string, Pick<DriveParams, 'mode' | 'drive' | 'tone' | 'lev
 };
 
 export function DrivePedal({ params, onChange }: DrivePedalProps) {
+  const modeName = useParamNames('Mode').name;
   const applyPreset = (name: string) => {
     const preset = presets[name];
     Object.entries(preset).forEach(([key, value]) => onChange(key as keyof DriveParams, value));
   };
 
   return (
-    <div className="tube-drive-ui" role="group" aria-label="Tube style overdrive controls">
+    <div className="tube-drive-ui" role="group" aria-label={ko.pedal.drive.controls}>
       <div className="tube-knob-deck">
         <DriveKnob
           label="Drive"
@@ -65,7 +68,7 @@ export function DrivePedal({ params, onChange }: DrivePedalProps) {
       <div className="tube-utility-controls">
         <label className="select-control">
           <span>Mode</span>
-          <select value={params.mode} onChange={(event) => onChange('mode', event.currentTarget.value)}>
+          <select aria-label={modeName} value={params.mode} onChange={(event) => onChange('mode', event.currentTarget.value)}>
             <option value="overdrive">Overdrive</option>
             <option value="crunch">Crunch</option>
             <option value="distortion">Distortion</option>
@@ -116,6 +119,7 @@ interface DriveKnobProps {
 }
 
 function DriveKnob({ label, value, min, max, size = 'large', onChange }: DriveKnobProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const normalized = (value - min) / (max - min);
   const rotation = -135 + normalized * 270;
   const defaults = initialPedals.find((pedal) => pedal.type === 'drive')!.params as DriveParams;
@@ -131,15 +135,15 @@ function DriveKnob({ label, value, min, max, size = 'large', onChange }: DriveKn
           max={max}
           step={1}
           value={value}
-          aria-label={label}
-          aria-valuetext={`${label} ${Math.round(value)}%`}
+          aria-label={accessibleName}
+          aria-valuetext={`${accessibleName} ${Math.round(value)}%`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
         <i />
       </span>
-      <span className="tube-knob-label">{label}</span>
+      <span className="tube-knob-label" title={tip}>{label}</span>
       <output>{Math.round(value)}%</output>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={1} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={1} onChange={onChange} />
     </div>
   );
 }

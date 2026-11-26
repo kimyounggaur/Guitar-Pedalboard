@@ -32,6 +32,7 @@ import {
   storedParam,
   type V1Fixture,
 } from '../helpers/storage';
+import { knobKoName, pedalKoName } from '../helpers/ko-names';
 
 /** 화면의 15개 카드를 한 번에 읽은 모양 */
 interface BoardView {
@@ -47,7 +48,15 @@ interface BoardView {
   dimmed: boolean[];
 }
 
+/** 카드 영역 이름은 한국어(`노이즈 게이트 이펙터`)다. 시험이 쓰는 표(PEDALS)는 얼굴에 인쇄된 영어 이름이라 돌려놓는다(S4.6). */
+const faceNameOf = (koName: string): string => PEDALS.find((pedal) => pedalKoName(pedal.name) === koName)?.name ?? `?${koName}`;
+
 async function readBoard(page: Page): Promise<BoardView> {
+  const view = await readBoardRaw(page);
+  return { ...view, names: view.names.map(faceNameOf) };
+}
+
+async function readBoardRaw(page: Page): Promise<BoardView> {
   return page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll('.pedal-board .pedal-card'));
     const switchOf = (card: Element): Element | null => card.querySelector('.stomp-toggle-switch');
@@ -155,7 +164,7 @@ const meterEffectCount = (page: Page): Locator => page.locator('.performance-sta
 const DEBOUNCED_SAVE_SETTLE_MS = 500;
 
 /** Drive 의 'Drive' 노브. 스위치와 달리 바로 쓰지 않고 300 ms 뒤에 한 번 쓰는 길을 지난다. */
-const driveKnob = (page: Page): Locator => pedalGroup(page, 'Drive').getByRole('slider', { name: 'Drive', exact: true });
+const driveKnob = (page: Page): Locator => pedalGroup(page, 'Drive').getByRole('slider', { name: knobKoName('Drive', 'Drive'), exact: true });
 
 /**
  * Drive 노브를 지금과 다른 값으로 돌리고, v2 작업 상태에 새 값이 써질 때까지 기다린 뒤 지연 저장이 끝날 시간을 더 준다.

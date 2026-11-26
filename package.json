@@ -60,6 +60,7 @@
     "test:param-schema": "node scripts/param-schema-regression.mjs",
     "test:fuzz-gate": "node scripts/fuzz-gate-regression.mjs",
     "test:connect-errors": "node scripts/connect-errors-regression.mjs",
+    "test:ko-catalog": "node scripts/ko-catalog-regression.mjs",
     "test:file-mode": "node scripts/file-mode-regression.mjs",
     "test:cdp-client": "node scripts/cdp-client-regression.mjs",
     "test:cabinet-response": "node scripts/cabinet-response-analysis.mjs",

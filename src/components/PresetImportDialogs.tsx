@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import type { ConflictResolution, ImportConflict } from '../persistence/exportFormat';
+import { ko } from '../i18n/ko';
 import { ModalDialog } from './ModalDialog';
 
 interface PasteImportDialogProps {
@@ -16,7 +17,7 @@ export function PasteImportDialog({ onSubmit, onClose }: PasteImportDialogProps)
 
   const submit = () => {
     if (!text.trim()) {
-      setError('가져올 JSON을 붙여 넣어 주세요.');
+      setError(ko.preset.pasteJsonRequired);
       return;
     }
     setError(onSubmit(text));

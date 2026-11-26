@@ -10,8 +10,9 @@ export function PedalIcon({ type, color = 'var(--accent)' }: PedalIconProps) {
   const commonProps = {
     className: 'pedal-type-icon',
     viewBox: '0 0 24 24',
-    role: 'img' as const,
-    'aria-label': `${type} icon`,
+    // 이름은 바로 옆 글자(페달 이름)가 이미 말해 준다. 장식 그림이라 스크린 리더에서는 숨긴다(S4.6: 옛 라벨은 'noiseGate icon' 처럼 내부 ID 를 그대로 읽었다).
+    'aria-hidden': true as const,
+    focusable: false as const,
     style: { '--pedal-icon-color': color } as CSSProperties,
   };
 

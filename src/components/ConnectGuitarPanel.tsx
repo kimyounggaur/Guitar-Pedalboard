@@ -7,6 +7,7 @@ import { FilePlayer } from './FilePlayer';
 import { InputLevelNotice } from './InputLevelNotice';
 import { MidiAdvancedControls } from './MidiAdvancedControls';
 import { ToggleSwitch } from './ToggleSwitch';
+import { ko } from '../i18n/ko';
 
 /** 모바일 안내를 닫았는지. 저장소를 못 써도(읽기 실패) 던지지 않고 '아직 안 닫음'으로 본다. 값은 문자열 'true' 그대로 저장된다. */
 function readMobileNoticeDismissed(): boolean {
@@ -109,14 +110,14 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
 
   const panicControl = (
     <button type="button" className="panic-button" onClick={panic}>
-      Panic
+      {ko.app.panic}
     </button>
   );
 
   const detailsContent = (
     <>
       <div className="panel-title">
-        <p className="eyebrow">Audio Input</p>
+        <p className="eyebrow">{ko.app.eyebrow.audioInput}</p>
         <h2>기타 입력 연결</h2>
       </div>
 
@@ -190,7 +191,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
           <div className="connect-status-channel">
             <InputChannelFields />
           </div>
-          <span className="connect-status-latency" title={latencyDisplay.items.map((item) => item.text).join(' · ') || '지연시간 측정 대기'}>
+          <span className="connect-status-latency" title={latencyDisplay.items.map((item) => item.text).join(' · ') || ko.app.latencyPending}>
             <span className="connect-status-key">지연</span>
             <span className="connect-status-value">{latencyText}</span>
           </span>

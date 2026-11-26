@@ -12,6 +12,7 @@
 import type { InputLatencySource, LatencyReading } from '../types';
 import latencyTable from '../params/latency.json';
 import { limiterLookaheadFrames } from './limiterSpec';
+import { ko } from '../../i18n/ko';
 
 /** 아직 컨텍스트가 없을 때의 읽음 */
 export const EMPTY_LATENCY: LatencyReading = {
@@ -259,5 +260,4 @@ export function formatLatency(reading: LatencyReading): LatencyDisplay {
 }
 
 /** 끊김 수를 읽을 수 없을 때(측정 불가) 마우스를 올리면 보이는 이유 */
-export const UNDERRUN_UNAVAILABLE_REASON =
-  '이 브라우저는 출력 끊김 통계(AudioContext.playbackStats)를 제공하지 않아 측정할 수 없습니다.';
+export const UNDERRUN_UNAVAILABLE_REASON: string = ko.meter.underrunUnavailable;

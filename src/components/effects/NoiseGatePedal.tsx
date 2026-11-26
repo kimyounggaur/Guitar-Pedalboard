@@ -6,6 +6,8 @@ import type { NoiseGateParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
 import { useKnobDrag } from '../../hooks/useKnobDrag';
 import { initialPedals } from '../../store/pedalStore';
+import { useParamNames } from '../ParamScope';
+import { ko } from '../../i18n/ko';
 
 interface NoiseGatePedalProps {
   params: NoiseGateParams;
@@ -24,6 +26,7 @@ interface NoiseGateKnobProps {
 }
 
 function NoiseGateKnob({ label, value, min, max, step, className = '', ariaValueText, onChange }: NoiseGateKnobProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const normalized = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(normalized, 0), 1) * 270;
   const defaults = initialPedals.find((pedal) => pedal.type === 'noiseGate')!.params as NoiseGateParams;
@@ -42,15 +45,15 @@ function NoiseGateKnob({ label, value, min, max, step, className = '', ariaValue
           max={max}
           step={step}
           value={value}
-          aria-label={label}
-          aria-valuetext={`${label} ${ariaValueText}`}
+          aria-label={accessibleName}
+          aria-valuetext={`${accessibleName} ${ariaValueText}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
         <i aria-hidden="true" />
       </span>
-      <strong>{label}</strong>
+      <strong title={tip}>{label}</strong>
       <output>{ariaValueText}</output>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} onChange={onChange} />
     </div>
   );
 }
@@ -69,7 +72,7 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
   }, []);
 
   return (
-    <div className="noise-gate-stomp-ui" role="group" aria-label="Noise Gate controls">
+    <div className="noise-gate-stomp-ui" role="group" aria-label={ko.pedal.noiseGate.controls}>
       <section className="noise-gate-face">
         <div className={`noise-gate-led state-${gateState.toLowerCase()}`} aria-hidden="true" />
 
@@ -116,7 +119,7 @@ export function NoiseGatePedal({ params, onChange }: NoiseGatePedalProps) {
       </section>
 
       <div className="noise-gate-utility-controls">
-        <div className={`effect-status state-${gateState.toLowerCase()}`}>Gate: {gateState}</div>
+        <div className={`effect-status state-${gateState.toLowerCase()}`}>{ko.gate.label} {gateState === 'Open' ? ko.gate.open : ko.gate.closed}</div>
         <SliderControl
           label="Reduction"
           value={params.reductionDb}
