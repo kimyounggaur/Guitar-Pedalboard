@@ -224,6 +224,48 @@ for (const edge of [400, 480]) {
   near(getPitchReading(edge, 'chromatic', edge).cents, 0, `기준음 ${edge} 은 그대로 쓴다`);
 }
 
+// ── S5.5 수용 기준과 설계 범위(430~450 Hz, 1 Hz 단위) ──────────────
+{
+  // 수용 기준: A4 = 442 Hz 설정에서 442 Hz 입력이 0센트(크로매틱), 화면 문구는 '정확함'.
+  const a442 = getPitchReading(442, 'chromatic', 442);
+  assert.equal(a442.note, 'A4');
+  near(a442.cents, 0, 'A4=442 에서 442 Hz');
+  assert.equal(describeTuner(a442, true).statusText, '정확함');
+  // 같은 442 Hz 를 440 기준으로 읽으면 약 +7.85센트(올림 8) — 기준음이 정말 판독에 들어간다.
+  const at440 = getPitchReading(442, 'chromatic', 440);
+  near(at440.cents, 1200 * Math.log2(442 / 440), '기준 440 에서 442 Hz', 1e-9);
+  assert.equal(describeTuner(at440, true).statusText, '8센트 높음');
+  // 반대로 440 Hz 를 442 기준으로 읽으면 약 −7.85센트.
+  assert.equal(describeTuner(getPitchReading(440, 'chromatic', 442), true).statusText, '8센트 낮음');
+
+  for (let reference = 430; reference <= 450; reference += 1) {
+    const chromatic = getPitchReading(reference, 'chromatic', reference);
+    assert.equal(chromatic.note, 'A4', `${reference} Hz 기준 A4`);
+    near(chromatic.cents, 0, `${reference} Hz 기준 A4`);
+    for (const preset of GUITAR_TUNING_OPTIONS) {
+      TUNING_PRESETS[preset.id].targets.forEach((target, index) => {
+        // 개방현 목표음은 '기준음이 440 일 때의 주파수 × 기준음/440'.
+        const frequency = target.frequency * (reference / 440);
+        const reading = getPitchReading(frequency, preset.id, reference);
+        assert.equal(reading.stringNumber, 6 - index, `${reference} Hz ${preset.id} ${target.note}`);
+        near(reading.cents, 0, `${reference} Hz ${preset.id} ${target.note}`, 1e-6);
+        // 기준음을 모르는 채 440 으로 읽으면 어긋난다 — 줄 목표음이 기준음을 따른다는 증거.
+        if (reference !== 440) {
+          const wrong = getPitchReading(frequency, preset.id, 440);
+          near(wrong.cents, 1200 * Math.log2(reference / 440), `${reference} Hz ${preset.id} ${target.note} 를 440 기준으로 읽으면`, 1e-6);
+        }
+      });
+    }
+    // 크로매틱: 어느 음이든 기준음 비율만큼 센트가 바뀐다(음이름은 그대로).
+    for (const note of ['C2', 'E2', 'A2', 'D3', 'G3', 'B3', 'E4', 'C5']) {
+      const frequency = hz(note, reference);
+      const reading = getPitchReading(frequency, 'chromatic', reference);
+      assert.equal(reading.note, note, `${reference} Hz 기준 ${note}`);
+      near(reading.cents, 0, `${reference} Hz 기준 ${note}`);
+    }
+  }
+}
+
 // ── 줄 번호를 확인하세요: 가장 가까운 줄과도 600센트보다 멀다 ───────
 {
   assert.equal(STRING_CHECK_CENTS, 600);
