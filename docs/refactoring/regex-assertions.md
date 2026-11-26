@@ -339,7 +339,7 @@
 | 147 | match | `connectSource` | `/safeStorage\.getRaw\(STORAGE_KEYS\.mobileAudioNotice\)/` |
 | 148 | match | `connectSource` | `/safeStorage\.setRaw\(STORAGE_KEYS\.mobileAudioNotice, 'true'\)/` |
 | 149 | match | `connectSource` | `/aria-label="모바일 오디오 안내 닫기"/` |
-| 151 | match | `pedalCardSource` | `/<article[\s\S]*role="group"[\s\S]*aria-label=\{'\$\{pedal\.name\} 이펙터` |
+| 151 | match | `pedalCardSource` | `/<section[\s\S]*aria-label=\{'\$\{pedal\.name\} 이펙터'\}/` |
 | 152 | match | `delaySource` | `/ariaValueText=\{delayModeLabels\[params\.mode\]\}/` |
 | 153 | match | `delaySource` | `/<div className="delay-led" aria-hidden="true" \/>/` |
 | 154 | !match | `delaySource` | `/delay-led[^>]*aria-label/` |
