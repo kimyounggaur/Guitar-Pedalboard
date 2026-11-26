@@ -2168,3 +2168,50 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - 터치 시험은 Chromium 에뮬레이션(CDP)이다.
 
 ---
+
+## S4.5 글자 크기와 대비
+
+- 브랜치·병합: `refactor/s4-5-font-contrast` → `phase/4`. 커밋: `679ba6d`(F-7 서랍 수정)·`96af745`(구현·시험)·`88d8db4`(Graphic EQ 두 줄)·`8da4fe4`(시험 보강)·`6adf0be`(정규식 목록)
+- 해결 항목: R4-5(글자 대비·크기), D12(최소 글자 크기). 설계서의 '현재' 숫자(260개·6.7 px)는 재현하지 못했고 옛 코드를 새 도구로 다시 쟀다(L-296).
+- 변경 파일(`git diff --shortstat phase/4 HEAD`, 이 문서 커밋 전):  20 files changed, 1012 insertions(+), 72 deletions(-). 제품 — `styles/{tokens,layout,panels,pedals,accessibility,globals}.css`·새 `styles/{type-scale,contrast}.css`·`components/{PedalCard,ConnectGuitarPanel}.tsx`. 시험 — 새 `e2e/tests/e21-text.spec.ts`(27개)·`e2e/tests/s4-5-drawer-preset.spec.ts`(3개)·`e2e/helpers/text-metrics.ts`, 고친 `e2e/helpers/storage.ts`·`e05-storage`·`s2-1-off-pedal-mix`·`s2-2-param-schema`·`s4-3-knob-speed`·`scripts/responsive-a11y-regression.mjs`·`docs/refactoring/regex-assertions.md`.
+
+| 수용 기준(E-21) | 결과 | 근거 |
+|---|---|---|
+| 계산된 글자 크기 11 px 미만 0개 | **충족** | 11 화면 총 36개 상태 전부 0개(옛 46개, 최소 7 px). 값 13 px·라벨 12 px 이상(시험 ①·⑤) |
+| axe `color-contrast` 위반 0 + 픽셀 표본 4.5:1 미만 0 | **충족(자체 계산)** | 대비 위반 0개(옛 화면당 약 150개). **axe 는 돌리지 못했다** — WCAG 상대 휘도를 화면 픽셀로 직접 계산(L-299). '못 잰 글자'가 상태당 3~582개 |
+| Lighthouse 글꼴 감사 통과, axe 확정 위반 0 유지 | **충족(근사)** | 12 px 이상 글자 89.9~95.4 %(기준 60 %). **Lighthouse 는 돌리지 못했다** |
+| (추가) LED ≥ 3:1·색만으로 구분하지 않음 | **충족** | 시험 ③(옛 코드도 이미 충족) |
+| (추가) 카드 section region·모바일 안내 note | **충족** | 시험 ④-1·④-2 |
+
+**전후** — 같은 도구(`e21-text.spec.ts` ①·②)를 옛 코드(`72cbc0e`)와 새 코드에 돌린 결과(연결 전 상태)
+
+| 화면 | 11 px 미만 글자 옛 → 새 | 12 px 이상 비율 옛 → 새 | 대비 위반 옛 → 새 |
+|---|---|---|---|
+| 390×844 | 46 → 0 | 33.8 % → 95.2 % | 149 → 0 |
+| 768×1024 | 46 → 0 | 37.2 % → 93.6 % | 153 → 0 |
+| 1280×800 | 46 → 0 | 48.4 % → 93.5 % | 155 → 0 |
+| 1920×1080 | 46 → 0 | 48.4 % → 93.5 % | 155 → 0 |
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| `npm test` | 51개 통과(S4.4) | 51개 통과(514초) |
+| `npm run e2e` | 298개 통과(S4.4) | 328개 통과(20분 — 새 시험 30개) |
+| 프로브 | 30개, 값 2,468개 | 다시 돌리지 않았다 — `src/audio`·`src/config`·기준선을 건드리지 않았다(CSS·UI 만) |
+
+- 검증
+  - `npx tsc -b --noEmit`·`npx tsc -p tsconfig.e2e.json --noEmit`·`npx eslint e2e`·`npm run build` 오류 0, `npm run lint`(전체 e2e 뒤), 정규식 단언 목록 `regex-assertions.md` 그대로(재생성한 것과 같음).
+  - **새 시험이 정말 잡는지**(L-304): 브라우저 변이 21개, 20개를 잡고 M1·M20·M21 이 처음 살아남아 시험을 보강했다. M8(MIDI 상태 알약 제거)은 알약 없이도 대비가 충족돼 살아남는다.
+  - **이전 코드 비교**: 위 표(L-296). 서랍 시험은 옛 빌드에서 높이 2 px 로 실패한다(L-301).
+- 만난 문제
+  - 서랍 대비 위반을 '전환 중간 상태'로 오진 → 실제는 기존 결함 F-7(프리셋 브라우저 높이 2 px)(L-301).
+  - Graphic EQ 대역 이름이 12 px 로 겹침(E-06 6개 실패) → 두 줄로 접음(L-302).
+  - 남아 있던 미리보기 서버가 옛 빌드 비교를 현재 빌드로 바꿔 놓음, 화면을 찍는 사이 움직인 글자의 가짜 위반, 접힌 칸 안 글자(L-303).
+  - 변이 도구가 서랍 시험 파일을 돌리지 않아 M18·M21 이 가짜로 '실패'한 것(L-304).
+- 사람 확인 필요
+  - 색이 바뀐 페달 10종의 모양, 실제 axe·Lighthouse, 스크린리더 landmark, 저시력·야외 가독성, 768~1279 px 서랍 모양, Graphic EQ 두 줄 이름(L-306).
+- 남은 위험
+  - 대비는 화면 픽셀의 대표색 하나로 계산한 근사라 그라데이션·이미지 위 글자에서 axe 와 다를 수 있다. 가려진 글자는 '못 잰 글자'로 남는다.
+  - 11.2~11.84 px 보조 글자(전체의 약 5~9 %)는 12 px 미만이지만 기준(11 px) 이상이라 그대로다.
+  - 글자 폭은 이 기계의 폰트·Chromium 기준이다.
+
+---
