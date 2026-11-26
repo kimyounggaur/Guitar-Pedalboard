@@ -6,13 +6,19 @@
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
-import { readdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import vm from 'node:vm';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { ESLint } from 'eslint';
+import { createFakeDocument, FakeNode } from './lib/fake-document.mjs';
+import { byClass, byId, byRole, byTag, find, findAll, parseHtml, textContent } from './lib/html-tree.mjs';
+import { createSsrHarness } from './lib/ssr-harness.mjs';
 
 const sourceRoot = fileURLToPath(new URL('../src', import.meta.url));
+const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 
 const bundle = await build({
   stdin: {
@@ -270,7 +276,8 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
 
   assert.equal(notices.length, 1, '여러 번 실패해도 안내는 한 번');
   assert.equal(notices[0].kind, 'quota');
-  assert.match(notices[0].message, /kimyounggaur\.github\.io/);
+  assert.equal(notices[0].message, STORAGE_NOTICE_MESSAGES.quota);
+  assert.ok(notices[0].message.includes('kimyounggaur.github.io'), '가득 참 안내는 어느 사이트의 데이터인지 알려 줍니다');
   assert.deepEqual(storage.get(K.v1Pedals, null), { version: 11, n: 2 });
 
   // 공간이 생기면 다음 저장이 성공하고 메모리 값은 저장소 값으로 돌아간다.
@@ -680,64 +687,243 @@ assert.equal(classifyStorageError('QuotaExceededError'), 'unknown', '문자열�
   assert.equal(lines[0], '오류 이름: TypeError');
   assert.equal(lines[1], '메시지: x is not a function');
   assert.equal(lines[2], `앱 버전: ${packageJson.version}`);
-  assert.match(lines[3], /^브라우저: /);
+  assert.ok(lines[3].startsWith('브라우저: '), '네 번째 줄은 브라우저 정보');
   assert.equal(lines[4], '시각: 2026-01-02T03:04:05.000Z');
 }
 
 // ---------------------------------------------------------------------------------------------
-// 14. 소스 계약: localStorage 는 SafeStorage.ts 에만, 오류 경계와 main.tsx 의 약속
+// 14. 구조의 약속을 실행으로 확인한다: localStorage 는 SafeStorage.ts 에만, 오류 경계, 앱의 감싸는 구조, 시작 실패 안내
+//     (예전에는 소스를 글자로 읽어 정규식으로 확인했다 — S4.7)
 // ---------------------------------------------------------------------------------------------
-async function listSources(directory) {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...(await listSources(path)));
-    else if (/\.(ts|tsx)$/.test(entry.name)) files.push(path);
+// ① localStorage 직접 사용 금지: 소스를 훑는 대신 이 저장소의 ESLint 설정을 실제로 돌려, 같은 코드가 SafeStorage.ts 밖에서는 오류이고 안에서는 통과하는지 본다.
+{
+  const eslint = new ESLint({ cwd: projectRoot });
+  const lintRules = async (code, filePath) => {
+    const [result] = await eslint.lintText(code, { filePath: join(projectRoot, filePath) });
+    return result.messages.map((message) => message.ruleId).filter((ruleId) => ruleId?.startsWith('no-restricted-'));
+  };
+  const directUses = [
+    ['localStorage.getItem("a");', 'no-restricted-globals'],
+    ['window.localStorage.getItem("a");', 'no-restricted-properties'],
+    ['globalThis.localStorage.getItem("a");', 'no-restricted-properties'],
+    ['self.localStorage.getItem("a");', 'no-restricted-properties'],
+  ];
+  for (const [code, ruleId] of directUses) {
+    assert.deepEqual(await lintRules(code, 'src/store/example.ts'), [ruleId], `src/store 의 '${code}' 는 막혀야 합니다`);
+    assert.deepEqual(await lintRules(code, 'src/components/Example.tsx'), [ruleId], `src/components 의 '${code}' 는 막혀야 합니다`);
+    assert.deepEqual(await lintRules(code, 'src/persistence/SafeStorage.ts'), [], 'SafeStorage.ts 는 localStorage 에 닿을 수 있는 유일한 파일입니다');
   }
-  return files;
+  assert.deepEqual(await lintRules('safeStorage.get("a", null);', 'src/store/example.ts'), [], 'SafeStorage 를 거치는 사용은 막지 않습니다');
 }
-const stripComments = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1');
 
-const offenders = [];
-for (const file of await listSources(sourceRoot)) {
-  if (file.endsWith('/persistence/SafeStorage.ts')) continue;
-  if (/\blocalStorage\b/.test(stripComments(await readFile(file, 'utf8')))) offenders.push(file.replace(`${sourceRoot}/`, 'src/'));
+// ② 오류 경계·앱 구조·시작 실패 안내: 컴포넌트와 main.tsx 를 실제로 실행한다.
+const sources = await Promise.all([readFile(new URL('../index.html', import.meta.url), 'utf8')]);
+const [indexHtml] = sources;
+{
+  const reloads = [];
+  const ssr = await createSsrHarness({
+    extraExports: [
+      "{ AppErrorBoundary } from './app/AppErrorBoundary.tsx'",
+      "{ default as App } from './App.tsx'",
+      "{ ToastRegion } from './components/Toast.tsx'",
+      "{ SessionProtection } from './components/SessionProtection.tsx'",
+      "{ AppShell } from './components/AppShell.tsx'",
+      "{ AudioSession } from './audio/engine/AudioSession.ts'",
+      "{ stopSessionForError } from './store/audioStore.ts'",
+      "{ safeStorage, STORAGE_KEYS, APP_STORAGE_PREFIX } from './persistence/index.ts'",
+      "{ showStaticFallback, STATIC_FALLBACK_TITLE } from './app/staticFallback.ts'",
+    ],
+  });
+  const { AppErrorBoundary, App, ToastRegion, SessionProtection, AppShell, AudioSession, stopSessionForError } = ssr.exports;
+  globalThis.window.location = { reload: () => reloads.push('reload') };
+  const textOf = (node) => textContent(node).replace(/\s+/g, ' ').trim();
+  const buttonLabels = (tree) => findAll(tree, byTag('button')).map(textOf);
+
+  // 오류 경계: 오류가 없으면 아이를 그대로 그리고, 오류가 나면 상태에 담아 안내 화면을 그린다.
+  const child = { marker: 'child' };
+  assert.equal(new AppErrorBoundary({ children: child }).render(), child, '오류가 없으면 앱을 그대로 보여 줍니다');
+  const failure = new Error('boom');
+  assert.deepEqual(AppErrorBoundary.getDerivedStateFromError(failure), { error: failure, confirmingReset: false, copyStatus: 'idle' });
+  const thrownText = AppErrorBoundary.getDerivedStateFromError('문자열로 던져진 값');
+  assert.ok(thrownText.error instanceof Error && thrownText.error.message === '문자열로 던져진 값', 'Error 가 아닌 값도 Error 로 바꿔 담습니다');
+
+  const boundary = new AppErrorBoundary({ children: child });
+  boundary.state = AppErrorBoundary.getDerivedStateFromError(failure);
+  boundary.setState = (patch) => {
+    boundary.state = { ...boundary.state, ...patch };
+  };
+  let screen = ssr.renderElement(boundary.render());
+  const alert = find(screen, byRole('alert'));
+  assert.equal(alert.tag, 'main');
+  assert.equal(alert.attrs['data-app-error'], 'true');
+  assert.equal(alert.attrs.tabindex, '-1', '오류 화면은 포커스를 받을 수 있어야 합니다');
+  assert.equal(textOf(find(screen, byTag('h1'))), '문제가 생겨 화면을 표시하지 못했습니다');
+  assert.deepEqual(buttonLabels(screen), ['다시 시도', '설정을 초기화하고 다시 시작', '오류 정보 복사']);
+  assert.equal(findAll(screen, byClass('app-error-confirm')).length, 0, '초기화 확인은 누르기 전에는 보이지 않습니다');
+
+  // 소리부터 끈다: 오류를 잡으면 'error' 이유로 세션을 멈추고 오류를 기록한다.
+  const stopReasons = [];
+  const originalStop = AudioSession.prototype.stop;
+  AudioSession.prototype.stop = async function stop(reason) {
+    stopReasons.push(reason);
+    return { ok: true };
+  };
+  const originalConsoleError = console.error;
+  const logged = [];
+  console.error = (...args) => logged.push(args);
+  try {
+    boundary.componentDidCatch(failure, { componentStack: '\n  at Broken' });
+    assert.deepEqual(stopReasons, ['error'], '오류가 나면 먼저 소리를 끈다');
+    assert.equal(logged.length, 1);
+    assert.equal(logged[0][1], failure);
+    await stopSessionForError();
+    assert.deepEqual(stopReasons, ['error', 'error'], 'stopSessionForError 는 error 이유로 정지한다');
+    AudioSession.prototype.stop = async () => {
+      throw new Error('정리 실패');
+    };
+    await stopSessionForError(); // 정리가 실패해도 던지지 않는다
+  } finally {
+    AudioSession.prototype.stop = originalStop;
+    console.error = originalConsoleError;
+  }
+
+  // 초기화는 두 번 눌러야 한다: 확인 화면이 뜨기 전에는 아무것도 지우지 않고, 확인한 뒤에만 이 앱의 설정을 지우고 새로고침한다.
+  const appKey = STORAGE_KEYS.v1Pedals;
+  ssr.storage.set(appKey, '{"version":11}');
+  ssr.storage.set('other-app:setting', 'keep');
+  boundary.askReset();
+  screen = ssr.renderElement(boundary.render());
+  assert.equal(ssr.storage.has(appKey), true, '확인 전에는 지우지 않습니다');
+  assert.deepEqual(reloads, []);
+  const confirm = find(screen, byClass('app-error-confirm'));
+  assert.ok(confirm, '확인 화면이 보입니다');
+  assert.equal(confirm.attrs['aria-labelledby'], find(confirm, byTag('h2')).attrs.id, '확인 화면은 자기 제목으로 이름이 붙습니다');
+  assert.deepEqual(buttonLabels(confirm), ['초기화하고 다시 시작', '취소']);
+  assert.equal(find(screen, (node) => node.tag === 'button' && textOf(node) === '설정을 초기화하고 다시 시작').attrs['aria-expanded'], 'true');
+  boundary.cancelReset();
+  assert.equal(boundary.state.confirmingReset, false);
+  assert.equal(ssr.storage.has(appKey), true, '취소해도 지우지 않습니다');
+  boundary.askReset();
+  boundary.confirmReset();
+  assert.equal(ssr.storage.has(appKey), false, '확인하면 이 앱의 설정을 지웁니다');
+  assert.equal(ssr.storage.get('other-app:setting'), 'keep', '같은 주소의 다른 앱 데이터는 건드리지 않습니다');
+  assert.deepEqual(reloads, ['reload'], '지운 뒤 새로고침합니다');
+  boundary.retry();
+  assert.deepEqual(boundary.state, { error: null, confirmingReset: false, copyStatus: 'idle' }, '다시 시도는 처음 상태로 돌아갑니다');
+
+  // 앱 전체를 오류 경계가 감싼다: App 이 돌려주는 요소의 구조.
+  const appElement = App();
+  assert.equal(appElement.type, AppErrorBoundary, '오류 경계가 앱 전체의 바깥입니다');
+  assert.deepEqual(appElement.props.children.map((element) => element.type), [ToastRegion, SessionProtection, AppShell], '토스트·세션 보호·앱 본체가 경계 안에 있습니다');
+
+  // React 가 뜨기 전에 실패하면 정적 안내: showStaticFallback 이 #root 에 알림 영역을 넣는다.
+  const fakeDocument = createFakeDocument();
+  globalThis.document = fakeDocument;
+  try {
+    ssr.exports.showStaticFallback(fakeDocument.root);
+    const [fallback] = fakeDocument.root.children;
+    assert.equal(fallback.tagName, 'MAIN');
+    assert.equal(fallback.getAttribute('role'), 'alert');
+    assert.equal(fallback.getAttribute('data-static-fallback'), 'true');
+    assert.equal(fallback.find((node) => node.tagName === 'H1').textContent, ssr.exports.STATIC_FALLBACK_TITLE);
+    assert.equal(ssr.exports.STATIC_FALLBACK_TITLE, '앱을 시작하지 못했습니다');
+    assert.equal(fallback.find((node) => node.tagName === 'BUTTON').textContent, '페이지 다시 불러오기');
+  } finally {
+    delete globalThis.document;
+  }
+  ssr.restore();
 }
-assert.deepEqual(offenders, [], 'SafeStorage.ts 밖에서 localStorage 를 직접 참조합니다');
 
-const safeStorageSource = await readFile(new URL('../src/persistence/SafeStorage.ts', import.meta.url), 'utf8');
-assert.equal([...stripComments(safeStorageSource).matchAll(/window\.localStorage/g)].length, 1, 'localStorage 에 닿는 곳은 browserBackend 하나');
+// ③ index.html: 앱 스크립트보다 먼저 오는 안내 스크립트를 가짜 window·document 에서 실행해, 스크립트 로딩 실패 때 #root 를 안내로 바꾸는지 본다.
+{
+  const page = parseHtml(indexHtml);
+  const body = find(page, byTag('body'));
+  const scripts = body.children.filter((node) => node.tag === 'script');
+  const moduleScript = scripts.find((node) => node.attrs.type === 'module');
+  const inlineScript = scripts.find((node) => node.attrs.type === undefined);
+  assert.equal(moduleScript.attrs.src, '/src/main.tsx', '앱은 /src/main.tsx 모듈로 시작합니다');
+  assert.ok(body.children.indexOf(inlineScript) < body.children.indexOf(moduleScript), '안내 스크립트가 앱 스크립트보다 먼저 옵니다');
+  assert.ok(find(body, byId('root')), '#root 가 있습니다');
 
-const boundarySource = await readFile(new URL('../src/app/AppErrorBoundary.tsx', import.meta.url), 'utf8');
-assert.match(boundarySource, /getDerivedStateFromError/);
-assert.match(boundarySource, /componentDidCatch[\s\S]*void stopSessionForError\(\)/, '오류가 나면 먼저 소리를 끈다');
-for (const text of ['문제가 생겨 화면을 표시하지 못했습니다', '다시 시도', '설정을 초기화하고 다시 시작', '오류 정보 복사', '초기화하고 다시 시작', '취소']) {
-  assert.ok(boundarySource.includes(text), `오류 화면에 '${text}' 가 없습니다`);
+  const runInlineScript = (rootChildren, event) => {
+    const fakeDocument = createFakeDocument();
+    for (let index = 0; index < rootChildren; index += 1) fakeDocument.root.appendChild(new FakeNode('div'));
+    const listeners = [];
+    const sandbox = {
+      document: fakeDocument,
+      location: { origin: 'https://example.test', reload() {} },
+      window: { addEventListener: (type, listener, capture) => listeners.push({ type, listener, capture }) },
+    };
+    vm.runInNewContext(textContent(inlineScript), sandbox);
+    assert.deepEqual(listeners.map(({ type, capture }) => [type, capture]), [['error', true]], '캡처 단계에서 error 하나만 듣습니다(스크립트 로딩 실패는 버블링하지 않는다)');
+    listeners[0].listener(event);
+    return fakeDocument.root;
+  };
+  const scriptFailure = { target: { tagName: 'SCRIPT' } };
+  const emptyRoot = runInlineScript(0, scriptFailure);
+  const [shown] = emptyRoot.children;
+  assert.equal(shown.getAttribute('role'), 'alert');
+  assert.equal(shown.getAttribute('data-static-fallback'), 'true');
+  assert.equal(shown.find((node) => node.tagName === 'H1').textContent, '앱을 시작하지 못했습니다');
+  assert.deepEqual(runInlineScript(1, scriptFailure).children.map((node) => node.tagName), ['DIV'], 'React 가 이미 그렸으면(#root 에 내용이 있으면) 그 내용을 안내로 바꾸지 않습니다');
+  assert.equal(runInlineScript(0, { target: { tagName: 'IMG' } }).children.length, 0, '이미지 로딩 실패 같은 무관한 오류는 무시합니다');
+  assert.equal(runInlineScript(0, { target: null, filename: 'https://example.test/assets/index.js' }).children.length, 1, '우리 스크립트의 실행 오류는 안내를 보여 줍니다');
+  assert.equal(runInlineScript(0, { target: null, filename: 'https://other.test/ads.js' }).children.length, 0, '다른 출처 스크립트의 오류는 무시합니다');
 }
-assert.match(boundarySource, /role="alert"/);
-assert.match(boundarySource, /safeStorage\.clearAppSettings\(\);\s*window\.location\.reload\(\)/, '확인한 뒤에만 지우고 새로고침한다');
-assert.doesNotMatch(boundarySource, /confirmReset[\s\S]*\blocalStorage\b/);
 
-const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
-assert.match(appSource, /<AppErrorBoundary>[\s\S]*<AppShell \/>[\s\S]*<\/AppErrorBoundary>/, '오류 경계가 앱 전체를 감싼다');
-assert.match(appSource, /<ToastRegion \/>/);
+// ④ main.tsx: 시작 순서와 실패 처리를 실제로 실행한다. createRoot 를 가짜로 바꿔 성공·실패 두 경우를 본다.
+async function runMain({ failRender }) {
+  const hooks = { roots: [], rendered: [], listeners: [] };
+  const fakeDocument = createFakeDocument();
+  globalThis.__mainHooks = {
+    createRoot(root) {
+      hooks.roots.push(root);
+      if (failRender) throw new Error('React 시작 실패');
+      return { render: (element) => hooks.rendered.push(element) };
+    },
+  };
+  const originalWarn = console.warn;
+  const originalError = console.error;
+  console.warn = () => {};
+  console.error = () => {};
+  let ssr;
+  try {
+    ssr = await createSsrHarness({
+      extraExports: ["{ default as App } from './App.tsx'", "* as main from './main.tsx'"],
+      stubs: {
+        'react-dom/client': "export function createRoot(root: unknown) { return (globalThis as any).__mainHooks.createRoot(root); }",
+        'styles/globals.css': 'export {};',
+      },
+      define: { 'import.meta.env.DEV': 'false' },
+      documentOverrides: fakeDocument,
+      windowOverrides: { addEventListener: (type) => hooks.listeners.push(type) },
+    });
+    return { hooks, fakeDocument, App: ssr.exports.App, ssr };
+  } finally {
+    console.warn = originalWarn;
+    console.error = originalError;
+  }
+}
+{
+  const ok = await runMain({ failRender: false });
+  assert.deepEqual(ok.hooks.listeners.filter((type) => type === 'error' || type === 'unhandledrejection').sort(), ['error', 'unhandledrejection'], '시작할 때 전역 오류 처리기를 건다');
+  assert.equal(ok.hooks.roots[0], ok.fakeDocument.root, '#root 에 그린다');
+  assert.equal(ok.hooks.rendered.length, 1);
+  assert.equal(ok.hooks.rendered[0].props.children.type, ok.App, 'StrictMode 안에서 App 을 그린다');
+  assert.equal(ok.fakeDocument.root.children.length, 0, '정상 시작에서는 정적 안내를 넣지 않는다');
+  ok.ssr.restore();
 
-const mainSource = await readFile(new URL('../src/main.tsx', import.meta.url), 'utf8');
-assert.match(mainSource, /installGlobalErrorHandlers\(\)/);
-assert.match(mainSource, /try \{[\s\S]*createRoot\(rootElement\)\.render\([\s\S]*\} catch \(error\) \{[\s\S]*showStaticFallback\(rootElement\)/, 'React 가 뜨지 못하면 정적 안내');
-
-const auditSource = await readFile(new URL('../src/store/audioStore.ts', import.meta.url), 'utf8');
-assert.match(auditSource, /export function stopSessionForError\(\)[\s\S]*stopSession\('error'\)/);
-
-const indexSource = await readFile(new URL('../index.html', import.meta.url), 'utf8');
-assert.match(indexSource, /앱을 시작하지 못했습니다/, 'React 가 뜨기 전 실패에 대한 정적 안내');
-assert.match(indexSource, /<script type="module" src="\/src\/main\.tsx"><\/script>/);
-assert.ok(indexSource.indexOf('data-static-fallback') < indexSource.indexOf('src="/src/main.tsx"'), '안내 스크립트가 앱 스크립트보다 먼저 온다');
+  const failed = await runMain({ failRender: true });
+  const [fallback] = failed.fakeDocument.root.children;
+  assert.ok(fallback, 'React 가 뜨지 못하면 #root 에 정적 안내를 넣는다');
+  assert.equal(fallback.getAttribute('data-static-fallback'), 'true');
+  assert.equal(fallback.find((node) => node.tagName === 'H1').textContent, '앱을 시작하지 못했습니다');
+  failed.ssr.restore();
+}
 
 console.warn = originalConsoleWarn;
 assert.ok(warnings.length > 0 && warnings.every((text) => text.includes('읽지 못해 기본값을 사용합니다')), '깨진 값은 원인을 경고로 남긴다');
 
 console.log(
-  'SafeStorage regression passed: key names pinned, blocked/quota/unknown/corrupt handling with once-only notices, memory retention, 300 ms debounce with pagehide flush, scoped reset, never-throws, toast action slot, global error toasts and error-boundary source contract.',
+  'SafeStorage regression passed: key names pinned, blocked/quota/unknown/corrupt handling with once-only notices, memory retention, 300 ms debounce with pagehide flush, scoped reset, never-throws, toast action slot, global error toasts, ESLint-enforced SafeStorage-only localStorage, rendered error boundary, App structure and main.tsx start-up failure handling.',
 );
