@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { formatLatency } from '../audio/engine/latency';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { useAudioStore } from '../store/audioStore';
-import { DeviceSelector, InputChannelFields } from './DeviceSelector';
+import { DeviceSelector } from './DeviceSelector';
 import { FilePlayer } from './FilePlayer';
 import { InputLevelNotice } from './InputLevelNotice';
 import { MidiAdvancedControls } from './MidiAdvancedControls';
@@ -16,9 +15,14 @@ function readMobileNoticeDismissed(): boolean {
 
 interface ConnectGuitarPanelProps {
   isMobile?: boolean;
+  /**
+   * true 면 상단 헤더의 '오디오 입력' 메뉴 안의 내용이다(데스크톱). 연결·연결 해제·Panic·상태·오류·입력 레벨 경고는 헤더 줄이 맡으므로 여기서 그리지 않는다.
+   * false 는 휴대폰 하단 도크의 '입력' 탭이다.
+   */
+  inMenu?: boolean;
 }
 
-export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps) {
+export function ConnectGuitarPanel({ isMobile = false, inMenu = false }: ConnectGuitarPanelProps) {
   const [isMobileNoticeDismissed, setIsMobileNoticeDismissed] = useState(
     readMobileNoticeDismissed,
   );
@@ -34,26 +38,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
   const loadDevices = useAudioStore((state) => state.loadDevices);
   const setInputGainDb = useAudioStore((state) => state.setInputGainDb);
   const setHowlProtectionEnabled = useAudioStore((state) => state.setHowlProtectionEnabled);
-  const devices = useAudioStore((state) => state.devices);
-  const selectedDeviceId = useAudioStore((state) => state.selectedDeviceId);
-  const latency = useAudioStore((state) => state.latency);
 
-  // S1.8: 데스크톱에서 기타(장치 입력)를 연결하면 이 패널이 한 줄 상태 표시줄로 줄어든다. 장치·채널·지연·입력 트림·연결 해제·Panic 만
-  // 남기고 나머지(장치 고르기·MIDI·음원 파일·하울링 보호·안내)는 '입력 설정' 버튼으로 펼친다. 모바일 도크와 음원 파일 재생은 그대로 둔다.
-  const isLiveConnected = isRunning && inputMode === 'device';
-  const compact = !isMobile && isLiveConnected;
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [previousLive, setPreviousLive] = useState(isLiveConnected);
-  // 연결이 끝나면(해제·Panic·하울링 차단·장치 분실) 다음 연결은 다시 접힌 채로 시작한다.
-  if (previousLive !== isLiveConnected) {
-    setPreviousLive(isLiveConnected);
-    if (!isLiveConnected) setDetailsOpen(false);
-  }
-  const deviceLabel = selectedDeviceId
-    ? (devices.find((device) => device.deviceId === selectedDeviceId)?.label || '선택한 입력 장치')
-    : '기본 입력 장치';
-  const latencyDisplay = formatLatency(latency);
-  const latencyText = latencyDisplay.totalMs !== null ? `${latencyDisplay.totalMs.toFixed(1)}ms` : '측정 대기';
   // 장치가 꽂히고 빠지는 것(`devicechange`)은 스토어가 지켜본다(audioStore.ts). 여기서는 패널이 나타날 때 목록을 한 번 읽을 뿐이다.
   useEffect(() => {
     void loadDevices();
@@ -121,10 +106,10 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
         <h2>기타 입력 연결</h2>
       </div>
 
-      <DeviceSelector hideChannelMenu={compact} />
+      <DeviceSelector />
       <MidiAdvancedControls />
 
-      {!compact && inputMode !== 'file' && (
+      {inputMode !== 'file' && !inMenu && (
         <div className="connect-actions">
           {!isRunning ? (
             <button
@@ -141,14 +126,14 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
         </div>
       )}
 
-      {!compact && errorNotice}
+      {inMenu ? null : errorNotice}
 
-      {!compact && isRunning && panicControl}
+      {!inMenu && isRunning && panicControl}
 
       <FilePlayer />
 
       <div className="input-safety-controls">
-        {!compact && trimControl}
+        {trimControl}
         <div className="howl-protection-control">
           <ToggleSwitch
             label="하울링 보호"
@@ -162,7 +147,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
   );
 
   return (
-    <section className={`side-panel connect-panel${compact ? ' is-connected' : ''}`}>
+    <section className={`side-panel connect-panel${inMenu ? ' is-menu' : ''}`}>
       {isMobile && !isMobileNoticeDismissed ? (
         <div className="mobile-audio-notice" role="note" aria-label="모바일 오디오 안내">
           <p>
@@ -181,55 +166,15 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
         </div>
       ) : null}
 
-      {compact ? (
-        <div className="connect-status-bar" role="group" aria-label="입력 연결 상태">
-          <span className="connect-status-dot" aria-hidden="true" />
-          <span className="connect-status-device" title={deviceLabel}>
-            <span className="connect-status-key">입력</span>
-            <span className="connect-status-value">{deviceLabel}</span>
-          </span>
-          <div className="connect-status-channel">
-            <InputChannelFields />
-          </div>
-          <span className="connect-status-latency" title={latencyDisplay.items.map((item) => item.text).join(' · ') || ko.app.latencyPending}>
-            <span className="connect-status-key">지연</span>
-            <span className="connect-status-value">{latencyText}</span>
-          </span>
-          {trimControl}
-          {disconnectControl}
-          {panicControl}
-          <button
-            type="button"
-            className="secondary-button connect-status-more"
-            aria-expanded={detailsOpen}
-            aria-controls="connect-panel-details"
-            onClick={() => setDetailsOpen((open) => !open)}
-          >
-            {detailsOpen ? '입력 설정 접기' : '입력 설정'}
-          </button>
-        </div>
-      ) : null}
+      {detailsContent}
 
-      {compact ? errorNotice : null}
+      {/* 입력 레벨 경고(4.12): 판정은 MonitorService 가 한다. 여기서는 결과를 보이기만 한다(S2.5). 메뉴에서는 헤더가 보인다. */}
+      {inMenu ? null : <InputLevelNotice />}
 
-      {compact ? (
-        <div id="connect-panel-details" className="connect-panel-details" hidden={!detailsOpen}>
-          {detailsContent}
-        </div>
-      ) : (
-        detailsContent
-      )}
-
-      {/* 입력 레벨 경고(4.12): 판정은 MonitorService 가 한다. 여기서는 결과를 보이기만 한다(S2.5). */}
-      <InputLevelNotice />
-
-      {!compact ? (
-        <p className="panel-copy">
-          초기 테스트는 헤드폰 사용을 권장합니다. 오디오 인터페이스의 Direct Monitor가 켜져 있으면
-          원음과 처리음이 함께 들릴 수 있습니다.
-        </p>
-      ) : null}
-
+      <p className="panel-copy">
+        초기 테스트는 헤드폰 사용을 권장합니다. 오디오 인터페이스의 Direct Monitor가 켜져 있으면
+        원음과 처리음이 함께 들릴 수 있습니다.
+      </p>
     </section>
   );
 }

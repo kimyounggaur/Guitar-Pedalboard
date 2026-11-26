@@ -10,7 +10,7 @@
 //   ⑧ 휴대폰 화면에서 안내 문구가 가로로 넘치지 않는다
 // 문구는 설계서와 앱 카탈로그(src/i18n/ko.ts)가 아니라 이 파일에 따로 적었다 — 카탈로그가 실수로 바뀌면 이 시험이 알아채야 한다.
 import type { Page } from '@playwright/test';
-import { connectButton, connectGuitar, disconnectButton, horizontalOverflow, openApp, panicButton, setMobileDock } from '../helpers/app';
+import { connectButton, connectGuitar, disconnectButton, horizontalOverflow, openApp, openAudioInputMenu, panicButton, setMobileDock } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { mockDevices, readAudioTracking, trackAudioContexts, type DeviceMock } from '../helpers/mocks';
 
@@ -46,6 +46,7 @@ async function openAppWithMock(page: Page, options: Parameters<typeof mockDevice
   await trackAudioContexts(page);
   const mock = await mockDevices(page, options);
   await openApp(page);
+  await openAudioInputMenu(page);
   return mock;
 }
 
@@ -119,8 +120,8 @@ test.describe('E-17 입출력 장치', () => {
     await connectGuitar(page);
     expect(await mock.sinkCalls()).toContain(first);
 
-    // 연결 중에 바꾸면 바로 그 장치로 보낸다(연결하면 데스크톱 패널이 한 줄로 줄어들므로 '입력 설정'으로 펼친다).
-    await page.getByRole('button', { name: '입력 설정', exact: true }).click();
+    // 연결 중에 바꾸면 바로 그 장치로 보낸다(연결해도 '오디오 입력' 메뉴는 열려 있다).
+    await openAudioInputMenu(page);
     await outputSelect(page).selectOption({ label: OUTPUT_2 });
     await expect.poll(() => mock.sinkCalls(), { timeout: 1000 }).toContain(second);
     await expect(page.locator('.error-message')).toHaveCount(0);
@@ -128,6 +129,7 @@ test.describe('E-17 입출력 장치', () => {
 
     // 다음 방문: 같은 장치가 골라져 있고 연결하면 그 장치로 보낸다.
     await page.reload();
+    await openAudioInputMenu(page);
     await expect(outputSelect(page)).toHaveValue(second);
     await connectGuitar(page);
     expect(await mock.sinkCalls()).toContain(second);
@@ -140,7 +142,9 @@ test.describe('E-17 입출력 장치', () => {
 
     await mock.set({ hidden: [id] });
     await page.reload();
+    await openAudioInputMenu(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await connectButton(page).click();
 
     await expect(disconnectButton(page)).toBeVisible({ timeout: 15_000 });
@@ -156,7 +160,9 @@ test.describe('E-17 입출력 장치', () => {
 
     await mock.set({ renamed: { [id]: 'renamed-output' } });
     await page.reload();
+    await openAudioInputMenu(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(outputSelect(page)).toHaveValue('renamed-output');
     await connectGuitar(page);
     expect(await mock.sinkCalls()).toContain('renamed-output');
@@ -177,7 +183,10 @@ test.describe('E-17 입출력 장치', () => {
     await inputSelect(page).selectOption({ label: INPUT_2 });
 
     await page.reload();
+
+    await openAudioInputMenu(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(inputSelect(page)).toHaveValue(id);
     await connectButton(page).click();
     await expect(disconnectButton(page)).toBeVisible({ timeout: 15_000 });
@@ -192,7 +201,10 @@ test.describe('E-17 입출력 장치', () => {
     await inputSelect(page).selectOption({ label: '기본 입력 장치' });
 
     await page.reload();
+
+    await openAudioInputMenu(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(inputSelect(page)).toHaveValue('');
     await connectButton(page).click();
     await expect(disconnectButton(page)).toBeVisible({ timeout: 15_000 });
@@ -207,7 +219,9 @@ test.describe('E-17 입출력 장치', () => {
 
     await mock.set({ renamed: { [id]: 'renamed-input' } });
     await page.reload();
+    await openAudioInputMenu(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(inputSelect(page)).toHaveValue('renamed-input');
     await connectButton(page).click();
     await expect(disconnectButton(page)).toBeVisible({ timeout: 15_000 });
@@ -222,7 +236,9 @@ test.describe('E-17 입출력 장치', () => {
 
     await mock.set({ hidden: [id] });
     await page.reload();
+    await openAudioInputMenu(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(inputSelect(page)).toHaveValue('');
     await connectButton(page).click();
     await expect(disconnectButton(page)).toBeVisible({ timeout: 15_000 });
@@ -254,7 +270,9 @@ test.describe('E-17 입출력 장치', () => {
 
     await mock.set({ blank: true });
     await page.reload();
+    await openAudioInputMenu(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(inputSelect(page)).toHaveValue(id);
     await expect(inputSelect(page).locator(`option[value="${id}"]`)).toHaveText(INPUT_2);
     await expect(outputSelect(page)).toHaveValue(outputId);

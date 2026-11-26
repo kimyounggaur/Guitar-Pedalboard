@@ -81,6 +81,20 @@ export async function connectGuitar(page: Page): Promise<void> {
   await expect(disconnectButton(page)).toBeVisible({ timeout: 15_000 });
 }
 
+/** 상단 헤더의 '오디오 입력' 메뉴 단추 */
+export const audioInputMenuToggle = (page: Page): Locator => page.locator('.audio-input-menu-toggle');
+/** 메뉴 안(장치·채널·MIDI·음원 파일·입력 트림·하울링 보호)이 담긴 팝오버 */
+export const audioInputPopover = (page: Page): Locator => page.locator('#audio-input-popover');
+
+/** '오디오 입력' 메뉴를 연다(이미 열려 있으면 그대로 둔다). 기타 연결·연결 해제·긴급 정지는 메뉴 밖 헤더 줄에 있어 열지 않아도 된다. */
+export async function openAudioInputMenu(page: Page): Promise<void> {
+  const toggle = audioInputMenuToggle(page);
+  // 휴대폰 배치(하단 도크)에는 메뉴가 없고 입력 패널이 '입력' 탭에 그대로 있다.
+  if ((await toggle.count()) === 0) return;
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await expect(audioInputPopover(page)).toBeVisible();
+}
+
 export const connectButton = (page: Page): Locator => page.getByRole('button', { name: '기타 연결하기' });
 export const disconnectButton = (page: Page): Locator => page.getByRole('button', { name: '연결 해제' });
 /** 연결되어 있을 때만 그려지는 긴급 정지 버튼 */

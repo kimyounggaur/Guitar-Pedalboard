@@ -4,7 +4,7 @@
 // 스피커로 나가는 소리·화면의 출력 미터·녹음 파일이 모두 같은 지점(리미터 뒤)에서 갈라져야 같은 피크 제한을 지난다.
 // 리미터의 소리 자체(천장 −1 dBFS)는 오디오 렌더 프로브 P-03 이, 오프라인에서도 불러와지는지는 E-23 이 본다.
 // 가드가 실제로 하울링을 잘라내는 시간(1.5초 이내)은 E-03(e03-howl.spec.ts)이 본다.
-import { connectGuitar, disconnectButton, openApp } from '../helpers/app';
+import { connectGuitar, disconnectButton, openApp, openAudioInputMenu } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { readAudioEdges, trackAudioGraph, type GraphEdge } from '../helpers/mocks';
 
@@ -28,6 +28,7 @@ test.describe('S1.4a·S1.5 출력 단계', () => {
     const { page } = await launchWithMic();
     await trackAudioGraph(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await connectGuitar(page);
 
     let edges = await readAudioEdges(page);
@@ -61,6 +62,7 @@ test.describe('S1.4a·S1.5 출력 단계', () => {
     const { page } = await launchWithMic();
     await trackAudioGraph(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await connectGuitar(page);
     await disconnectButton(page).click();
     await expect(page.getByRole('button', { name: '기타 연결하기' })).toBeVisible();

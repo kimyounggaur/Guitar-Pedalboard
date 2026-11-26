@@ -7,7 +7,7 @@
 // 값 방향(옛 앱은 127 이 꺼짐이었다)·경계(63/64)·1초 경계·연결 순서의 모든 경우는 Node 시험(test:midi-reconnect)이 본다.
 // 여기서는 화면(배너·카드 표시·알림)과 브라우저가 하는 일이다. 실제 풋스위치·실제 권한 창은 사람이 본다(보고서 '사람 확인 필요').
 import type { Locator, Page } from '@playwright/test';
-import { horizontalOverflow, openApp } from '../helpers/app';
+import { horizontalOverflow, openApp, openAudioInputMenu } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { mockMidi, type MidiMock, type MidiMockOptions } from '../helpers/mocks';
 import { pedalGroup, readLocal, seedStorage, stompOf, toastOf } from '../helpers/storage';
@@ -47,6 +47,7 @@ async function openWithMidi(page: Page, options: MidiMockOptions, seed: boolean 
   const midi = await mockMidi(page, options);
   if (seed) await seedStorage(page, { [MIDI_KEY]: SAVED_MAPPINGS });
   await openApp(page);
+  await openAudioInputMenu(page);
   return midi;
 }
 
@@ -111,6 +112,8 @@ test.describe('E-13 MIDI 풋스위치', () => {
     expect(await storedMapping(page, 'drive')).toBeDefined();
 
     await page.reload();
+
+    await openAudioInputMenu(page);
     await expect(midiStatus(page, 'Drive')).toHaveText('매핑됨 · 장치 없음 · Ch 1 · CC 90');
     await expect(banner(page)).toHaveCount(0);
     id = await midi.connect('Mock Footswitch');
@@ -146,6 +149,7 @@ test.describe('E-13 MIDI 풋스위치', () => {
 
     // 한 번 허용했으니 새로고침하면 저절로 연결되고 배너도 없다
     await page.reload();
+    await openAudioInputMenu(page);
     await expect(midiStatus(page, 'Drive')).toHaveText('매핑됨 · 장치 없음 · Ch 1 · CC 81');
     await expect(banner(page)).toHaveCount(0);
     expect(await midi.permission()).toEqual({ state: 'granted', prompts: 0 });
@@ -281,6 +285,7 @@ test.describe('E-13 MIDI 풋스위치', () => {
     const midi = await mockMidi(page, { permission: 'prompt' });
     await seedStorage(page, { [ADVANCED_KEY]: JSON.stringify({ channel: 1, volumeCc: 7, wahCc: null, programs: {} }) });
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(banner(page)).toBeVisible();
     expect(await midi.stats()).toEqual({ requests: 0, connectedInputs: 0 });
     expect((await midi.permission()).prompts, '열 때 권한 창이 뜨면 안 된다').toBe(0);
@@ -295,6 +300,7 @@ test.describe('E-13 MIDI 풋스위치', () => {
   test('E-13 고급 설정을 저장하는 것도 사용자 동작이라 그때 권한을 요청한다', async ({ page }) => {
     const midi = await mockMidi(page, { permission: 'prompt' });
     await openApp(page);
+    await openAudioInputMenu(page);
     expect((await midi.permission()).prompts).toBe(0);
     await page.locator('.midi-advanced-controls > summary').click();
     await page.locator('.midi-advanced-controls').getByLabel('마스터 볼륨').selectOption('7');

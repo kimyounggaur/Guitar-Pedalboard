@@ -12,7 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
-import { connectGuitar, horizontalOverflow, openApp, setMobileDock } from '../helpers/app';
+import { connectGuitar, horizontalOverflow, openApp, openAudioInputMenu, setMobileDock } from '../helpers/app';
 import { fixturePath, repoRoot } from '../helpers/env';
 import { openFileThroughButton } from '../helpers/file-media';
 import { expect, test } from '../helpers/fixtures';
@@ -130,6 +130,7 @@ function shownCount(text: string | null): number {
 test.describe('E-14 지연·끊김 표시', () => {
   test('E-14 ① 입력·처리·출력이 따로 보이고 입력과 처리가 합계에 들어간다. 처리는 켜진 페달만 더한다', async ({ page }) => {
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(headline(page)).toHaveText('지연시간 측정 대기');
     await connectGuitar(page);
     await expect(itemOf(page, 'input')).toBeVisible();
@@ -178,6 +179,7 @@ test.describe('E-14 지연·끊김 표시', () => {
     test.setTimeout(120_000);
     await exposeAudioContexts(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(underrunOutput(page)).toHaveText('--');
     await connectGuitar(page);
     await expect(underrunOutput(page)).toHaveText(/^\d+회$/);
@@ -202,6 +204,7 @@ test.describe('E-14 지연·끊김 표시', () => {
       Object.defineProperty(AudioContext.prototype, 'playbackStats', { configurable: true, get: () => undefined });
     });
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(underrunOutput(page)).toHaveText('--');
     await connectGuitar(page);
     await expect(underrunOutput(page)).toHaveText('측정 불가');
@@ -225,6 +228,7 @@ test.describe('E-14 지연·끊김 표시', () => {
       Object.defineProperty(AudioContext.prototype, 'outputLatency', { configurable: true, get: () => undefined });
     });
     await openApp(page);
+    await openAudioInputMenu(page);
     await connectGuitar(page);
     await expect(itemOf(page, 'input')).toBeVisible();
     await expect(itemOf(page, 'input')).toHaveText('입력 지연 미포함');
@@ -242,6 +246,7 @@ test.describe('E-14 지연·끊김 표시', () => {
       Object.defineProperty(AudioContext.prototype, 'baseLatency', { configurable: true, get: () => 0.05 });
     });
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(page.locator('.latency-advice')).toHaveCount(0);
     await connectGuitar(page);
     await expect(page.locator('.latency-advice')).toContainText(ADVICE);
@@ -262,6 +267,7 @@ test.describe('E-14 지연·끊김 표시', () => {
       Object.defineProperty(AudioContext.prototype, 'playbackStats', { configurable: true, get: () => fake });
     });
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(underrunOutput(page)).toHaveText('--');
     await connectGuitar(page);
     await expect(underrunOutput(page), '시작 전의 5건은 세지 않는다').toHaveText('0회');
@@ -280,6 +286,7 @@ test.describe('E-14 지연·끊김 표시', () => {
       Object.defineProperty(AudioContext.prototype, 'playbackStats', { configurable: true, get: () => fake });
     });
     await openApp(page);
+    await openAudioInputMenu(page);
     await openFileThroughButton(page, fixturePath('ref-pc.wav'));
     await expect(itemOf(page, 'input')).toHaveText('입력 없음(음원 파일)');
     await expect(underrunOutput(page), '시작 전의 5건은 세지 않는다').toHaveText('0회');
@@ -296,6 +303,7 @@ test.describe('E-14 지연·끊김 표시', () => {
   test('E-14 ⑧ 휴대폰 화면에서 지연 문구가 가로로 넘치지 않는다', async ({ launchWithMic }) => {
     const { page } = await launchWithMic(undefined, PHONE);
     await openApp(page);
+    await openAudioInputMenu(page);
     await setMobileDock(page, true);
     await connectGuitar(page);
     await setMobileDock(page, true, 'meter');

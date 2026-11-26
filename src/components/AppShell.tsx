@@ -2,6 +2,7 @@ import { useHistoryStore } from '../store/historyStore';
 import { HistoryControls } from './HistoryControls';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { ChainText } from './ChainText';
+import { AudioInputMenu } from './AudioInputMenu';
 import { ConnectGuitarPanel } from './ConnectGuitarPanel';
 import { GlobalKeyboardShortcuts } from './GlobalKeyboardShortcuts';
 import { Meter } from './Meter';
@@ -136,7 +137,7 @@ export function AppShell() {
         </div>
       ) : null}
       <div className={`workspace${!sidebarOpen && sidebarDocked && !isMobileLayout ? ' sidebar-collapsed' : ''}${!sidebarDocked && !isMobileLayout ? ' sidebar-drawer-mode' : ''}`}>
-        <PedalBoard inputPanel={isMobileLayout ? undefined : inputPanel} />
+        <PedalBoard inputPanel={isMobileLayout ? undefined : <AudioInputMenu />} />
         {!isMobileLayout ? (
           <>
             {drawerOpen ? <div className="sidebar-scrim" aria-hidden="true" onClick={() => setSidebarOpen(false)} /> : null}

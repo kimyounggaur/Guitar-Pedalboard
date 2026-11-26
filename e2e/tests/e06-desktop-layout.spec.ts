@@ -8,7 +8,7 @@
 // 값은 지금도 기준선(docs/baseline/e2e.json)에 남긴다(E2E_UPDATE_BASELINE=1 일 때만 갱신).
 // 설계서의 '900 px 높이에서 첫 줄 스위치가 스크롤 없이 보임'은 카드 속을 다시 짜야만 가능해서(REFACTOR_LOG L-71) 단언하지 않고 첫 화면 노출 수만 기록한다.
 import type { Page } from '@playwright/test';
-import { connectGuitar, disconnectButton, horizontalOverflow, openApp, panicButton, pedalCards, PEDAL_COUNT, setSidebar } from '../helpers/app';
+import { audioInputMenuToggle, audioInputPopover, connectButton, connectGuitar, disconnectButton, horizontalOverflow, openApp, panicButton, pedalCards, PEDAL_COUNT, setSidebar } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { overlapsInCard, type OverlapPair } from '../helpers/geometry';
 import { recordMeasurement, recordScreenshot } from '../helpers/record';
@@ -185,24 +185,26 @@ for (const screen of DESKTOP_PROFILES) {
   test.describe(`E-06 연결한 뒤 ${screen.name}`, () => {
     test.use({ viewport: { width: screen.width, height: screen.height } });
 
-    test(`E-06 연결한 뒤 ${screen.name}: 입력 줄이 한 줄 상태 막대로 줄고 첫 페달 카드가 위로 올라온다`, async ({ page }) => {
+    test(`E-06 연결한 뒤 ${screen.name}: 헤더 메뉴 줄에 상태가 모이고 보드는 밀리지 않으며 메뉴는 보드 위에 뜬다`, async ({ page }) => {
       await openApp(page);
-      const idleTop = (await boardGeometry(page)).firstCardTop;
+      const idleGeometry = await boardGeometry(page);
+      const idleTop = idleGeometry.firstCardTop;
       const idleScreen = await firstScreenSwitches(page);
       const logo = await page.locator('.app-logo-title img').boundingBox();
 
+      // 연결 전: 헤더에는 메뉴 단추와 '기타 연결하기'만 있고, 입력 설정 패널은 접혀 있다(보드를 밀지 않는다).
+      const toggle = audioInputMenuToggle(page);
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await expect(audioInputPopover(page)).toBeHidden();
+      await expect(connectButton(page)).toBeVisible();
+
       await connectGuitar(page);
-      const bar = page.getByRole('group', { name: '입력 연결 상태' });
-      await expect(bar).toBeVisible();
+      const bar = page.locator('.audio-input-menu-bar');
       await expect(bar.locator('.connect-status-device')).toBeVisible();
       await expect(bar.locator('.connect-status-latency')).toBeVisible();
-      await expect(bar.locator('#input-channel')).toBeVisible();
-      await expect(bar.locator('label.io-slider-control', { hasText: '입력 트림' })).toBeVisible();
       await expect(disconnectButton(page)).toBeVisible();
       await expect(panicButton(page)).toBeVisible();
-      const moreButton = bar.getByRole('button', { name: '입력 설정', exact: true });
-      await expect(moreButton).toHaveAttribute('aria-expanded', 'false');
-      await expect(page.locator('#connect-panel-details')).toBeHidden();
+      await expect(audioInputPopover(page)).toBeHidden();
 
       const geometry = await boardGeometry(page);
       const barBox = await bar.boundingBox();
@@ -213,7 +215,7 @@ for (const screen of DESKTOP_PROFILES) {
         id: 'E-06',
         profile: screen.name,
         condition: 'connected',
-        summary: `연결한 뒤: 첫 페달 카드 윗선 ${geometry.firstCardTop}px(연결 전 ${idleTop}px), 상태 막대 높이 ${Math.round(barBox?.height ?? 0)}px, 첫 화면에서 첫 줄 스위치 ${connectedScreen.visible}/${connectedScreen.rowCards}개 보임(연결 전 ${idleScreen.visible}/${idleScreen.rowCards}), 가로 넘침 ${overflow}px`,
+        summary: `연결한 뒤: 첫 페달 카드 윗선 ${geometry.firstCardTop}px(연결 전 ${idleTop}px), 메뉴 줄 높이 ${Math.round(barBox?.height ?? 0)}px, 첫 화면에서 첫 줄 스위치 ${connectedScreen.visible}/${connectedScreen.rowCards}개 보임(연결 전 ${idleScreen.visible}/${idleScreen.rowCards}), 가로 넘침 ${overflow}px`,
         values: {
           firstCardTop: geometry.firstCardTop,
           firstCardTopBeforeConnect: idleTop,
@@ -226,18 +228,25 @@ for (const screen of DESKTOP_PROFILES) {
       });
 
       expect(overflow, `${screen.name} 연결한 뒤: 문서 가로 넘침(px)`).toBe(0);
-      expect(geometry.firstCardTop, `${screen.name}: 연결하면 첫 페달 카드가 연결 전(${idleTop}px)보다 위로 올라와야 한다`).toBeLessThan(idleTop);
+      // 연결해도 헤더 높이가 달라지면 안 된다(상태가 같은 줄에 들어간다). 1px 안쪽의 반올림은 허용.
+      expect(Math.abs(geometry.firstCardTop - idleTop), `${screen.name}: 연결 전후 첫 페달 카드 윗선 차이(px)`).toBeLessThanOrEqual(2);
       if (screen.name === '1280x800') {
         expect(geometry.firstCardTop, `1280×800 연결한 뒤 첫 페달 카드 윗선(px). 설계서 S1.8 수용 기준 ≤ ${FIRST_PEDAL_TOP_LIMIT}px`).toBeLessThanOrEqual(FIRST_PEDAL_TOP_LIMIT);
       }
 
-      // '입력 설정' 으로 장치 고르기·잡음 등 자세한 설정을 펼쳤다 접을 수 있고, 펼쳐도 가로로 넘치지 않는다.
-      await moreButton.click();
-      await expect(bar.getByRole('button', { name: '입력 설정 접기', exact: true })).toHaveAttribute('aria-expanded', 'true');
-      await expect(page.locator('#connect-panel-details')).toBeVisible();
-      expect(await horizontalOverflow(page), `${screen.name}: 입력 설정을 펼친 뒤 가로 넘침(px)`).toBe(0);
-      await bar.getByRole('button', { name: '입력 설정 접기', exact: true }).click();
-      await expect(page.locator('#connect-panel-details')).toBeHidden();
+      // 메뉴를 열면 장치·채널·입력 트림 등 설정이 보이고, 보드 배치는 그대로이며, 가로로 넘치지 않는다.
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      await expect(audioInputPopover(page)).toBeVisible();
+      await expect(audioInputPopover(page).locator('#input-channel')).toBeVisible();
+      await expect(audioInputPopover(page).locator('label.io-slider-control', { hasText: '입력 트림' })).toBeVisible();
+      expect(await boardGeometry(page), `${screen.name}: 메뉴를 열어도 보드 배치가 바뀌면 안 된다`).toEqual(geometry);
+      expect(await horizontalOverflow(page), `${screen.name}: 메뉴를 연 뒤 가로 넘침(px)`).toBe(0);
+      const popoverBox = await audioInputPopover(page).boundingBox();
+      expect(popoverBox && popoverBox.x >= 0 && popoverBox.x + popoverBox.width <= screen.width, `${screen.name}: 메뉴가 화면 안에 들어와야 한다`).toBe(true);
+      // 단추를 다시 누르면 닫힌다.
+      await toggle.click();
+      await expect(audioInputPopover(page)).toBeHidden();
     });
   });
 }

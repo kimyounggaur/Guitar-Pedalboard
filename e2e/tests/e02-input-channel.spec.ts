@@ -7,7 +7,7 @@
 //   · 채널이 하나뿐인 장치에서는 선택 메뉴를 숨기는지 확인한다.
 // 가짜 마이크는 `ref-pc-left-only.wav`·`ref-pc-right-only.wav`·`ref-pc.wav`(양쪽 같은 소리)를 늘 2채널로 준다
 // (Chrome 은 channelCount 제약을 무시하고 WAV 의 채널을 그대로 전달한다).
-import { connectGuitar, disconnectButton, openApp } from '../helpers/app';
+import { connectGuitar, disconnectButton, openApp, openAudioInputMenu } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { mockInputChannelCount, readOutputLevels, tapOutput, trackAudioContexts, type OutputLevels } from '../helpers/mocks';
 import { recordScreenshot } from '../helpers/record';
@@ -34,6 +34,7 @@ async function openWithTap(page: Page): Promise<void> {
   await trackAudioContexts(page);
   await tapOutput(page);
   await openApp(page);
+  await openAudioInputMenu(page);
 }
 
 function balance(levels: OutputLevels): number {
@@ -119,6 +120,7 @@ test.describe('E-02 입력 채널', () => {
     await expect.poll(async () => Object.values(await readStoredChannels(page)).some((entry) => entry.mode === 'ch2')).toBe(true);
 
     await page.reload();
+    await openAudioInputMenu(page);
     await expect(channelSelect(page)).toHaveValue('ch2');
     await expect(decisionNote(page)).toHaveCount(0);
 
@@ -153,6 +155,7 @@ test.describe('E-02 입력 채널', () => {
     await trackAudioContexts(page);
     await mockInputChannelCount(page, 1);
     await openApp(page);
+    await openAudioInputMenu(page);
     await expect(channelSelect(page)).toBeVisible();
     await connectGuitar(page);
     await expect(channelSelect(page)).toHaveCount(0);

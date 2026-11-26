@@ -4,7 +4,7 @@
 // 녹음 중에 멈춰도 파일이 남는지, 대화상자가 열린 상태의 Esc 는 대화상자만 닫는지,
 // 정지→연결을 10번 되풀이해도 AudioContext 가 동시에 둘 이상 열리지 않는지 확인한다.
 import { readFileSync } from 'node:fs';
-import { chooseRecordingFormat, connectButton, connectGuitar, disconnectButton, openApp, panicButton, type RecordingFormat } from '../helpers/app';
+import { chooseRecordingFormat, connectButton, connectGuitar, disconnectButton, openApp, openAudioInputMenu, panicButton, type RecordingFormat } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { markTriggers, mockHowlGuard, readAudioTracking, trackAudioContexts, triggerHowl } from '../helpers/mocks';
 import { waitForTeardown } from '../helpers/teardown';
@@ -19,6 +19,7 @@ async function openConnected(page: Page): Promise<void> {
   await markTriggers(page);
   await mockHowlGuard(page);
   await openApp(page);
+  await openAudioInputMenu(page);
   await connectGuitar(page);
   await expect
     .poll(async () => {
@@ -130,6 +131,7 @@ test.describe('E-01 정지 정리', () => {
     await trackAudioContexts(page);
     await markTriggers(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(200);
     await expect(page.locator('.toast')).toHaveCount(0);
@@ -199,6 +201,7 @@ test.describe('E-01 정지 정리', () => {
     await trackAudioContexts(page);
     await markTriggers(page);
     await openApp(page);
+    await openAudioInputMenu(page);
 
     const stoppers = ['연결 해제 버튼', 'Panic 버튼', 'Esc'] as const;
     for (let cycle = 0; cycle < 10; cycle += 1) {

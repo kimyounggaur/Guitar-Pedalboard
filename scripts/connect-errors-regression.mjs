@@ -366,10 +366,11 @@ equal(useAudioStore.getState().error, ko.connect.workletLoad, '워클릿 로드 
 // ---------------------------------------------------------------------------------------------
 // 4. 소스 단언
 // ---------------------------------------------------------------------------------------------
-const [engineSource, storeSource, panelSource, errorsSource] = await Promise.all([
+const [engineSource, storeSource, panelSource, menuSource, errorsSource] = await Promise.all([
   read('src/audio/AudioEngine.ts'),
   read('src/store/audioStore.ts'),
   read('src/components/ConnectGuitarPanel.tsx'),
+  read('src/components/AudioInputMenu.tsx'),
   read('src/audio/engine/errors.ts'),
 ]);
 const count = (text, needle) => text.split(needle).length - 1;
@@ -385,11 +386,11 @@ ok(storeSource.includes('shouldRetryWithDefaultInput(error, deviceId)'), '스토
 ok(storeSource.includes('ko.connect.fellBackToDefault'), '스토어: 안내 문구는 카탈로그에서');
 ok(panelSource.includes('<p ref={errorRef} className="error-message" role="alert">{error}</p>'), '화면: 오류 문단이 role="alert" 이다(스크린리더가 바로 읽는다)');
 equal(count(panelSource, 'className="error-message"'), 1, '화면: 오류 문단은 한 군데에서만 만든다(연결된 상태와 아닌 상태가 같은 문단을 쓴다)');
-equal(count(panelSource, '{!compact && errorNotice}'), 1, '화면: 연결 전에는 안내가 연결 버튼 줄 바로 아래에 있다');
-equal(count(panelSource, '{compact ? errorNotice : null}'), 1, '화면: 연결된 한 줄 상태 표시줄에서는 표시줄 바로 아래에 있다');
-ok(panelSource.indexOf('{!compact && errorNotice}') > panelSource.indexOf('className="connect-actions"'), '화면: 안내는 연결 버튼 줄 다음에 온다');
-ok(panelSource.indexOf('{!compact && errorNotice}') < panelSource.indexOf('<FilePlayer />'), '화면: 안내는 음원 파일·안전 설정 묶음보다 위에 있다(휴대폰 도크에서 스크롤 아래로 밀리지 않는다)');
-ok(panelSource.indexOf('{compact ? errorNotice : null}') < panelSource.indexOf('id="connect-panel-details"'), '화면: 연결된 상태에서도 접힌 상세 설정보다 위에 있다');
+equal(count(panelSource, '{inMenu ? null : errorNotice}'), 1, '화면: 휴대폰 도크의 입력 패널에서는 안내가 연결 버튼 줄 바로 아래에 있다');
+ok(panelSource.indexOf('{inMenu ? null : errorNotice}') > panelSource.indexOf('className="connect-actions"'), '화면: 안내는 연결 버튼 줄 다음에 온다');
+ok(panelSource.indexOf('{inMenu ? null : errorNotice}') < panelSource.indexOf('<FilePlayer />'), '화면: 안내는 음원 파일·안전 설정 묶음보다 위에 있다(휴대폰 도크에서 스크롤 아래로 밀리지 않는다)');
+equal(count(menuSource, 'className="error-message" role="alert">{error}</p>'), 1, '화면: 데스크톱 헤더 메뉴는 오류 문단을 role="alert" 로 한 번 그린다(메뉴가 닫혀 있어도 보인다)');
+ok(menuSource.indexOf('className="error-message"') < menuSource.indexOf('id="audio-input-popover"'), '화면: 오류 문단은 접히는 설정 팝오버 밖(헤더 줄 바로 아래)에 있다')
 ok(panelSource.includes("errorRef.current?.scrollIntoView({ block: 'nearest' })"), '화면: 새 오류가 생기면 보이는 곳까지 스크롤한다');
 ok(!panelSource.includes('{error && <p className="error-message"'), '화면: 패널 맨 아래의 옛 오류 문단이 없다');
 ok(!errorsSource.includes('error instanceof'), 'errors.ts: 오류를 instanceof 로 가르지 않는다(다른 창의 오류도 이름으로 가른다)');
