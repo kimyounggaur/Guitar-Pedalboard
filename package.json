@@ -66,6 +66,7 @@
     "test:cabinet-response": "node scripts/cabinet-response-analysis.mjs",
     "test:test-system": "node scripts/test-system-guard.mjs",
     "test:probe": "node scripts/audio-render-probe.mjs",
+    "test:readme": "node scripts/readme-numbers-regression.mjs",
     "probe": "node scripts/audio-render-probe.mjs",
     "trims": "node scripts/compute-preset-trims.mjs",
     "e2e": "playwright test"
