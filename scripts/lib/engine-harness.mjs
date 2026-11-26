@@ -37,7 +37,13 @@ export async function createEngineHarness({ extraExports = [], contextOverrides 
 
   const fake = installFakeAudio();
   const originalWindow = globalThis.window;
+  const storage = new Map();
   globalThis.window = originalWindow ?? {
+    localStorage: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => { storage.set(key, String(value)); },
+      removeItem: (key) => { storage.delete(key); },
+    },
     dispatchEvent() { return true; },
     addEventListener() {},
     removeEventListener() {},
@@ -80,6 +86,8 @@ export async function createEngineHarness({ extraExports = [], contextOverrides 
     blobs,
     revokedUrls,
     workletModules,
+    /** window.localStorage 가짜가 담고 있는 값(저장소 시험용) */
+    storage,
     /** 비공개 loadWorklets() 를 그대로 부른다(실제 start 경로가 부르는 함수). */
     async loadWorklets() {
       await engine.loadWorklets();
