@@ -48,6 +48,8 @@
     "test:device-manager": "node scripts/device-manager-regression.mjs",
     "test:history": "node scripts/history-regression.mjs",
     "test:cabinet-ir": "node scripts/cabinet-ir-regression.mjs",
+    "test:cabinet-ir-store": "node scripts/cabinet-ir-store-regression.mjs",
+    "test:cabinet-ir-library": "node scripts/cabinet-ir-library-regression.mjs",
     "test:knob": "node scripts/knob-regression.mjs",
     "test:latency": "node scripts/latency-regression.mjs",
     "test:mix-law": "node scripts/mix-law-regression.mjs",

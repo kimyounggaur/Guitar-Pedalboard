@@ -150,7 +150,7 @@ try {
   assert.equal(JSON.stringify(usePedalStore.getState().pedals), pedalsBeforeEmptyActivation);
   assert.equal(rebuildCount, 0, '빈 슬롯이 체인을 rebuild했습니다.');
 
-  // A regular parameter change or chain reorder preserves the session IR.
+  // 사용자 IR(S5.4): 저장된 IR 은 값·순서 변경이나 슬롯 불러오기로 지워지지 않고, 쓸지는 Cab 모델('내 IR')이 정한다.
   class MockParam {
     value = 0;
     cancelScheduledValues() {}
@@ -172,21 +172,40 @@ try {
       return { numberOfChannels: count, getChannelData: (channel) => data[channel] };
     },
   };
-  const cab = new CabEffect(context, usePedalStore.getState().pedals.find((pedal) => pedal.id === 'cab'));
-  const customBuffer = {};
-  cab.setCustomImpulse(customBuffer);
+  const library = engine.cabinetIrs;
+  const customBuffer = { numberOfChannels: 1, length: 3, getChannelData: () => new Float32Array([0, 0.2, -0.1]) };
+  library.stored = { name: 'custom.wav', sampleRate: 48000, cut: false, originalSeconds: 0.1, channels: [new Float32Array([0, 0.2, -0.1])], savedAt: 1 };
+  library.revision += 1;
+  library.prepared = { buffer: customBuffer, makeupDb: 0, revision: library.revision, sampleRate: 48000 };
+  // IR 교체는 페이드 뒤 타이머로 일어난다 — 걸린 타이머를 모두 실행해 최종 상태를 본다.
+  const timerQueue = [];
+  const flushTimers = () => { while (timerQueue.length) timerQueue.shift()(); };
+  const timers = { setTimeout: (callback) => { timerQueue.push(callback); return timerQueue.length; }, clearTimeout: () => {} };
+  const storeCab = () => usePedalStore.getState().pedals.find((pedal) => pedal.id === 'cab');
+  usePedalStore.getState().updatePedalParam('cab', 'model', 'my-ir');
+  const cab = new CabEffect(context, storeCab(), timers, () => library.ready(48000));
+  assert.equal(convolver.buffer, customBuffer, "모델이 '내 IR' 이면 사용자 IR 이 컨볼버에 들어간다");
   engine.effects.set('cab', cab);
-  engine.cabImpulses.set('cab', { name: 'custom.wav', buffer: customBuffer });
-  engine.cabIrRequests.set('cab', 7);
   usePedalStore.getState().updatePedalParam('cab', 'lowCut', 90);
   usePedalStore.getState().setPedals([...usePedalStore.getState().pedals].reverse());
-  assert.equal(engine.getCabinetIrName('cab'), 'custom.wav');
+  assert.equal(engine.getCabinetIrInfo().name, 'custom.wav', '값·순서를 바꿔도 저장된 IR 은 그대로다');
   usePresetStore.setState({ slotB: savedSlotB });
   useAudioStore.setState({ tapTempo: { taps: [1_000, 1_500], bpm: 120 } });
   assert.equal(usePresetStore.getState().activateSlot('A'), true);
-  assert.equal(engine.getCabinetIrName('cab'), null, 'snapshot loading clears session IR');
-  assert.notEqual(convolver.buffer, customBuffer, 'active CabEffect must stop using the custom IR');
-  assert.equal(engine.cabIrRequests.get('cab'), 8, 'snapshot loading invalidates pending decode');
+  assert.equal(storeCab().params.model, 'v30-4x12', '슬롯 A 의 Cab 모델이 적용된다');
+  assert.equal(engine.getCabinetIrInfo().name, 'custom.wav', '슬롯을 불러와도 저장된 IR 은 지워지지 않는다');
+  // 엔진은 체인을 다시 만들 때 이펙트에 update 를 준다 — 그때 Cab 은 모델대로 만든 IR 로 돌아간다.
+  cab.update(storeCab());
+  flushTimers();
+  assert.notEqual(convolver.buffer, customBuffer, '모델이 바뀌면 활성 CabEffect 는 사용자 IR 쓰기를 멈춘다');
+  usePedalStore.getState().updatePedalParam('cab', 'model', 'my-ir');
+  cab.update(storeCab());
+  flushTimers();
+  assert.equal(convolver.buffer, customBuffer, "다시 '내 IR' 을 고르면 저장된 IR 을 쓴다");
+  usePedalStore.getState().updatePedalParam('cab', 'model', 'v30-4x12');
+  library.stored = null;
+  library.revision += 1;
+  library.prepared = null;
   assert.equal(usePresetStore.getState().activeSlot, 'A');
   assert.equal(rebuildCount, 1);
   assert.equal(
@@ -242,7 +261,7 @@ try {
   usePresetStore.getState().activateSlot('B');
   assert.equal(usePedalStore.getState().presetTrimDb, -2, '슬롯 B 를 켜면 B 에 담긴 음량 보정이 적용됩니다.');
 
-  // ── 프리셋을 적용하는 하나의 길: 캐비닛 IR 정리 → 페달·음량 보정 → 템포 이어받기 → 체인 재구성 (이 순서) ──────
+  // ── 프리셋을 적용하는 하나의 길: 페달·음량 보정 → 템포 이어받기 → 체인 재구성 (이 순서). 사용자 IR 은 건드리지 않는다(S5.4) ──────
   // 엔진·스토어 함수를 감싸 호출 순서만 기록한다(실제 동작은 그대로 실행).
   const orderOf = (action) => {
     const order = [];
@@ -265,7 +284,6 @@ try {
       } });
       restorers.push(() => store.setState({ [name]: original }));
     };
-    wrapEngine('clearAllCabinetIrs');
     wrapEngine('rebuildChain');
     wrapStore(usePedalStore, 'setPedals');
     wrapStore(usePedalStore, 'resetPedalOrder');
@@ -277,7 +295,7 @@ try {
     }
     return order;
   };
-  const APPLY_ORDER = ['clearAllCabinetIrs', 'setPedals', 'adoptTempoFromPedals', 'rebuildChain'];
+  const APPLY_ORDER = ['setPedals', 'adoptTempoFromPedals', 'rebuildChain'];
   const studio = usePresetStore.getState().presets.find((preset) => preset.name === 'Studio Clean');
   assert.ok(studio, '팩토리 프리셋 Studio Clean 이 목록에 있어야 합니다.');
   assert.deepEqual(orderOf(() => applyPresetPedals(studio.pedals, studio.trimDb)), APPLY_ORDER);
@@ -300,10 +318,10 @@ try {
   const resetButton = harness.findHost('button', (props) => typeof props.className === 'string' && props.className.includes('preset-reset-button'));
   assert.equal(hostText(resetButton.props.children).trim(), '기본 페달 설정');
   usePedalStore.getState().setPedals(clonePedals(usePedalStore.getState().pedals).reverse(), 0);
-  assert.deepEqual(orderOf(() => resetButton.props.onClick()), ['clearAllCabinetIrs', 'resetPedalOrder', 'rebuildChain'], "'기본 페달 설정' 은 IR 정리 → 순서·값 되돌리기 → 체인 재구성입니다.");
+  assert.deepEqual(orderOf(() => resetButton.props.onClick()), ['resetPedalOrder', 'rebuildChain'], "'기본 페달 설정' 은 순서·값 되돌리기 → 체인 재구성입니다.");
   assert.deepEqual(usePedalStore.getState().pedals, usePedalStore.getInitialState().pedals, '모든 페달이 처음 순서와 값으로 돌아옵니다.');
   assert.deepEqual(orderOf(() => resetButton.props.onClick()), [], '이미 기본 페달 설정이면 아무것도 바꾸지 않습니다.');
-  assert.deepEqual(orderOf(() => resetToDefaultChain()), ['clearAllCabinetIrs', 'resetPedalOrder', 'rebuildChain'], 'resetToDefaultChain 의 순서');
+  assert.deepEqual(orderOf(() => resetToDefaultChain()), ['resetPedalOrder', 'rebuildChain'], 'resetToDefaultChain 의 순서');
 
   // ── A/B 도구줄: 단추 넷, 빈 슬롯은 켤 수 없고, 켜진 슬롯만 눌림 표시, 상태 문구는 정중한 알림 영역 ─────────────────
   const toolbarAt = (state) => {

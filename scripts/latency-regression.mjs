@@ -222,8 +222,12 @@ for (const sampleRate of [44100, 48000]) {
   assert.equal(cabOff.latencySeconds, 0.000089, '모델을 고르면 컨볼버 지연');
   cabOff.update(pedalState('cab', true, { model: 'off' }));
   assert.equal(cabOff.latencySeconds, 0, '다시 off');
-  cabOff.setCustomImpulse({ numberOfChannels: 1, length: 1, getChannelData: () => new Float32Array(1) });
-  assert.equal(cabOff.latencySeconds, 0.000089, '사용자 IR 은 model off 여도 컨볼버를 쓴다');
+  // 사용자 IR(S5.4)은 모델 '내 IR' 일 때만 쓰이므로, IR 이 저장돼 있어도 model off 면 컨볼버를 거치지 않는다.
+  const withUserIr = new CabEffect(context, pedalState('cab', true, { model: 'off' }), noTimers,
+    () => ({ buffer: { numberOfChannels: 1, length: 1, getChannelData: () => new Float32Array(1) }, makeupDb: 0 }));
+  assert.equal(withUserIr.latencySeconds, 0, 'IR 이 저장돼 있어도 model off 는 컨볼버를 거치지 않는다');
+  withUserIr.update(pedalState('cab', true, { model: 'my-ir' }));
+  assert.equal(withUserIr.latencySeconds, 0.000089, "'내 IR' 도 컨볼버 지연");
   const plain = new BaseEffect(context, pedalState('eq', true));
   assert.equal(plain.latencySeconds, 0, 'BaseEffect 기본 지연은 0');
 }

@@ -201,7 +201,6 @@ export const PedalCard = memo(function PedalCard({ pedal, dragHandleProps, isDra
         )}
         {pedal.type === 'cab' && (
           <CabPedal
-            pedalId={pedal.id}
             params={pedal.params as CabParams}
             onChange={(key, value) => commitParam(String(key), value)}
           />

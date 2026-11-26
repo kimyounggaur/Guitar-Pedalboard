@@ -25,6 +25,7 @@ export const cabSchema: EffectSchema = {
         { value: 'blue-1x12', label: 'Blue 1×12' },
         { value: 'jensen-1x12', label: 'American 1×12' },
         { value: 'tweed-1x10', label: 'Tweed 1×10' },
+        { value: 'my-ir', label: '내 IR' },
         { value: 'off', label: 'IR 끄기' },
       ],
       default: 'v30-4x12',

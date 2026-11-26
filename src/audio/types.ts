@@ -111,6 +111,8 @@ export interface CabParams extends BasePedalParams {
     | 'blue-1x12'
     | 'jensen-1x12'
     | 'tweed-1x10'
+    /** 사용자가 불러온 IR(S5.4). 저장된 IR 이 없으면 기본 캐비닛으로 재생한다. */
+    | 'my-ir'
     | 'off';
   micPosition: number;
   distance: number;

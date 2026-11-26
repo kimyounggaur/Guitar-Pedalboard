@@ -374,7 +374,6 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 {
   const engine = AudioEngine.getInstance();
   const engineCalls = [];
-  engine.clearAllCabinetIrs = () => engineCalls.push(['clearAllCabinetIrs']);
   engine.rebuildChain = () => engineCalls.push(['rebuildChain']);
   engine.setMasterVolume = (value) => engineCalls.push(['setMasterVolume', value]);
   engine.setPedalParam = (id, key, value) => engineCalls.push(['setPedalParam', id, key, value]);
@@ -395,7 +394,7 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
   inputOne.emit([0xc1, 8]);
   assert.deepEqual(usePedalStore.getState().pedals.map((pedal) => pedal.id), presetPedals.map((pedal) => pedal.id), 'Program Change 8 이 프리셋의 페달 순서를 적용합니다.');
   assert.equal(usePedalStore.getState().presetTrimDb, -3, 'Program Change 가 프리셋의 음량 보정까지 적용합니다.');
-  assert.deepEqual(engineCalls, [['clearAllCabinetIrs'], ['rebuildChain']], '프리셋 적용은 IR 정리 후 체인 재구성(공통 적용 길)입니다.');
+  assert.deepEqual(engineCalls, [['rebuildChain']], '프리셋 적용은 체인 재구성(공통 적용 길)입니다. 사용자 IR 은 건드리지 않습니다.');
   assert.deepEqual(notices(), [ko.midi.programLoaded('무대용')]);
 
   usePresetStore.setState({ presets: [] });

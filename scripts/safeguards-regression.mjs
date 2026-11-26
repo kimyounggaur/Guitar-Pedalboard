@@ -4,7 +4,7 @@
 //   2. 스토어      presetStore 의 savePreset(같은 이름 거부)·deletePreset·restoreDeletedPreset 이 저장소까지 정확히 바꾸는지.
 //                 '묻지 않고 덮어쓰는 길이 없다'는 것을 저장소에 쓰기가 한 번도 없었다는 기록으로 확인한다.
 //   3. 기본 설정   chainActions 의 isDefaultChain · 기억 → 처음 값으로 → 되돌리기가 켜짐·순서·음량 보정을 그대로 복원하는지.
-//   4. IR 기억     AudioEngine 의 snapshotCabinetIrs/restoreCabinetIrs 가 같은 세션에서만 되돌리고 남의 IR 을 덮지 않는지.
+//   4. 내 IR      사용자 캐비닛 IR(S5.4)은 기본 설정·프리셋 적용으로 지워지지 않고, 어느 IR 을 쓸지는 Cab 모델 값('내 IR')이 정해 기본 설정 되돌리기가 모델만 되돌린다.
 //   5. 소스 검사   src/ 어디에도 window.confirm 이 없다(브라우저 기본 대화상자는 시험도 접근성도 약하다).
 // 화면에서의 확인(토스트 8초·키보드로 '실행 취소'·대화상자 세 버튼·휴대폰 하단 시트)은 e2e E-12 가 본다.
 import assert from 'node:assert/strict';
@@ -51,7 +51,7 @@ const bundle = await build({
       "export { AudioEngine } from './audio/AudioEngine.ts';",
       "export { initialPedals, usePedalStore } from './store/pedalStore.ts';",
       "export { useAudioStore } from './store/audioStore.ts';",
-      "export { defaultPresets, usePresetStore } from './store/presetStore.ts';",
+      "export { applyPresetPedals, defaultPresets, usePresetStore } from './store/presetStore.ts';",
       "export { captureChainSnapshot, isDefaultChain, resetToDefaultChain, restoreChainSnapshot } from './store/chainActions.ts';",
     ].join('\n'),
     resolveDir: fileURLToPath(new URL('../src', import.meta.url)),
@@ -66,6 +66,7 @@ const bundle = await build({
 const app = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
 const {
   AudioEngine,
+  applyPresetPedals,
   STORAGE_KEYS,
   captureChainSnapshot,
   defaultPresets,
@@ -292,7 +293,7 @@ const board = () => clone(usePedalStore.getState().pedals);
   usePedalStore.getState().setPedals(clone(initialPedals), 0);
   const fresh = captureChainSnapshot();
   ok(isDefaultChain(fresh), '처음 상태는 기본 체인');
-  deepEqual(fresh.cabinetIrs.entries, [], '기억: IR 이 없다');
+  ok(!('cabinetIrs' in fresh), '기억: 사용자 IR 은 기억하지 않는다(IR 은 저장소에 따로 있다, S5.4)');
 
   // 바뀐 곳 하나씩이 모두 '기본이 아님' 으로 잡힌다
   const toggled = clone(fresh);
@@ -304,9 +305,6 @@ const board = () => clone(usePedalStore.getState().pedals);
   const trimmed = clone(fresh);
   trimmed.presetTrimDb = 1;
   ok(!isDefaultChain(trimmed), '음량 보정이 0 이 아니면 기본이 아니다');
-  const withIr = clone(fresh);
-  withIr.cabinetIrs.entries.push({ pedalId: 'cab', name: 'x', buffer: null });
-  ok(!isDefaultChain(withIr), '불러 둔 IR 이 있으면 기본이 아니다');
   const tweaked = clone(fresh);
   const firstParam = Object.keys(tweaked.pedals[0].params)[0];
   tweaked.pedals[0].params[firstParam] = typeof tweaked.pedals[0].params[firstParam] === 'number' ? tweaked.pedals[0].params[firstParam] + 1 : 'changed';
@@ -341,8 +339,7 @@ const board = () => clone(usePedalStore.getState().pedals);
   equal(storedAfterReset.trimDb, 0, '처음 값의 음량 보정도 저장소에 반영된다');
   deepEqual(storedAfterReset.chain, initialPedals.map((pedal) => pedal.id), '처음 값의 순서도 저장소에 반영된다');
 
-  const result = restoreChainSnapshot(changed);
-  equal(result.cabinetIrsLost, 0, '되돌리기: 잃은 IR 없음');
+  restoreChainSnapshot(changed);
   equal(JSON.stringify(usePedalStore.getState().pedals), savedPedals, '되돌리기: 모든 페달(켜짐·순서·노브)이 기억한 값과 같다');
   equal(usePedalStore.getState().presetTrimDb, -2.5, '되돌리기: 음량 보정');
   const storedAfterRestore = JSON.parse(fakeValues.get(STORAGE_KEYS.v2State));
@@ -369,74 +366,37 @@ const board = () => clone(usePedalStore.getState().pedals);
 }
 
 // ---------------------------------------------------------------------------------------------
-// 4. IR 기억: 같은 세션에서만 · 남의 IR 을 덮지 않는다
+// 4. 내 IR(S5.4): 기본 설정이 IR 을 지우지 않는다 · 모델 값이 IR 사용을 정한다
 // ---------------------------------------------------------------------------------------------
 {
   const engine = AudioEngine.getInstance();
-  const savedContext = engine.context;
-  const savedGeneration = engine.sessionGeneration;
-  engine.cabImpulses.clear();
-  engine.context = { state: 'running' };
-  engine.sessionGeneration = 7;
-  const bufferA = { tag: 'A' };
-  const bufferB = { tag: 'B' };
-  engine.cabImpulses.set('cab-1', { name: 'room.wav', buffer: bufferA });
-  engine.cabImpulses.set('cab-2', { name: 'hall.wav', buffer: bufferB });
+  const library = engine.cabinetIrs;
+  // 저장소에서 읽어 온 것처럼 라이브러리 안에 IR 하나를 넣는다(디코딩은 브라우저 일이라 Node 에서는 못 한다).
+  const savedStored = library.stored;
+  library.stored = { name: 'room.wav', sampleRate: 48000, cut: true, originalSeconds: 1.5, channels: [new Float32Array([1, 0])], savedAt: 1 };
+  library.revision += 1;
+  usePedalStore.getState().setPedals(clone(initialPedals), 0);
 
-  const snapshot = engine.snapshotCabinetIrs();
-  equal(snapshot.generation, 7, 'IR 기억: 세션 번호');
-  deepEqual(snapshot.entries.map((entry) => `${entry.pedalId}:${entry.name}`), ['cab-1:room.wav', 'cab-2:hall.wav'], 'IR 기억: 페달·이름');
-  ok(snapshot.entries[0].buffer === bufferA, 'IR 기억: 버퍼는 복사하지 않고 그대로 잡는다(큰 데이터)');
+  ok(isDefaultChain(captureChainSnapshot()), 'IR 이 저장돼 있어도 기본 체인이다(IR 은 체인 상태가 아니다)');
+  usePedalStore.getState().updatePedalParam('cab', 'model', 'my-ir');
+  const withMyIr = captureChainSnapshot();
+  equal(withMyIr.pedals.find((pedal) => pedal.id === 'cab').params.model, 'my-ir', "기억: Cab 모델 '내 IR'");
+  ok(!isDefaultChain(withMyIr), "모델이 '내 IR' 이면 기본 체인이 아니다");
 
-  engine.clearAllCabinetIrs();
-  equal(engine.cabImpulses.size, 0, '지우면 비어 있다');
-  dispatched.length = 0;
-  equal(engine.restoreCabinetIrs(snapshot), 2, '같은 세션이면 둘 다 되돌린다');
-  equal(engine.getCabinetIrName('cab-1'), 'room.wav', '되돌린 IR 의 이름');
-  ok(engine.cabImpulses.get('cab-2').buffer === bufferB, '되돌린 IR 의 버퍼');
-  ok(dispatched.includes('cab-ir-change'), '되돌리면 화면에 알린다(cab-ir-change)');
-
-  // 지금 같은 페달에 다른 IR 이 불려 있으면 그것을 지킨다
-  engine.cabImpulses.clear();
-  engine.cabImpulses.set('cab-1', { name: 'newer.wav', buffer: { tag: 'N' } });
-  equal(engine.restoreCabinetIrs(snapshot), 1, '남의 IR 이 있는 페달은 건너뛴다');
-  equal(engine.getCabinetIrName('cab-1'), 'newer.wav', '그 사이 불러 온 IR 을 덮어쓰지 않는다');
-  equal(engine.getCabinetIrName('cab-2'), 'hall.wav', '나머지는 되돌린다');
-
-  // 세션이 바뀌었으면(정지·다시 연결) 낡은 버퍼이므로 되돌리지 않는다
-  engine.cabImpulses.clear();
-  engine.sessionGeneration = 8;
-  dispatched.length = 0;
-  equal(engine.restoreCabinetIrs(snapshot), 0, '세션이 바뀌었으면 하나도 되돌리지 않는다');
-  equal(engine.cabImpulses.size, 0, '낡은 IR 은 넣지 않는다');
-  ok(!dispatched.includes('cab-ir-change'), '아무것도 안 바뀌었으면 알리지 않는다');
-
-  // 오디오가 없거나 닫혔으면 되돌리지 않는다
-  engine.sessionGeneration = 7;
-  engine.context = null;
-  equal(engine.restoreCabinetIrs(snapshot), 0, '오디오 컨텍스트가 없으면 0');
-  engine.context = { state: 'closed' };
-  equal(engine.restoreCabinetIrs(snapshot), 0, '닫힌 컨텍스트면 0');
-
-  // 체인 되돌리기가 잃은 IR 수를 알려 준다
-  engine.context = { state: 'running' };
-  engine.sessionGeneration = 7;
-  engine.cabImpulses.clear();
-  engine.cabImpulses.set('cab-1', { name: 'room.wav', buffer: bufferA });
-  const chainSnapshot = captureChainSnapshot();
-  equal(chainSnapshot.cabinetIrs.entries.length, 1, '체인 기억에 IR 이 들어간다');
-  ok(!isDefaultChain(chainSnapshot), 'IR 만 있어도 기본 체인이 아니다');
   resetToDefaultChain();
-  equal(engine.cabImpulses.size, 0, '기본 설정은 IR 도 지운다');
-  deepEqual(restoreChainSnapshot(chainSnapshot), { cabinetIrsLost: 0 }, '같은 세션이면 IR 을 잃지 않는다');
-  equal(engine.getCabinetIrName('cab-1'), 'room.wav', '기본 설정을 되돌리면 IR 도 돌아온다');
-  engine.sessionGeneration = 9;
-  engine.cabImpulses.clear();
-  deepEqual(restoreChainSnapshot(chainSnapshot), { cabinetIrsLost: 1 }, '세션이 바뀌었으면 잃은 IR 수를 알린다');
+  equal(usePedalStore.getState().pedals.find((pedal) => pedal.id === 'cab').params.model, initialPedals.find((pedal) => pedal.id === 'cab').params.model, '기본 설정은 모델을 기본 캐비닛으로 돌린다');
+  equal(engine.getCabinetIrInfo()?.name, 'room.wav', '기본 설정이 저장된 IR 을 지우지 않는다');
+  restoreChainSnapshot(withMyIr);
+  equal(usePedalStore.getState().pedals.find((pedal) => pedal.id === 'cab').params.model, 'my-ir', '되돌리면 모델과 함께 IR 이 다시 쓰인다');
+  equal(engine.getCabinetIrInfo()?.name, 'room.wav', '되돌린 뒤에도 같은 IR');
 
-  engine.cabImpulses.clear();
-  engine.context = savedContext;
-  engine.sessionGeneration = savedGeneration;
+  // 프리셋을 불러와도(어떤 모델이든) IR 은 그대로다
+  applyPresetPedals(clone(initialPedals), 0);
+  equal(engine.getCabinetIrInfo()?.name, 'room.wav', '프리셋 적용이 저장된 IR 을 지우지 않는다');
+  ok(!('clearAllCabinetIrs' in engine) && !('snapshotCabinetIrs' in engine) && !('restoreCabinetIrs' in engine), '세션 IR 을 지키던 엔진 장치는 없다');
+
+  library.stored = savedStored;
+  library.revision += 1;
   usePedalStore.getState().setPedals(clone(initialPedals), 0);
 }
 
