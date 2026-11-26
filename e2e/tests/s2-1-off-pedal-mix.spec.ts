@@ -10,6 +10,7 @@ import type { Locator, Page } from '@playwright/test';
 import { openApp, pedalCards } from '../helpers/app';
 import { fixturesDir } from '../helpers/env';
 import { expect, test } from '../helpers/fixtures';
+import { knobKoName, pedalRegionName } from '../helpers/ko-names';
 
 const fixture = JSON.parse(readFileSync(join(fixturesDir, 'storage-v1', '04-disabled-pedal-mix0.json'), 'utf8')) as {
   storage: Record<string, string>;
@@ -18,12 +19,12 @@ const fixture = JSON.parse(readFileSync(join(fixturesDir, 'storage-v1', '04-disa
 /** 기본 Mix(%). `src/store/pedalStore.ts` 의 기본 페달 값이다. */
 const DEFAULT_MIX = { Delay: 30, Reverb: 25, Chorus: 35 } as const;
 
-const pedalGroup = (page: Page, name: string): Locator => page.getByRole('region', { name: `${name} 이펙터`, exact: true });
+const pedalGroup = (page: Page, name: string): Locator => page.getByRole('region', { name: pedalRegionName(name), exact: true });
 const stompOf = (page: Page, name: string): Locator => pedalGroup(page, name).locator('.stomp-toggle-switch');
 /** Mix 노브의 화면 이름. Delay 는 'E.Level'(에코 레벨)이 Mix 값이다. */
 const MIX_LABEL: Record<string, string> = { Delay: 'E.Level' };
 const mixOf = (page: Page, name: string): Locator =>
-  pedalGroup(page, name).getByRole('slider', { name: MIX_LABEL[name] ?? 'Mix', exact: true });
+  pedalGroup(page, name).getByRole('slider', { name: knobKoName(name, MIX_LABEL[name] ?? 'Mix'), exact: true });
 
 /** 새로고침할 때 덮어쓰지 않도록 sessionStorage 로 한 번만 넣는다(픽스처 README 의 방법). */
 async function seedFixture(page: Page): Promise<void> {
@@ -82,7 +83,8 @@ test.describe('S2.1 꺼진 페달의 Mix 0% 바로잡기', () => {
         const card = cards.nth(index);
         const pressed = await card.locator('.stomp-toggle-switch').getAttribute('aria-pressed');
         if (pressed !== 'false') continue;
-        const mix = card.getByRole('slider', { name: 'Mix', exact: true });
+        // 접근성 이름이 같은 '믹스' 라서 Delay(E.Level)·Graphic EQ·Cab 의 Mix 도 함께 잡힌다(S4.6 이전에는 영어 이름이 달라 빠져 있었다).
+        const mix = card.getByRole('slider', { name: knobKoName('Drive', 'Mix'), exact: true });
         if ((await mix.count()) === 0) continue;
         const name = await card.getAttribute('aria-label');
         expect(await mix.inputValue(), `${preset} 의 꺼진 ${name} 는 Mix 0% 로 저장돼 있다`).not.toBe('0');

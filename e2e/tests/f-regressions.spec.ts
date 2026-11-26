@@ -5,6 +5,7 @@ import { expect, test } from '../helpers/fixtures';
 import { reachable } from '../helpers/geometry';
 import { measureSwitches } from '../helpers/switches';
 import { settledScroll, touchDrag } from '../helpers/touch';
+import { knobKoName, pedalRegionName } from '../helpers/ko-names';
 
 /** 그래픽 EQ 페달의 고정 대역 수(GraphicEQEffect 의 7밴드). 바꾸면 이 값과 시험을 같이 바꾼다. */
 const GRAPHIC_EQ_FADERS = 7;
@@ -160,15 +161,15 @@ test.describe('F-4 노브 가운데를 눌러도 끌기를 받는다', () => {
 
   // 전에는 값이 그대로였던 노브들(장식 층 종류별로 하나씩): Noise Gate(`i` 캡), Chorus(공용 껍데기 바늘), Drive(튜브 껍데기), Reverb(리버브 껍데기).
   const knobs = [
-    { card: 'Noise Gate 이펙터', label: 'Threshold' },
-    { card: 'Chorus 이펙터', label: 'Rate' },
-    { card: 'Drive 이펙터', label: 'Tone' },
-    { card: 'Reverb 이펙터', label: 'Mix' },
+    { card: 'Noise Gate', label: 'Threshold' },
+    { card: 'Chorus', label: 'Rate' },
+    { card: 'Drive', label: 'Tone' },
+    { card: 'Reverb', label: 'Mix' },
   ] as const;
   for (const knob of knobs) {
-    test(`F-4 ${knob.card.replace(' 이펙터', '')} ${knob.label}: 마우스로 가운데를 위로 끌면 값이 바뀐다`, async ({ page }) => {
+    test(`F-4 ${knob.card} ${knob.label}: 마우스로 가운데를 위로 끌면 값이 바뀐다`, async ({ page }) => {
       await openApp(page);
-      const input = page.locator(`.pedal-card[aria-label="${knob.card}"] input[type="range"][aria-label="${knob.label}"]`);
+      const input = page.locator(`.pedal-card[aria-label="${pedalRegionName(knob.card)}"] input[type="range"][aria-label="${knobKoName(knob.card, knob.label)}"]`);
       await input.scrollIntoViewIfNeeded();
       const box = await input.boundingBox();
       expect(box, `${knob.card} ${knob.label} 입력 상자`).not.toBeNull();

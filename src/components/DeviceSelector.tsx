@@ -71,7 +71,7 @@ export function DeviceSelector({ hideChannelMenu = false }: DeviceSelectorProps)
       await loadDevices();
     } catch (error) {
       if (error instanceof DOMException && error.name === 'NotAllowedError') return;
-      useAudioStore.setState({ error: '출력 장치 선택 창을 열 수 없습니다. 브라우저 권한을 확인해 주세요.' });
+      useAudioStore.setState({ error: ko.devices.outputPickerFailed });
     }
   };
 

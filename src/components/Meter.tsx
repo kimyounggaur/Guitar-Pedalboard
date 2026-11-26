@@ -17,6 +17,7 @@ import { readInputLevel, readOutputLevel, useMonitorStore } from '../store/monit
 import { InputLevelNotice } from './InputLevelNotice';
 import { ToggleSwitch } from './ToggleSwitch';
 import { WaveformCanvas, type WaveformCanvasHandle } from './WaveformCanvas';
+import { ko } from '../i18n/ko';
 
 const STORE_REFRESH_INTERVAL_MS = 100;
 const SILENT_LEVEL: LevelReading = {
@@ -91,7 +92,7 @@ export function Meter({ active = true }: MeterProps) {
 
       if (clipIndicator) {
         clipIndicator.classList.toggle('is-active', isClipping);
-        clipIndicator.textContent = isClipping ? '클리핑 발생' : '헤드룸 정상';
+        clipIndicator.textContent = isClipping ? ko.meter.clipped : ko.meter.headroomOk;
       }
 
       if (!outputWarning) return;
@@ -100,14 +101,12 @@ export function Meter({ active = true }: MeterProps) {
         outputWarning.hidden = false;
         outputWarning.className = 'level-warning is-danger';
         outputWarning.setAttribute('role', 'alert');
-        outputWarning.textContent =
-          '출력 클리핑이 발생했습니다. 마스터 볼륨이나 페달 레벨을 낮추세요.';
+        outputWarning.textContent = ko.meter.outputClipping;
       } else if (outputLevel.peakDb > -1) {
         outputWarning.hidden = false;
         outputWarning.className = 'level-warning is-warning';
         outputWarning.setAttribute('role', 'status');
-        outputWarning.textContent =
-          '마스터 출력이 0dBFS에 근접했습니다. 페달 레벨이나 인터페이스 출력을 낮추세요.';
+        outputWarning.textContent = ko.meter.outputNearFull;
       } else {
         outputWarning.hidden = true;
         outputWarning.className = 'level-warning';
@@ -179,7 +178,7 @@ export function Meter({ active = true }: MeterProps) {
   return (
     <section className="side-panel meter-panel">
       <div className="panel-title">
-        <p className="eyebrow">Monitor</p>
+        <p className="eyebrow">{ko.app.eyebrow.monitor}</p>
         <h2>미터 & 튜너</h2>
       </div>
 
@@ -200,8 +199,8 @@ export function Meter({ active = true }: MeterProps) {
         />
       </label>
 
-      <LevelBar ref={inputLevelRef} label="Input" />
-      <LevelBar ref={outputLevelRef} label="Output" />
+      <LevelBar ref={inputLevelRef} label={ko.meter.inputBar} />
+      <LevelBar ref={outputLevelRef} label={ko.meter.outputBar} />
 
       <div ref={clipIndicatorRef} className="clip-indicator" role="status" aria-live="polite">
         헤드룸 정상
@@ -256,7 +255,7 @@ export function Meter({ active = true }: MeterProps) {
         </div>
         <p className="recording-status" aria-live="polite">
           {!selectedRecordingSupported
-            ? '이 브라우저에서는 녹음을 지원하지 않습니다.'
+            ? ko.meter.recordingUnsupported
             : recordingStatus === 'recording'
               ? `녹음 중 ${formatElapsed(recordingElapsed)}`
               : recordingStatus === 'ready'
@@ -404,7 +403,7 @@ const LevelBar = memo(
           if (trackRef.current) {
             trackRef.current.classList.toggle('is-clipping', reading.isClipping);
             trackRef.current.setAttribute('aria-valuenow', String(Math.round(level * 100)));
-            trackRef.current.setAttribute('aria-valuetext', `${dbText}, peak ${peakText}`);
+            trackRef.current.setAttribute('aria-valuetext', ko.meter.valueText(dbText, peakText));
           }
         },
         reset: () => {
@@ -414,7 +413,7 @@ const LevelBar = memo(
           if (trackRef.current) {
             trackRef.current.classList.remove('is-clipping');
             trackRef.current.setAttribute('aria-valuenow', '0');
-            trackRef.current.setAttribute('aria-valuetext', '-inf dB, peak -inf dBpk');
+            trackRef.current.setAttribute('aria-valuetext', ko.meter.valueTextEmpty);
           }
         },
       }),
@@ -434,7 +433,7 @@ const LevelBar = memo(
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={0}
-          aria-valuetext="-inf dB, peak -inf dBpk"
+          aria-valuetext={ko.meter.valueTextEmpty}
           role="meter"
         >
           <span ref={fillRef} style={{ transform: 'scaleX(0)' }} />

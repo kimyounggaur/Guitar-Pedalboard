@@ -2215,3 +2215,52 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - 글자 폭은 이 기계의 폰트·Chromium 기준이다.
 
 ---
+
+## S4.6 한국어 문구 통일
+
+- 브랜치·병합: `refactor/s4-6-copy-unification` → `phase/4`. 커밋: `ef61399`(구현+시험)·`b19b29d`(레이아웃 고침)·`dd185be`(시험 보강)
+- 해결 항목: R4-6(한국어·영어 혼용). 설계서·코드 지도의 '`ko.ts` 없음' 과 예시 문구('Preset saved'·'Signal Chain Updated')는 낡은 서술이다 — `ko.ts` 는 이미 있었고 예시 문구는 이미 한국어였다(L-307·L-309).
+- 변경 파일(`git diff --shortstat phase/4 HEAD`, 이 문서 커밋 전):  70 files changed, 1431 insertions(+), 381 deletions(-). 제품 — `i18n/ko.ts`(문구 178개·20묶음)·새 `i18n/paramName.ts`·새 `components/ParamScope.tsx`·`components/*`(AppShell·Meter·PedalCard·PedalIcon·PresetPanel·MidiAdvancedControls 외, 페달 15종·노브·슬라이더·페이더)·`audio/AudioEngine.ts`·`audio/utils/cabinetIr.ts`·`audio/midi/MidiService.ts`·`audio/engine/{errors,latency}.ts`·`store/{audioStore,presetStore}.ts`·`persistence/{SafeStorage,exportFormat}.ts`·`app/*`·`styles/layout.css`(단추 여백). 시험 — 새 `e2e/tests/e22-copy.spec.ts`(5개)·`e2e/helpers/ko-names.ts`·`scripts/ko-catalog-regression.mjs`(+ `package.json` 의 `test:ko-catalog`), 고친 e2e 시험 12개(+ 도우미 `storage.ts`)·스크립트 4개·`docs/refactoring/regex-assertions.md`.
+
+| 수용 기준(E-22) | 결과 | 근거 |
+|---|---|---|
+| 화면에 내부 ID 텍스트 0 | **충족** | 6개 상태에서 0곳(옛 3~6곳). camelCase 이펙터 키·상태 값이 한 곳도 안 나온다 |
+| 못 박은 영어 시스템 문구 0, 모든 토스트·오류·알림이 `ko.ts` 키, 안 쓰는 키 0 | **충족(목록 범위 안)** | 6개 상태에서 0곳(옛 30~50곳). 정적 검사 27개 확인, 키 178개 전부 사용, 글자 그대로 쓴 문구 0(예외 목록은 이유와 함께 못 박음, L-312) |
+| 처음 화면에 브라우저 기본 영어 버튼 0 | **충족** | 화면에 그려진 파일 입력 1개 → 0개(Cab IR 입력을 숨기고 한국어 단추로 대신, L-311) |
+| (추가) 한글 없는 접근성 이름 0 | **충족** | 103개 → 0개 |
+
+**전후** — 같은 도구(`e22-copy` 의 측정 함수)를 옛 코드(`39b3969`)와 새 코드에 돌린 결과
+
+| 화면 상태 | 영어 시스템 문구 옛 → 새 | 내부 이름 옛 → 새 | 한글 없는 접근성 이름 옛 → 새 | 화면에 그려진 기본 파일 입력 옛 → 새 |
+|---|---|---|---|---|
+| 데스크톱·연결 전 | 50 → 0 | 6 → 0 | 103 → 0 | 1 → 0 |
+| 데스크톱·연결 후 | 50 → 0 | 6 → 0 | 103 → 0 | 1 → 0 |
+| 휴대폰·input 탭 | 32 → 0 | 3 → 0 | 103 → 0 | 1 → 0 |
+| 휴대폰·meter 탭 | 34 → 0 | 3 → 0 | 103 → 0 | 1 → 0 |
+| 휴대폰·preset 탭 | 30 → 0 | 3 → 0 | 103 → 0 | 1 → 0 |
+| 휴대폰·pedals 탭 | 30 → 0 | 3 → 0 | 103 → 0 | 1 → 0 |
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| `npm test` | 51개 통과(S4.5) | 52개 통과(526초 — 새 `test:ko-catalog` 1개) |
+| `npm run e2e` | 328개 통과(S4.5) | 333개 통과(21분 — 새 시험 5개) |
+| 프로브 | 30개, 값 2,468개 | `npm test` 안의 `test:probe` 가 통과했다. `src/audio` 는 오류 문구 문자열만 바꿨고(소리 처리 코드는 그대로) `src/config`·기준선은 건드리지 않았다 |
+
+- 검증
+  - `npx tsc -b --noEmit`·`npx tsc -p tsconfig.e2e.json --noEmit`·`npx eslint e2e`·`npm run build` 오류 0, `npm run lint`, 정규식 단언 목록 `regex-assertions.md` 그대로(재생성한 것과 같음).
+  - **새 시험이 정말 잡는지**(L-317): 변이 25개(정적 7 + 화면 18), 첫 실행 24개를 잡고 E4 가 살아남아 시험을 보강(`dd185be`)한 뒤 25/25.
+  - **이전 코드 비교**: 위 전후 표(L-314). 옛 코드에서는 6개 상태 모두 위반이 있었다.
+- 만난 문제
+  - 전체 e2e 사전 점검: E-06 1280×800 첫 카드 위쪽 320.9 > 320 — '긴급 정지' 가 넓어 상태 줄이 세 줄로 갈라짐 → 단추 안쪽 여백 12 → 10 px(`b19b29d`, L-315).
+  - `npm test` 3개 실패(소스 글자를 정규식으로 보는 스크립트), 고치고 단언 목록을 다시 만듦(L-316).
+  - E-22 만들기: `dB` 단위가 camelCase 로 잡힘, 접힌 도크에서 연결 단추가 안 눌림, 기본값일 때 초기화 알림이 안 뜸, 순서 변경 알림에 스크롤이 필요함(L-313).
+  - 변이 E4 생존 — 못 박은 문구 `'Gate: '` 가 글자 노드 `trim` 때문에 죽은 항목이었다(L-317).
+- 사람 확인 필요
+  - 스크린 리더 읽기, Cab IR 파일 단추, 번역된 머리말·상태 줄의 모양과 한글 폰트 줄 높이, 얼굴 글자를 영어로 둔 결정, 번역 어감(L-319).
+- 남은 위험
+  - 충족 판정은 못 박은 영어 목록과 camelCase 규칙의 범위 안이다. 목록에 없는 영어 문구는 시험이 못 잡는다.
+  - 정적 검사는 변수에 담아 나중에 넘기는 문구와 싱크 밖(`console`·`title` 속성)을 못 본다. E-22 가 방문한 화면 상태만 메운다.
+  - 페달 얼굴 글자(이름·노브 약어·프리셋 이름)는 영어다.
+  - 한글 폭·줄 높이는 이 기계의 폴백 글꼴 기준이다.
+
+---

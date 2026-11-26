@@ -11,6 +11,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { effectSchemas, formatParamValue, type ChoiceDef, type ParamDef } from '../../src/audio/params';
+import { paramNames } from '../../src/i18n/paramName';
+import { knobKoName, pedalRegionName } from '../helpers/ko-names';
 import type { EffectType } from '../../src/audio/types';
 import { openApp } from '../helpers/app';
 import { fixturesDir } from '../helpers/env';
@@ -35,8 +37,11 @@ const PEDALS: ReadonlyArray<{ name: string; type: EffectType }> = [
   { name: 'Reverb', type: 'reverb' },
 ];
 
-const pedalGroup = (page: Page, name: string): Locator => page.getByRole('region', { name: `${name} 이펙터`, exact: true });
-const sliderOf = (card: Locator, label: string): Locator => card.getByRole('slider', { name: label, exact: true });
+/** 카드 이름은 한국어 전체 이름이고(S4.6), 화면에 인쇄된 얼굴 이름과 노브 약어는 영어 그대로다. 시험은 영어 이름을 적고 도우미가 한국어로 바꾼다. */
+const pedalGroup = (page: Page, name: string): Locator => page.getByRole('region', { name: pedalRegionName(name), exact: true });
+/** 노브의 접근성 이름은 스키마 `name` 의 괄호 앞 부분이다(예: Threshold → 문턱값). `label` 은 화면에 인쇄된 약어. */
+const sliderOf = (card: Locator, type: EffectType, label: string): Locator => card.getByRole('slider', { name: knobKoName(type, label), exact: true });
+const nameOf = (type: EffectType, label: string): string => paramNames(type, label).name;
 /** 슬라이더와 같은 조절기 안에 있는 값 표시(<output>). */
 const outputOf = (slider: Locator): Locator => slider.locator('xpath=ancestor::div[1]').locator('output');
 
@@ -99,7 +104,7 @@ function valuetextMatches(label: string, valuetext: string, shown: string): bool
 function checkControl(type: EffectType, control: RenderedControl, mode: 'default' | 'moved'): string[] {
   const schema = effectSchemas[type];
   const where = `${type}.${control.label}`;
-  const numeric: ParamDef | undefined = schema.params.find((definition) => definition.label === control.label && !definition.hidden);
+  const numeric: ParamDef | undefined = schema.params.find((definition) => nameOf(type, definition.label) === control.label && !definition.hidden);
   if (numeric) {
     const scale = numeric.sliderScale ?? 1;
     const problems: string[] = [];
@@ -117,7 +122,7 @@ function checkControl(type: EffectType, control: RenderedControl, mode: 'default
     if (control.output !== null && control.output !== shown) problems.push(`${where}: 보이는 값 '${control.output}' ≠ '${shown}'`);
     return problems;
   }
-  const choice: ChoiceDef | undefined = schema.choices.find((definition) => definition.label === control.label && definition.kind === 'enum' && !definition.hidden);
+  const choice: ChoiceDef | undefined = schema.choices.find((definition) => nameOf(type, definition.label) === control.label && definition.kind === 'enum' && !definition.hidden);
   if (choice?.options) {
     const problems: string[] = [];
     if (control.min !== 0 || control.max !== choice.options.length - 1 || control.step !== 1) {
@@ -133,8 +138,8 @@ function checkControl(type: EffectType, control: RenderedControl, mode: 'default
 }
 
 /** 스위치(Sync 등)를 원하는 상태로 맞춘다. 체크박스는 겉보기 스위치 뒤에 숨어 있어 직접 누를 수 없고, 라벨(글자)을 눌러야 한다. */
-async function setSwitch(card: Locator, label: string, on: boolean): Promise<void> {
-  const input = card.getByLabel(label, { exact: true });
+async function setSwitch(card: Locator, type: EffectType, label: string, on: boolean): Promise<void> {
+  const input = card.getByRole('checkbox', { name: knobKoName(type, label), exact: true });
   if ((await input.isChecked()) !== on) await card.locator('label.toggle-switch', { hasText: label }).click();
   if (on) await expect(input, `${label} 스위치가 켜진다`).toBeChecked();
   else await expect(input, `${label} 스위치가 꺼진다`).not.toBeChecked();
@@ -159,9 +164,11 @@ test.describe('S2.2 파라미터 스키마와 화면', () => {
       }
       // 거꾸로: 화면에 보이는 숫자 정의는 하나도 빠지지 않고 그려져 있다(숨긴 정의 제외). Sync 를 켜야 나오는 BPM 은 아래 시험에서 본다.
       const labels = new Set(controls.map((control) => control.label));
+      // 한 카드 안에서 접근성 이름이 겹치면 스크린 리더로 둘을 구별할 수 없다(S4.6).
+      expect(labels.size, `${name} 카드의 슬라이더 이름이 서로 다르다`).toBe(controls.length);
       for (const definition of effectSchemas[type].params) {
         if (definition.hidden) continue;
-        if (labels.has(definition.label)) continue;
+        if (labels.has(nameOf(type, definition.label))) continue;
         if (definition.label === 'BPM') continue;
         problems.push(`${type}.${definition.label}: 스키마에는 있으나 화면에 슬라이더가 없다`);
       }
@@ -181,9 +188,9 @@ test.describe('S2.2 파라미터 스키마와 화면', () => {
         if (control.disabled) continue;
         const schema = effectSchemas[type];
         // 고르는 값 노브(Mode 등)는 선택지 이름이 바뀌는 것을 위에서 봤다. 여기서는 숫자 조절기의 양 끝만 본다.
-        if (!schema.params.some((definition) => definition.label === control.label && !definition.hidden)) continue;
+        if (!schema.params.some((definition) => nameOf(type, definition.label) === control.label && !definition.hidden)) continue;
         for (const target of [control.min, control.max]) {
-          const slider = sliderOf(card, control.label);
+          const slider = card.getByRole('slider', { name: control.label, exact: true });
           await setSlider(slider, target);
           const [after] = (await readControls(card)).filter((candidate) => candidate.label === control.label);
           if (after.value !== target) {
@@ -202,7 +209,7 @@ test.describe('S2.2 파라미터 스키마와 화면', () => {
   test('S2.2 Fuzz 의 Gate: 이름은 Gate, 0 은 끔, 1~100 은 문턱(dB)이고 옛 이름 \'출력 감쇠\' 는 어디에도 없다', async ({ page }) => {
     await openApp(page);
     const card = pedalGroup(page, 'Fuzz');
-    const gate = sliderOf(card, 'Gate');
+    const gate = sliderOf(card, 'fuzz', 'Gate');
     await expect(gate).toHaveAttribute('min', '0');
     await expect(gate).toHaveAttribute('max', '100');
     await expect(gate).toHaveAttribute('step', '1');
@@ -222,13 +229,13 @@ test.describe('S2.2 파라미터 스키마와 화면', () => {
       await setSlider(gate, value);
       await expect(gate).toHaveValue(String(value));
       await expect(outputOf(gate), `Gate ${value} 의 표시`).toHaveText(shown);
-      await expect(gate).toHaveAttribute('aria-valuetext', `Gate ${shown}`);
+      await expect(gate).toHaveAttribute('aria-valuetext', `${knobKoName('fuzz', 'Gate')} ${shown}`);
     }
   });
 
   test('S2.2 EQ 의 Level 페이더는 0~200 이고 공장 프리셋 Solo Boost 의 108 이 그대로 보인다', async ({ page }) => {
     await openApp(page);
-    const level = sliderOf(pedalGroup(page, 'EQ'), 'Level');
+    const level = sliderOf(pedalGroup(page, 'EQ'), 'eq', 'Level');
     await expect(level).toHaveAttribute('min', '0');
     await expect(level).toHaveAttribute('max', '200');
     await page.locator('.preset-load-button', { hasText: 'Solo Boost' }).first().click();
@@ -238,9 +245,9 @@ test.describe('S2.2 파라미터 스키마와 화면', () => {
   test('S2.2 Delay: Sync 를 켜면 D.Time 을 조작할 수 없고 동기된 값이 보이며, Slapback 은 Sync 를 무시한다', async ({ page }) => {
     await openApp(page);
     const card = pedalGroup(page, 'Delay');
-    const time = sliderOf(card, 'D.Time');
-    const timeNumber = card.getByLabel('D.Time 값 직접 입력', { exact: true });
-    const sync = card.getByLabel('Sync', { exact: true });
+    const time = sliderOf(card, 'delay', 'D.Time');
+    const timeNumber = card.getByLabel(`${knobKoName('delay', 'D.Time')} 값 직접 입력`, { exact: true });
+    const sync = card.getByRole('checkbox', { name: knobKoName('delay', 'Sync'), exact: true });
     const division = card.locator('label.select-control', { hasText: 'Division' }).locator('select');
     const mode = card.locator('label.select-control', { hasText: 'Mode' }).locator('select');
 
@@ -249,12 +256,12 @@ test.describe('S2.2 파라미터 스키마와 화면', () => {
     await expect(time).not.toHaveAttribute('aria-disabled', 'true');
     await expect(outputOf(time)).toHaveText('280 ms');
 
-    await setSwitch(card, 'Sync', true);
+    await setSwitch(card, 'delay', 'Sync', true);
     await expect(time, 'Sync 중에는 D.Time 을 막는다').toBeDisabled();
     await expect(time).toHaveAttribute('aria-disabled', 'true');
     await expect(timeNumber, '직접 입력도 막는다').toBeDisabled();
     await expect(outputOf(time), '동기된 값').toHaveText('1/4 · 500 ms');
-    await expect(time).toHaveAttribute('aria-valuetext', 'D.Time 1/4 · 500 ms');
+    await expect(time).toHaveAttribute('aria-valuetext', `${knobKoName('delay', 'D.Time')} 1/4 · 500 ms`);
 
     await division.selectOption('1/8');
     await expect(outputOf(time)).toHaveText('1/8 · 250 ms');
@@ -270,7 +277,7 @@ test.describe('S2.2 파라미터 스키마와 화면', () => {
     await mode.selectOption('digital');
     await expect(time).toBeDisabled();
 
-    await setSwitch(card, 'Sync', false);
+    await setSwitch(card, 'delay', 'Sync', false);
     await expect(time).toBeEnabled();
     await expect(outputOf(time)).toHaveText('280 ms');
   });
@@ -282,10 +289,10 @@ test.describe('S2.2 파라미터 스키마와 화면', () => {
       { name: 'Delay', type: 'delay' as const },
     ]) {
       const card = pedalGroup(page, name);
-      await setSwitch(card, 'Sync', true);
-      const bpm = sliderOf(card, 'BPM');
+      await setSwitch(card, type, 'Sync', true);
+      const bpm = sliderOf(card, type, 'BPM');
       await expect(bpm, `${name} Sync 를 켜면 BPM 슬라이더가 있다`).toBeVisible();
-      const [control] = (await readControls(card)).filter((candidate) => candidate.label === 'BPM');
+      const [control] = (await readControls(card)).filter((candidate) => candidate.label === knobKoName(type, 'BPM'));
       expect(checkControl(type, control, 'moved')).toEqual([]);
     }
   });
@@ -303,10 +310,10 @@ test.describe('S2.2 파라미터 스키마와 화면', () => {
     }, fixture.storage);
     await openApp(page);
 
-    const decay = sliderOf(pedalGroup(page, 'Reverb'), 'Decay');
+    const decay = sliderOf(pedalGroup(page, 'Reverb'), 'reverb', 'Decay');
     await expect(decay).toHaveAttribute('max', '6');
     await expect(decay, '저장돼 있던 7.5초가 6초로 열린다').toHaveValue('6');
-    await expect(decay).toHaveAttribute('aria-valuetext', `Decay ${formatParamValue(effectSchemas.reverb.params.find((definition) => definition.key === 'decay')!, 6)}`);
+    await expect(decay).toHaveAttribute('aria-valuetext', `${knobKoName('reverb', 'Decay')} ${formatParamValue(effectSchemas.reverb.params.find((definition) => definition.key === 'decay')!, 6)}`);
 
     // 예전에 6.2초·7.5초였던 공장 프리셋 둘
     for (const preset of ['Ambient Delay', 'Tape Swell']) {

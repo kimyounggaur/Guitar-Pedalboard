@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useKnobDrag } from '../hooks/useKnobDrag';
 import { KnobNumberInput } from './KnobNumberInput';
+import { useParamNames } from './ParamScope';
 
 interface VerticalFaderProps {
   label: string;
@@ -25,13 +26,14 @@ export function VerticalFader({
   onChange,
   defaultValue,
 }: VerticalFaderProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const progress = max === min ? 0 : (value - min) / (max - min);
   const clampedProgress = Math.min(Math.max(progress, 0), 1);
   const dragHandlers = useKnobDrag(value, min, max, step, onChange, defaultValue, { touchAxis: 'y' });
 
   return (
     <div className="vertical-fader">
-      <span className="vertical-fader-label">{label}</span>
+      <span className="vertical-fader-label" title={tip}>{label}</span>
       <span
         className="vertical-fader-rail" {...dragHandlers}
         style={{ '--vertical-fader-position': `${(1 - clampedProgress) * 100}%` } as CSSProperties}
@@ -44,14 +46,14 @@ export function VerticalFader({
           max={max}
           step={step}
           value={value}
-          aria-label={label}
+          aria-label={accessibleName}
           aria-orientation="vertical"
-          aria-valuetext={`${label} ${ariaValueText}`}
+          aria-valuetext={`${accessibleName} ${ariaValueText}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
       <output>{displayValue}</output>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} onChange={onChange} />
     </div>
   );
 }

@@ -104,8 +104,11 @@ assert.match(appShellSource, /window\.addEventListener\('online', updateOnlineSt
 assert.match(appShellSource, /window\.addEventListener\('offline', updateOnlineStatus\)/);
 assert.match(appShellSource, /window\.removeEventListener\('online', updateOnlineStatus\)/);
 assert.match(appShellSource, /window\.removeEventListener\('offline', updateOnlineStatus\)/);
-assert.match(appShellSource, /오프라인 상태입니다\./);
-assert.match(appShellSource, /기타 실시간 입력은 사용할 수 없습니다\. 음원 파일 재생 모드로 톤을 확인해 주세요\./);
+// 오프라인 안내 문구는 카탈로그(ko.ts)에 있고 AppShell 은 그 키로 그린다(S4.6).
+assert.match(appShellSource, /ko\.notice\.offlineTitle/);
+assert.match(await readFile(new URL('../src/i18n/ko.ts', import.meta.url), 'utf8'), /offlineTitle: '오프라인 상태입니다\.'/);
+assert.match(appShellSource, /ko\.notice\.offlineBody/);
+assert.match(await readFile(new URL('../src/i18n/ko.ts', import.meta.url), 'utf8'), /offlineBody: '기타 실시간 입력은 사용할 수 없습니다\. 음원 파일 재생 모드로 톤을 확인해 주세요\.'/);
 assert.doesNotMatch(appShellSource, /addEventListener\('keydown'/);
 
 assert.match(pedalBoardSource, /interface PedalBoardProps[\s\S]*inputPanel\?: ReactNode/);
@@ -148,7 +151,7 @@ assert.match(connectSource, /safeStorage\.getRaw\(STORAGE_KEYS\.mobileAudioNotic
 assert.match(connectSource, /safeStorage\.setRaw\(STORAGE_KEYS\.mobileAudioNotice, 'true'\)/);
 assert.match(connectSource, /aria-label="모바일 오디오 안내 닫기"/);
 
-assert.match(pedalCardSource, /<section[\s\S]*aria-label=\{`\$\{pedal\.name\} 이펙터`\}/);
+assert.match(pedalCardSource, /<section[\s\S]*aria-label=\{`\$\{koName\} 이펙터`\}/);
 assert.match(delaySource, /ariaValueText=\{delayModeLabels\[params\.mode\]\}/);
 assert.match(delaySource, /<div className="delay-led" aria-hidden="true" \/>/);
 assert.doesNotMatch(delaySource, /delay-led[^>]*aria-label/);

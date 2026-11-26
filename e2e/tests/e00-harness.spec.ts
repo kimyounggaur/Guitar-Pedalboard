@@ -216,9 +216,9 @@ test.describe('E-00 하네스', () => {
     await connectGuitar(page);
     const meters = page.getByRole('meter');
     const labels = await meters.evaluateAll((elements) => elements.map((element) => element.getAttribute('aria-label')));
-    // 지금 앱의 미터 이름은 'Input 레벨'·'Output 레벨'(영어 섞임). 문구를 바꾸는 Step(S4.6)에서 이 이름도 같이 바꾼다.
-    expect(labels.join(' ')).toContain('Output 레벨');
-    const output = page.getByRole('meter', { name: 'Output 레벨' });
+    // 미터 이름은 '입력 레벨'·'출력 레벨'(S4.6 에서 영어 섞임을 없앴다).
+    expect(labels.join(' ')).toContain('출력 레벨');
+    const output = page.getByRole('meter', { name: '출력 레벨' });
     await expect
       .poll(async () => Number(await output.getAttribute('aria-valuenow')), {
         message: '가짜 마이크 신호가 출력 미터를 움직여야 합니다',

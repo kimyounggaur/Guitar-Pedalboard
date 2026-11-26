@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { uniqueNumberedName } from '../persistence/presetUndo';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ko } from '../i18n/ko';
 
 interface SameNamePresetDialogProps {
   /** 저장하려던 이름 */
@@ -27,11 +28,11 @@ export function SameNamePresetDialog({ name, takenNames, onOverwrite, onSaveAs, 
   const saveAs = () => {
     const trimmed = newName.trim();
     if (!trimmed) {
-      setError('새 이름을 입력해 주세요.');
+      setError(ko.preset.newNameRequired);
       return;
     }
     if (takenNames.has(trimmed)) {
-      setError('그 이름의 프리셋도 이미 있습니다. 다른 이름을 입력해 주세요.');
+      setError(ko.preset.newNameTaken);
       return;
     }
     onSaveAs(trimmed);

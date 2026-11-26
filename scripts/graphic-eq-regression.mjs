@@ -49,7 +49,7 @@ assert.match(pedalSource, /ariaValueText=\{`\$\{frequency\} 헤르츠, \$\{shown
 assert.doesNotMatch(pedalSource, /SliderControl/, '기존 SliderControl을 재사용했습니다.');
 assert.match(faderSource, /type="range"/);
 assert.match(faderSource, /aria-orientation="vertical"/);
-assert.match(faderSource, /aria-valuetext=\{`\$\{label\} \$\{ariaValueText\}`\}/);
+assert.match(faderSource, /aria-valuetext=\{`\$\{accessibleName\} \$\{ariaValueText\}`\}/);
 assert.match(faderSource, /onChange=\{\(event\) => onChange\(Number\(event\.currentTarget\.value\)\)\}/);
 assert.doesNotMatch(faderSource, /tabIndex=\{-1\}/, '키보드 접근이 차단되었습니다.');
 assert.match(cardSource, /'graphicEQ'/);

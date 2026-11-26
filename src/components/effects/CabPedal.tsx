@@ -1,9 +1,11 @@
 import { knobDefault } from '../knobDefaults';
 import { KnobNumberInput } from '../KnobNumberInput';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AudioEngine } from '../../audio/AudioEngine';
 import type { CabParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { useParamNames } from '../ParamScope';
+import { ko } from '../../i18n/ko';
 
 interface CabPedalProps {
   pedalId: string;
@@ -24,6 +26,7 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
   const [irName, setIrName] = useState(() => AudioEngine.getInstance().getCabinetIrName(pedalId));
   const [irError, setIrError] = useState('');
   const [irLoading, setIrLoading] = useState(false);
+  const irInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const refresh = () => setIrName(AudioEngine.getInstance().getCabinetIrName(pedalId));
     window.addEventListener('cab-ir-change', refresh);
@@ -31,7 +34,7 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
     return () => window.removeEventListener('cab-ir-change', refresh);
   }, [pedalId]);
   return (
-    <div className="cab-sim-ui" role="group" aria-label="캐비닛 시뮬레이터 컨트롤">
+    <div className="cab-sim-ui" role="group" aria-label={ko.pedal.cab.controls}>
       <div className="cab-grille" aria-hidden="true">
         <span />
         <strong>CAB SIM</strong>
@@ -53,18 +56,20 @@ export function CabPedal({ pedalId, params, onChange }: CabPedalProps) {
       </label>
 
       <div className="cab-custom-ir">
-        <label>
+        {/* 브라우저 기본 파일 버튼('Choose File / No file chosen')은 브라우저 언어를 따라 영어로 나온다. 입력은 숨기고 한국어 버튼이 대신 연다(S4.6). */}
+        <button type="button" className="secondary-button" disabled={irLoading} onClick={() => irInputRef.current?.click()}>
           사용자 IR 불러오기 (WAV)
-          <input type="file" accept=".wav,audio/wav" disabled={irLoading} onChange={async (event) => {
+        </button>
+        <input ref={irInputRef} className="hidden-file-input" type="file" accept=".wav,audio/wav" disabled={irLoading}
+          aria-label="사용자 IR 파일(WAV)" tabIndex={-1} onChange={async (event) => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = '';
             if (!file) return;
             setIrError(''); setIrLoading(true);
             try { await AudioEngine.getInstance().loadCabinetIr(pedalId, file); }
-            catch (error) { setIrError(error instanceof Error ? error.message : 'IR을 불러오지 못했습니다.'); }
+            catch (error) { setIrError(error instanceof Error ? error.message : ko.cabinetIr.loadFailed); }
             finally { setIrLoading(false); }
           }} />
-        </label>
         <p>{irName ? `사용 중: ${irName}` : '기본 캐비닛 IR 사용 중'}</p>
         {irName && <small>마이크 위치와 거리 조절은 기본 IR에만 적용됩니다.</small>}
         {irName && <button type="button" onClick={() => AudioEngine.getInstance().clearCabinetIr(pedalId)}>기본 IR로 돌아가기</button>}
@@ -177,10 +182,11 @@ function CabRangeControl({
   displayValue,
   onChange,
 }: CabRangeControlProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   return (
     <div className="cab-range-control">
       <span>
-        <strong>{label}</strong>
+        <strong title={tip}>{label}</strong>
         <output>{displayValue}</output>
       </span>
       <input
@@ -189,12 +195,12 @@ function CabRangeControl({
         max={max}
         step={step}
         value={value}
-        aria-label={label}
-        aria-valuetext={`${label} ${displayValue}`}
+        aria-label={accessibleName}
+        aria-valuetext={`${accessibleName} ${displayValue}`}
         onDoubleClick={() => onChange(defaultValue)}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
       />
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} onChange={onChange} />
     </div>
   );
 }

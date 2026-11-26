@@ -11,6 +11,7 @@ import { horizontalOverflow, openApp } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { mockMidi, type MidiMock, type MidiMockOptions } from '../helpers/mocks';
 import { pedalGroup, readLocal, seedStorage, stompOf, toastOf } from '../helpers/storage';
+import { pedalKoName } from '../helpers/ko-names';
 
 const MIDI_KEY = 'guitar-pedalboard:midi';
 const ADVANCED_KEY = 'guitar-pedalboard:midi-advanced';
@@ -102,7 +103,7 @@ test.describe('E-13 MIDI 풋스위치', () => {
     const midi = await openWithMidi(page, { permission: 'granted' }, false);
     let id = await midi.connect('Mock Footswitch');
     await expect(midiStatus(page, 'Drive')).toHaveText('MIDI 미매핑');
-    await pedalGroup(page, 'Drive').getByRole('button', { name: 'Drive MIDI 학습' }).click();
+    await pedalGroup(page, 'Drive').getByRole('button', { name: `${pedalKoName('Drive')} MIDI 학습` }).click();
     await expect(midiStatus(page, 'Drive')).toHaveText('MIDI 입력 대기 중…');
     await expect.poll(() => midi.listening()).toBe(1);
     await midi.send(id, [0xb0, 90, 127]);
@@ -208,7 +209,7 @@ test.describe('E-13 MIDI 풋스위치', () => {
   test('E-13 학습 중 누름 → 뗌이 1초 안에 이어지면 토글로 자동 지정하고 알린다', async ({ page }) => {
     const midi = await openWithMidi(page, { permission: 'granted' }, false);
     const id = await midi.connect('Mock Footswitch');
-    await pedalGroup(page, 'Delay').getByRole('button', { name: 'Delay MIDI 학습' }).click();
+    await pedalGroup(page, 'Delay').getByRole('button', { name: `${pedalKoName('Delay')} MIDI 학습` }).click();
     await expect.poll(() => midi.listening()).toBe(1);
     await midi.send(id, [0xb0, 85, 127]);
     await midi.send(id, [0xb0, 85, 0]);
@@ -233,7 +234,7 @@ test.describe('E-13 MIDI 풋스위치', () => {
   test('E-13 학습 중 신호가 한 번만 오면 래치로 지정하고, 1초 뒤에 알린다. 방식 버튼으로 토글로 바꿀 수 있다', async ({ page }) => {
     const midi = await openWithMidi(page, { permission: 'granted' }, false);
     const id = await midi.connect('Mock Footswitch');
-    await pedalGroup(page, 'Delay').getByRole('button', { name: 'Delay MIDI 학습' }).click();
+    await pedalGroup(page, 'Delay').getByRole('button', { name: `${pedalKoName('Delay')} MIDI 학습` }).click();
     await expect.poll(() => midi.listening()).toBe(1);
     await midi.send(id, [0xb0, 86, 127]);
     await expect(midiStatus(page, 'Delay')).toHaveText('매핑됨 · 연결됨 · Ch 1 · CC 86');
@@ -269,7 +270,7 @@ test.describe('E-13 MIDI 풋스위치', () => {
 
   test('E-13 저장된 매핑이 없을 때 학습이 막히면 오류만 알리고 재연결 배너는 띄우지 않는다', async ({ page }) => {
     const midi = await openWithMidi(page, { permission: 'denied' }, false);
-    await pedalGroup(page, 'Delay').getByRole('button', { name: 'Delay MIDI 학습' }).click();
+    await pedalGroup(page, 'Delay').getByRole('button', { name: `${pedalKoName('Delay')} MIDI 학습` }).click();
     await expect(page.locator('.midi-advanced-controls [role="status"]')).toContainText('MIDI 접근 권한을 확인할 수 없습니다.');
     await expect(midiStatus(page, 'Delay')).toHaveText('MIDI 미매핑');
     await expect(banner(page)).toHaveCount(0);

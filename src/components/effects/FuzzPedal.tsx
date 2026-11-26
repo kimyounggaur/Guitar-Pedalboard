@@ -6,6 +6,8 @@ import { formatParamValue, getParamDef } from '../../audio/params';
 import { SliderControl } from '../SliderControl';
 import { useKnobDrag } from '../../hooks/useKnobDrag';
 import { initialPedals } from '../../store/pedalStore';
+import { useParamNames } from '../ParamScope';
+import { ko } from '../../i18n/ko';
 
 interface FuzzPedalProps {
   params: FuzzParams;
@@ -34,6 +36,7 @@ const fuzzModeLabels: Record<FuzzParams['mode'], string> = {
 };
 
 function FuzzKnob({ label, value, min, max, step, size = 'large', ariaValueText, onChange }: FuzzKnobProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const progress = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(progress, 0), 1) * 270;
   const accessibleValue = ariaValueText ?? `${Math.round(value)}%`;
@@ -54,14 +57,14 @@ function FuzzKnob({ label, value, min, max, step, size = 'large', ariaValueText,
           max={max}
           step={step}
           value={value}
-          aria-label={label}
-          aria-valuetext={`${label} ${accessibleValue}`}
+          aria-label={accessibleName}
+          aria-valuetext={`${accessibleName} ${accessibleValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
-      <strong>{label}</strong>
+      <strong title={tip}>{label}</strong>
       <output>{accessibleValue}</output>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} onChange={onChange} />
     </div>
   );
 }
@@ -70,7 +73,7 @@ export function FuzzPedal({ params, onChange }: FuzzPedalProps) {
   const modeIndex = Math.max(0, fuzzModes.indexOf(params.mode));
 
   return (
-    <div className="fuzz-stomp-ui" role="group" aria-label="Fuzz controls">
+    <div className="fuzz-stomp-ui" role="group" aria-label={ko.pedal.fuzz.controls}>
       <section className="fuzz-face">
         <div className="fuzz-check-row">
           <span>CHECK</span>

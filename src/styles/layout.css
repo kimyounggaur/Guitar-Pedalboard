@@ -869,7 +869,8 @@ h2 {
 .header-tools .connect-panel.is-connected .connect-status-bar .secondary-button {
   width: auto;
   height: 34px;
-  padding: 0 12px;
+  /* 12 → 10 px: 'Panic' 이 '긴급 정지' 가 되며(S4.6) 단추가 넓어져, 1280 px 에서 '입력 설정' 이 다음 줄로 밀려 첫 페달 카드가 40 px 내려갔다(E-06). */
+  padding: 0 10px;
   white-space: nowrap;
 }
 

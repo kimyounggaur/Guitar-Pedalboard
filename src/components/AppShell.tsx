@@ -13,6 +13,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useSidebar } from '../hooks/useSidebar';
 import { useAudioStore } from '../store/audioStore';
 import { usePedalStore } from '../store/pedalStore';
+import { ko } from '../i18n/ko';
 
 const MOBILE_LAYOUT_QUERY = '(max-width: 767px)';
 
@@ -130,10 +131,8 @@ export function AppShell() {
       <MidiReconnectBanner />
       {!isOnline ? (
         <div className="offline-notice" role="status" aria-live="polite">
-          <strong>오프라인 상태입니다.</strong>
-          <span>
-            기타 실시간 입력은 사용할 수 없습니다. 음원 파일 재생 모드로 톤을 확인해 주세요.
-          </span>
+          <strong>{ko.notice.offlineTitle}</strong>
+          <span>{ko.notice.offlineBody}</span>
         </div>
       ) : null}
       <div className={`workspace${!sidebarOpen && sidebarDocked && !isMobileLayout ? ' sidebar-collapsed' : ''}${!sidebarDocked && !isMobileLayout ? ' sidebar-drawer-mode' : ''}`}>

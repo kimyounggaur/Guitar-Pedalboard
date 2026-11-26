@@ -6,6 +6,8 @@ import { AudioEngine } from '../../audio/AudioEngine';
 import { useAudioStore } from '../../store/audioStore';
 import type { CompressorParams, PedalParamValue } from '../../audio/types';
 import { SliderControl } from '../SliderControl';
+import { useParamNames } from '../ParamScope';
+import { ko } from '../../i18n/ko';
 
 interface CompressorPedalProps {
   pedalId: string;
@@ -32,6 +34,7 @@ function CompressorKnob({
   displayValue,
   onChange,
 }: CompressorKnobProps) {
+  const { name: accessibleName, tip } = useParamNames(label);
   const progress = (value - min) / (max - min);
   const rotation = -135 + Math.min(Math.max(progress, 0), 1) * 270;
   const key = ({ Level: 'level', Knee: 'knee', Attack: 'attack', Sustain: 'sustain', Ratio: 'ratio' } as Record<string, string>)[label];
@@ -39,7 +42,7 @@ function CompressorKnob({
 
   return (
     <div className="compressor-knob">
-      <span>{label}</span>
+      <span title={tip}>{label}</span>
       <span
         className="compressor-knob-shell" {...dragHandlers}
         style={{ '--knob-rotation': `${rotation}deg` } as CSSProperties}
@@ -51,13 +54,13 @@ function CompressorKnob({
           max={max}
           step={step}
           value={value}
-          aria-label={label}
-          aria-valuetext={`${label} ${displayValue}`}
+          aria-label={accessibleName}
+          aria-valuetext={`${accessibleName} ${displayValue}`}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
       </span>
       <output>{displayValue}</output>
-      <KnobNumberInput label={label} value={value} min={min} max={max} step={step} onChange={onChange} />
+      <KnobNumberInput label={accessibleName} value={value} min={min} max={max} step={step} onChange={onChange} />
     </div>
   );
 }
@@ -78,7 +81,7 @@ export function CompressorPedal({ pedalId, params, onChange }: CompressorPedalPr
 
   const actualReduction = running && reduction !== null && Number.isFinite(reduction) ? reduction : null;
   return (
-    <div className="compressor-stomp-ui" role="group" aria-label="Compressor controls">
+    <div className="compressor-stomp-ui" role="group" aria-label={ko.pedal.compressor.controls}>
       <section className="compressor-control-deck">
         <div className="compressor-check-row">
           <span>CHECK</span>

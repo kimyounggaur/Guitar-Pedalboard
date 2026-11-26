@@ -24,6 +24,7 @@ import {
   storedParam,
   toastOf,
 } from '../helpers/storage';
+import { knobKoName } from '../helpers/ko-names';
 
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } as const;
 const FAVORITES_KEY = 'guitar-pedalboard:preset-favorites';
@@ -180,7 +181,7 @@ test.describe('E-12 되돌리기·덮어쓰기 안전장치', () => {
     expect(trimBefore, 'Texas Push 는 음량 보정이 0 이 아니다').not.toContain('0.0 dB');
     await expect(page.locator('.preset-item.is-active')).toContainText('Texas Push');
 
-    const drive = pedalGroup(page, 'Drive').getByRole('slider', { name: 'Drive', exact: true });
+    const drive = pedalGroup(page, 'Drive').getByRole('slider', { name: knobKoName('Drive', 'Drive'), exact: true });
     await drive.fill('61');
     const chorus = stompOf(page, 'Chorus');
     const chorusBefore = await chorus.getAttribute('aria-pressed');

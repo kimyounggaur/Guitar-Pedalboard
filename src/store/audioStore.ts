@@ -274,15 +274,13 @@ const midiService = new MidiService({
 /** 학습이 끝난 뒤 방식을 어떻게 정했는지 알린다. 사용자가 방식을 고르지 않았으므로 무엇으로 정했고 어떻게 바꾸는지를 함께 말한다. */
 function announceMidiMode(notice: MidiModeNotice): void {
   const pedal = usePedalStore.getState().pedals.find((candidate) => candidate.id === notice.pedalId);
-  const name = pedal?.name ?? '이 페달';
+  const name = pedal?.name ?? ko.midi.thisPedal;
   showToast({
     key: `midi-mode:${notice.pedalId}`,
     kind: 'info',
     durationMs: 8000,
     message:
-      notice.mode === 'toggle'
-        ? `${name}: 누른 뒤 1초 안에 뗌이 이어져 '토글'(누를 때마다 전환)로 지정했습니다. 카드의 '방식' 버튼으로 바꿀 수 있습니다.`
-        : `${name}: 1초 안에 뗌이 오지 않아 '래치'(스위치가 보내는 값을 따름)로 지정했습니다. 누를 때마다 전환하려면 카드의 '방식' 버튼으로 토글로 바꾸세요.`,
+      notice.mode === 'toggle' ? ko.midi.modeToggle(name) : ko.midi.modeLatch(name),
   });
 }
 
@@ -315,7 +313,7 @@ const midiRouter = new MidiRouter({
 function handleMidiMessage(event: MIDIMessageEvent): void {
   const audioState = useAudioStore.getState();
   if (audioState.midiLearningPedalId && event.data && midiAdvancedMatches?.(event.data)) {
-    useAudioStore.setState({ midiError: '이 MIDI 신호는 익스프레션 또는 프리셋 전환에 이미 사용 중입니다.' });
+    useAudioStore.setState({ midiError: ko.midi.signalInUse });
     return;
   }
   if (!audioState.midiLearningPedalId && event.data && midiAdvancedHandler?.(event.data)) return;
@@ -406,7 +404,7 @@ function settleRecording(
         recordingStatus: 'idle',
         recordedUrl: null,
         recordingElapsed: 0,
-        error: '녹음 파일을 만들지 못했습니다.',
+        error: ko.recording.fileFailed,
       });
     }
   } else {
@@ -438,7 +436,7 @@ function finishActiveRecording(mode: RecordingEndMode): Promise<void> {
       } else {
         useAudioStore.setState({ recordingStatus: 'idle', recordedUrl: null, recordingElapsed: 0 });
       }
-    }).catch(() => useAudioStore.setState({ recordingStatus: 'idle', error: 'WAV 녹음을 저장하지 못했습니다.' }))
+    }).catch(() => useAudioStore.setState({ recordingStatus: 'idle', error: ko.recording.wavSaveFailed }))
       .finally(() => { wavCompletion = null; });
     return wavCompletion;
   }
@@ -470,7 +468,7 @@ function finishActiveRecording(mode: RecordingEndMode): Promise<void> {
   try {
     candidate.stop();
   } catch {
-    settleRecording(candidate, generation, '녹음을 안전하게 종료하지 못했습니다.');
+    settleRecording(candidate, generation, ko.recording.stopFailed);
   }
 
   return completion;
@@ -497,18 +495,18 @@ async function finalizeRecordingForStop(): Promise<boolean> {
 
 /** 정리 절차 ⑧: 정지 이유별 안내(설계서 4.2절). 오류 경계 화면은 S1.7, 시작 실패 문구는 store.error 가 맡는다. */
 function announceStop(result: StopResult, detail: StopDetail): void {
-  const savedNote = result.recordingSaved ? ' 녹음은 저장했습니다.' : '';
+  const savedNote = result.recordingSaved ? ko.session.savedNote : '';
   switch (result.reason) {
     case 'user-disconnect':
       if (result.recordingSaved) {
-        showToast({ kind: 'success', key: 'recording-saved', message: '녹음을 저장했습니다.' });
+        showToast({ kind: 'success', key: 'recording-saved', message: ko.recording.saved });
       }
       break;
     case 'panic':
       showToast({
         kind: 'warning',
         key: 'session-stop',
-        message: `긴급 정지했습니다. 마이크와 오디오를 모두 껐습니다.${savedNote}`,
+        message: ko.session.panic(savedNote),
       });
       break;
     case 'howl': {
@@ -517,7 +515,7 @@ function announceStop(result: StopResult, detail: StopDetail): void {
       showToast({
         kind: 'warning',
         key: 'session-stop',
-        message: `하울링${where}이 감지되어 정지했습니다. 스피커 음량을 줄이거나 헤드폰을 쓰세요.${savedNote}`,
+        message: ko.session.howl(where, savedNote),
       });
       break;
     }
@@ -525,7 +523,7 @@ function announceStop(result: StopResult, detail: StopDetail): void {
       showToast({
         kind: 'warning',
         key: 'session-stop',
-        message: `입력 장치 연결이 끊겼습니다. 장치를 다시 연결한 뒤 연결하기를 누르세요.${savedNote}`,
+        message: ko.session.deviceLost(savedNote),
       });
       break;
     case 'error':
@@ -535,7 +533,7 @@ function announceStop(result: StopResult, detail: StopDetail): void {
     showToast({
       kind: 'error',
       key: 'session-stop-failed',
-      message: '정지하는 중 일부 정리가 끝나지 않았습니다. 소리가 계속 나면 페이지를 새로고침해 주세요.',
+      message: ko.session.cleanupIncomplete,
     });
   }
 }
@@ -1001,7 +999,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       activeDistortionAmounts.length >= 2 &&
       activeDistortionAmounts.every((amount) => amount > 60);
 
-    const chainGainWarning = isExcessive ? '왜곡 페달이 중첩되어 게인이 과도합니다' : null;
+    const chainGainWarning = isExcessive ? ko.chain.gainExcessive : null;
     // 추정 게인은 경고 문구에만 쓴다. 경고가 없을 때는 0 으로 두어, Drive 같은 노브를 돌릴 때마다 값이 바뀌어 모든 구독자를 깨우지 않게 한다(S4.3).
     const estimatedChainGainDb = chainGainWarning ? audioEngine.estimateChainGain() : 0;
     // 값이 같으면 쓰지 않는다(노브를 돌릴 때마다 모든 오디오 스토어 구독자를 깨우지 않는다, S4.3).
@@ -1078,7 +1076,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       safeStorage.setRaw(STORAGE_KEYS.outputDevice, deviceId);
       persistIoSettings(ioSettingsOf(get()));
     } catch {
-      set({ error: '출력 장치를 변경할 수 없습니다. 장치 연결과 브라우저 권한을 확인해 주세요.' });
+      set({ error: ko.devices.outputChangeFailed });
     }
   },
 
@@ -1324,7 +1322,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       else await midiService.connectIfAllowed();
       if (generation === midiService.generation && get().midiError) set({ midiError: null });
     } catch {
-      if (generation === midiService.generation) set({ midiError: '저장된 MIDI 매핑을 연결하지 못했습니다. MIDI 권한을 확인해 주세요.' });
+      if (generation === midiService.generation) set({ midiError: ko.midi.reconnectFailed });
     }
   },
 
@@ -1354,7 +1352,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
       set({
         midiDevices: [],
         midiLearningPedalId: null,
-        midiError: 'MIDI 접근 권한을 확인할 수 없습니다.',
+        midiError: ko.midi.permissionUnknown,
       });
     }
   },
@@ -1395,11 +1393,11 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
     try {
       const stream = audioEngine.createRecorderStream();
       if (state.recordingFormat === 'wav') {
-        if (typeof AudioContext === 'undefined' || !AudioContext.prototype.createScriptProcessor) throw new Error('이 브라우저는 WAV 녹음을 지원하지 않습니다.');
+        if (typeof AudioContext === 'undefined' || !AudioContext.prototype.createScriptProcessor) throw new Error(ko.recording.wavUnsupported);
         recordingStartedAt = recordingNow();
         activeWavRecorder = new WavRecorder(stream, () => {
           void finishActiveRecording('finalize');
-          useAudioStore.setState({ error: 'WAV 녹음 제한에 도달했거나 오디오를 시작할 수 없어 녹음을 종료했습니다.' });
+          useAudioStore.setState({ error: ko.recording.wavLimit });
         });
         recordingTimer = window.setInterval(() => useAudioStore.setState({ recordingElapsed: Math.floor((recordingNow() - recordingStartedAt) / 1000) }), RECORDING_TIMER_INTERVAL_MS);
         set({ recordingStatus: 'recording', recordingElapsed: 0 });
@@ -1443,7 +1441,7 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
             // The recorder may already be transitioning to the inactive state.
           }
         }
-        settleRecording(candidate, generation, '녹음 중 오류가 발생했습니다.');
+        settleRecording(candidate, generation, ko.recording.error);
       };
 
       candidate.start(RECORDING_TIMER_INTERVAL_MS);

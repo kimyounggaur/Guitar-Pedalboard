@@ -14,6 +14,7 @@ import { overlapsInCard, type OverlapPair } from '../helpers/geometry';
 import { recordMeasurement, recordScreenshot } from '../helpers/record';
 import { DESKTOP_PROFILES } from '../helpers/screens';
 import { describeSwitchReport, measureSwitches } from '../helpers/switches';
+import { pedalRegionName } from '../helpers/ko-names';
 
 /** useSidebar.ts 의 SIDEBAR_DOCK_MIN_WIDTH. 이 폭 이상이면 오른쪽 패널이 보드 옆에 붙고, 미만이면 서랍이다. */
 const DOCK_MIN_WIDTH = 1280;
@@ -421,7 +422,7 @@ test.describe('E-06 좁은 카드', () => {
       await page.setViewportSize({ width: item.width, height: item.height });
       await openApp(page);
       await setSidebar(page, item.panel === 'open');
-      const card = page.locator('.pedal-card[aria-label="Tremolo 이펙터"]');
+      const card = page.locator(`.pedal-card[aria-label="${pedalRegionName('Tremolo')}"]`);
       await expect(card).toHaveCount(1);
       const contentWidth = await card.evaluate((element) => {
         const style = getComputedStyle(element);

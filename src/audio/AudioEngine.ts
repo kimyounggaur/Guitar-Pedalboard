@@ -53,6 +53,7 @@ import { flangerProcessorSource } from './worklets/flanger-processor';
 import { phaserProcessorSource } from './worklets/phaser-processor';
 import { compressorProcessorSource } from './worklets/compressor-processor';
 import { levelMeterWorkletUrl, limiterWorkletUrl, outputGuardWorkletUrl } from './worklets/urls';
+import { ko } from '../i18n/ko';
 
 type EffectNode = EffectNodeWrapper;
 
@@ -276,7 +277,7 @@ export class AudioEngine {
   }
 
   async setOutputDevice(deviceId: string): Promise<void> {
-    if (!this.supportsOutputSelection) throw new Error('이 브라우저는 출력 장치 선택을 지원하지 않습니다.');
+    if (!this.supportsOutputSelection) throw new Error(ko.engine.outputSelectUnsupported);
     if (this.context) {
       const context = this.context as AudioContext & { setSinkId: (id: string) => Promise<void> };
       await context.setSinkId(deviceId);
@@ -322,7 +323,7 @@ export class AudioEngine {
       if (globalThis.isSecureContext === false) {
         throw new DOMException('보안 출처가 아니어서 마이크를 쓸 수 없습니다.', 'SecurityError');
       }
-      throw new Error('이 브라우저는 오디오 입력을 지원하지 않습니다.');
+      throw new Error(ko.engine.inputUnsupported);
     }
 
     const generation = await this.beginSession();
@@ -356,7 +357,7 @@ export class AudioEngine {
       await context.resume();
       this.assertCurrentSession(context, generation);
       if (!stream.getAudioTracks().some((track) => track.readyState === 'live')) {
-        throw new Error('입력 장치 연결이 끊어졌습니다. 장치를 다시 연결해 주세요.');
+        throw new Error(ko.engine.inputLost);
       }
       this.markSessionStart(context);
     } catch (error) {
@@ -370,7 +371,7 @@ export class AudioEngine {
 
   async startFile(file: File): Promise<void> {
     if (file.type && !file.type.startsWith('audio/')) {
-      throw new Error('오디오 파일만 업로드할 수 있습니다.');
+      throw new Error(ko.engine.audioFileOnly);
     }
 
     const generation = await this.beginSession();
@@ -419,7 +420,7 @@ export class AudioEngine {
 
   async playUploadedFile(): Promise<void> {
     if (!this.audioElement) {
-      throw new Error('재생할 업로드 음원이 없습니다.');
+      throw new Error(ko.engine.noUploadedSource);
     }
 
     if (this.context?.state === 'suspended') {
@@ -465,7 +466,7 @@ export class AudioEngine {
 
   createEffect(pedal: PedalState): EffectNodeWrapper {
     if (!this.context) {
-      throw new Error('AudioContext가 아직 준비되지 않았습니다.');
+      throw new Error(ko.engine.contextNotReady);
     }
 
     switch (pedal.type) {
@@ -533,9 +534,9 @@ export class AudioEngine {
   async loadCabinetIr(pedalId: string, file: File): Promise<void> {
     const context = this.context;
     const generation = this.sessionGeneration;
-    if (!context || context.state === 'closed') throw new Error('먼저 오디오를 시작해 주세요.');
+    if (!context || context.state === 'closed') throw new Error(ko.engine.startAudioFirst);
     if (!/\.wav$/i.test(file.name) || file.size > MAX_CAB_IR_BYTES) {
-      throw new Error('IR 파일은 4 MB 이하의 WAV 파일이어야 합니다.');
+      throw new Error(ko.cabinetIr.fileTooBig);
     }
     const requestId = (this.cabIrRequests.get(pedalId) ?? 0) + 1;
     this.cabIrRequests.set(pedalId, requestId);
@@ -543,12 +544,12 @@ export class AudioEngine {
     validateCabinetWav(bytes);
     let buffer: AudioBuffer;
     try { buffer = await context.decodeAudioData(bytes); }
-    catch { throw new Error('WAV IR 파일을 읽지 못했습니다.'); }
+    catch { throw new Error(ko.cabinetIr.readFailed); }
     validateDecodedCabinetIr(buffer);
     this.assertCurrentSession(context, generation);
-    if (this.cabIrRequests.get(pedalId) !== requestId) throw new Error('IR 적용이 취소되었습니다.');
+    if (this.cabIrRequests.get(pedalId) !== requestId) throw new Error(ko.cabinetIr.cancelled);
     const effect = this.effects.get(pedalId);
-    if (!(effect instanceof CabEffect)) throw new Error('캐비닛 페달을 찾을 수 없습니다.');
+    if (!(effect instanceof CabEffect)) throw new Error(ko.cabinetIr.pedalMissing);
     effect.setCustomImpulse(buffer);
     this.cabImpulses.set(pedalId, { name: file.name, buffer });
     // A queued chain rebuild may already have captured the old IR.
@@ -638,7 +639,7 @@ export class AudioEngine {
 
   createRecorderStream(): MediaStream {
     if (!this.context || this.context.state === 'closed' || !this.masterGain) {
-      throw new Error('녹음할 마스터 출력이 준비되지 않았습니다.');
+      throw new Error(ko.engine.recorderNotReady);
     }
 
     if (!this.recorderDestination) {
@@ -958,7 +959,7 @@ export class AudioEngine {
 
   private getReverbImpulseCache(): ImpulseCache {
     if (!this.context) {
-      throw new Error('AudioContext가 아직 준비되지 않았습니다.');
+      throw new Error(ko.engine.contextNotReady);
     }
 
     if (!this.reverbImpulseCache) {
@@ -1025,7 +1026,7 @@ export class AudioEngine {
 
   /** 소스와 입력 트림 사이에 둘 InputStage 를 만든다. 파일 재생(스트림 없음)은 그대로 통과시킨다. */
   private createInputStage(source: AudioNode): InputStage {
-    if (!this.context) throw new Error('AudioContext가 아직 준비되지 않았습니다.');
+    if (!this.context) throw new Error(ko.engine.contextNotReady);
 
     const track = this.stream?.getAudioTracks()[0];
     const stage = new InputStage(this.context, source, track ? (track.getSettings().channelCount ?? 2) : 1, {

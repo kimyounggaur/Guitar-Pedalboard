@@ -20,7 +20,7 @@ export type ConnectErrorKind =
  */
 export class WorkletLoadError extends Error {
   constructor(options?: { cause?: unknown }) {
-    super('오디오 워클릿 모듈을 불러오지 못했습니다.', options);
+    super(ko.engine.workletLoad, options);
     this.name = 'WorkletLoadError';
   }
 }

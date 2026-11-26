@@ -12,6 +12,7 @@ import type { Locator, Page } from '@playwright/test';
 import { openApp, PEDAL_COUNT } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { pedalGroup } from '../helpers/storage';
+import { knobKoName } from '../helpers/ko-names';
 
 interface KnobSpec {
   /** 페달 이름(카드 `aria-label` 의 앞부분) */
@@ -32,7 +33,7 @@ const KNOBS: readonly KnobSpec[] = [
 ];
 
 function knobOf(page: Page, spec: KnobSpec): Locator {
-  return pedalGroup(page, spec.pedal).locator(`input[type="range"][aria-label="${spec.label}"]`);
+  return pedalGroup(page, spec.pedal).locator(`input[type="range"][aria-label="${knobKoName(spec.pedal, spec.label)}"]`);
 }
 
 async function valueOf(knob: Locator): Promise<number> {
@@ -226,7 +227,7 @@ test.describe('E-20 노브 조작(마우스·키보드)', () => {
 
   test('E-20 ⑧ 막힌 노브(Sync 를 켠 Delay 의 D.Time)는 끌어도 더블클릭해도 값이 그대로다', async ({ page }) => {
     const delay = pedalGroup(page, 'Delay');
-    const knob = delay.locator('input[type="range"][aria-label="D.Time"]');
+    const knob = delay.locator(`input[type="range"][aria-label="${knobKoName('Delay', 'D.Time')}"]`);
     const sync = delay.locator('label.toggle-switch', { hasText: 'Sync' });
     // Sync 중에는 D.Time 이 '박자에서 정해진 시간'을 보여 주므로, 막힌 노브가 저장된 값을 건드렸는지는 Sync 를 끄고 다시 읽어야 보인다.
     // 기본값이 아닌 값으로 먼저 옮겨 둔다(더블클릭이 기본값으로 되돌렸다면 드러나도록).

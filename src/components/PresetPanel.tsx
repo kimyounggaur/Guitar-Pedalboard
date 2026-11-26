@@ -22,6 +22,7 @@ import {
 } from '../store/presetStore';
 import { ImportConflictDialog, PasteImportDialog } from './PresetImportDialogs';
 import { SameNamePresetDialog } from './PresetSaveDialog';
+import { ko } from '../i18n/ko';
 
 const FAVORITES_KEY = STORAGE_KEYS.presetFavorites;
 const RECENTS_KEY = STORAGE_KEYS.presetRecents;
@@ -167,30 +168,30 @@ export function PresetPanel() {
     setName(preset.name);
     setActivePresetId(preset.id);
     rememberRecent(preset.id);
-    setMessage(`${preset.name} 프리셋을 불러왔습니다.`);
+    setMessage(ko.preset.loaded(preset.name));
   }, [rememberRecent]);
 
   const captureComparisonSlot = useCallback((slot: PresetComparisonSlot) => {
     captureCurrentToSlot(slot);
     setActivePresetId(null);
-    setMessage(`${slot} 슬롯에 현재 체인을 저장했습니다.`);
+    setMessage(ko.preset.slotCaptured(slot));
   }, [captureCurrentToSlot]);
 
   const activateComparisonSlot = useCallback((slot: PresetComparisonSlot) => {
     if (!activateSlot(slot)) return;
     setActivePresetId(null);
-    setMessage(`${slot} 슬롯을 활성화했습니다.`);
+    setMessage(ko.preset.slotActivated(slot));
   }, [activateSlot]);
 
   const finishSave = () => {
     setActiveLibraryId('user');
-    setMessage('프리셋을 저장했습니다.');
+    setMessage(ko.preset.saved);
   };
 
   // 같은 이름이 있으면 스토어가 저장하지 않고 'exists' 를 돌려 준다(덮어쓰려면 `overwrite: true`). 그때 대화상자로 묻는다(S2.8).
   const saveCurrentPreset = () => {
     const trimmedName = name.trim();
-    if (!trimmedName) { setMessage('프리셋 이름을 입력해 주세요.'); return; }
+    if (!trimmedName) { setMessage(ko.preset.nameRequired); return; }
     const trimDb = presetTrimDb;
     // 지금 보드는 저장하는 순간에 읽는다(구독하지 않는다 — 노브를 돌릴 때마다 이 패널이 다시 그려지지 않게, S4.3).
     const snapshot = clonePedals(usePedalStore.getState().pedals);
@@ -213,7 +214,7 @@ export function PresetPanel() {
     const result = savePreset(newName, pendingSave.pedals, pendingSave.trimDb);
     setPendingSave(null);
     if (result !== 'saved') {
-      setMessage('같은 이름의 프리셋이 생겨 저장하지 못했습니다. 다시 저장해 주세요.');
+      setMessage(ko.preset.saveRaced);
       return;
     }
     setName(newName);
@@ -226,23 +227,23 @@ export function PresetPanel() {
   const matchLoudness = async () => {
     if (measuring) return;
     setMeasuring(true);
-    setMessage('현재 체인의 음량을 재는 중입니다…');
+    setMessage(ko.preset.measuring);
     try {
       const { computeTrimForChain } = await import('../audio/offline/measureLoudness');
       const sampleRate = AudioEngine.getInstance().readLatency().sampleRate || 48000;
       const result = await computeTrimForChain(usePedalStore.getState().pedals, { sampleRate });
       if (!result.audible) {
-        setMessage('소리가 거의 나오지 않아 음량을 맞출 수 없습니다. 노이즈 게이트와 볼륨 설정을 확인해 주세요.');
+        setMessage(ko.preset.inaudible);
         return;
       }
       setPresetTrimDb(result.trimDb);
       setMessage(
         result.headroomLimited
-          ? `음량 보정을 ${formatTrimDb(result.trimDb)} 로 맞췄습니다. 순간 소리가 커서 평균 ${result.resultRmsDb.toFixed(1)} dBFS 까지만 올렸습니다(리미터를 아끼려고 −20 dBFS 까지는 올리지 않았습니다). 프리셋으로 저장하면 이 값도 함께 저장됩니다.`
-          : `음량 보정을 ${formatTrimDb(result.trimDb)} 로 맞췄습니다. 프리셋으로 저장하면 이 값도 함께 저장됩니다.`,
+          ? ko.preset.trimSetLimited(formatTrimDb(result.trimDb), result.resultRmsDb.toFixed(1))
+          : ko.preset.trimSet(formatTrimDb(result.trimDb)),
       );
     } catch (error) {
-      setMessage(error instanceof Error ? `음량을 재지 못했습니다: ${error.message}` : '음량을 재지 못했습니다.');
+      setMessage(error instanceof Error ? ko.preset.measureFailedWith(error.message) : ko.preset.measureFailed);
     } finally {
       setMeasuring(false);
     }
@@ -278,24 +279,24 @@ export function PresetPanel() {
     const recentFollowing = takeOutOfList(RECENTS_KEY, setRecentIds, presetId);
 
     showToast({
-      message: `프리셋을 삭제했습니다: ${deleted.preset.name}`,
+      message: ko.preset.deleted(deleted.preset.name),
       kind: 'info',
       key: `preset-deleted:${presetId}`,
       durationMs: UNDO_TOAST_MS,
       action: {
-        label: '실행 취소',
+        label: ko.common.undo,
         onAction: () => {
           const result = restoreDeletedPreset(deleted);
           if (!result.restored || !result.preset) {
-            showToast({ message: '되돌리지 못했습니다. 같은 프리셋이 이미 있습니다.', kind: 'warning', key: `preset-restore-failed:${presetId}` });
+            showToast({ message: ko.preset.restoreFailed, kind: 'warning', key: `preset-restore-failed:${presetId}` });
             return;
           }
           putBackInList(FAVORITES_KEY, setFavoriteIds, presetId, favoriteFollowing);
           putBackInList(RECENTS_KEY, setRecentIds, presetId, recentFollowing);
           setMessage(
             result.renamed
-              ? `같은 이름의 프리셋이 있어 '${result.preset.name}' 이름으로 되돌렸습니다.`
-              : `'${result.preset.name}' 프리셋을 되돌렸습니다.`,
+              ? ko.preset.restoredRenamed(result.preset.name)
+              : ko.preset.restored(result.preset.name),
           );
         },
       },
@@ -306,27 +307,27 @@ export function PresetPanel() {
   const reset = () => {
     const before = captureChainSnapshot();
     if (isDefaultChain(before)) {
-      setMessage('이미 기본 페달 설정입니다.');
+      setMessage(ko.preset.alreadyDefault);
       return;
     }
     const previousPresetId = activePresetId;
     resetToDefaultChain();
     setActivePresetId(null);
-    setMessage('기본 페달 설정으로 되돌렸습니다.');
+    setMessage(ko.preset.resetDone);
     showToast({
-      message: '모든 노브를 처음 값으로 되돌렸습니다',
+      message: ko.preset.resetToast,
       kind: 'info',
       key: 'chain-reset',
       durationMs: UNDO_TOAST_MS,
       action: {
-        label: '실행 취소',
+        label: ko.common.undo,
         onAction: () => {
           const { cabinetIrsLost } = restoreChainSnapshot(before);
           setActivePresetId(previousPresetId);
           setMessage(
             cabinetIrsLost > 0
-              ? `기본 페달 설정 전으로 되돌렸습니다. 불러 둔 IR 파일 ${cabinetIrsLost}개는 오디오를 다시 시작해서 사라졌으니 다시 불러와 주세요.`
-              : '기본 페달 설정 전으로 되돌렸습니다.',
+              ? ko.preset.resetUndoneIrLost(cabinetIrsLost)
+              : ko.preset.resetUndone,
           );
         },
       },
@@ -337,7 +338,7 @@ export function PresetPanel() {
     // 파일로만 내보낸다. 내 프리셋이 없으면 빈 파일을 만들지 않는다(S2.7).
     const json = exportPresets();
     if (json === null) {
-      setMessage('내보낼 내 프리셋이 없습니다.');
+      setMessage(ko.preset.nothingToExport);
       return;
     }
     const count = presets.filter((preset) => !preset.isFactory).length;
@@ -348,7 +349,7 @@ export function PresetPanel() {
     link.download = `guitar-pedalboard-presets-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    setMessage(`내 프리셋 ${count}개를 내보냈습니다.`);
+    setMessage(ko.preset.exported(count));
   };
 
   const finishImport = (plan: ImportPlan, resolutions: readonly ConflictResolution[]) => {
@@ -365,7 +366,7 @@ export function PresetPanel() {
       else setPendingImport({ plan, resolutions: [] });
       return null;
     } catch (error) {
-      return error instanceof Error ? error.message : '프리셋을 가져오지 못했습니다.';
+      return error instanceof Error ? error.message : ko.preset.importFailed;
     }
   };
 
@@ -374,7 +375,7 @@ export function PresetPanel() {
     try {
       text = await file.text();
     } catch {
-      setMessage('파일을 읽지 못했습니다.');
+      setMessage(ko.preset.fileReadFailed);
       return;
     }
     const error = startImport(text);
@@ -403,7 +404,7 @@ export function PresetPanel() {
 
   const cancelImport = () => {
     setPendingImport(null);
-    setMessage('가져오기를 취소했습니다.');
+    setMessage(ko.preset.importCancelled);
   };
 
   return (
