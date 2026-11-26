@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { Buffer, File } from 'node:buffer';
 import console from 'node:console';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { openApp } from './lib/app-browser.mjs';
 import { workerUrlStub } from './lib/esbuild-plugins.mjs';
+import { FakeElement, installFakeElement } from './lib/fake-element.mjs';
+import { find, textContent } from './lib/html-tree.mjs';
+import { createSsrHarness } from './lib/ssr-harness.mjs';
 
 const routingBundle = await build({
   plugins: [workerUrlStub],
@@ -159,92 +162,6 @@ for (let index = 0; index < 15; index += 1) {
 assert.equal(documentedPedalIndexes.filter((index) => index >= 9).length, 12, '10~15번째 페달은 두 가지 키로 도움말에 있어야 합니다.');
 assert.ok(SHORTCUT_HELP_ROWS.find((row) => row.label === 'Esc').description.includes('녹음'), 'Esc 도움말이 녹음 저장을 말해야 합니다.');
 
-// S2.11: 키 해석은 input/shortcutKeys.ts, 포커스 규칙·실행·keydown 처리는 input/ShortcutService.ts, 리스너와 도움말 열기는 컴포넌트에 있다.
-const [globalSource, serviceSource, actionsSource, helpSource, routingSource, cssSource] = await Promise.all([
-  readFile(new URL('../src/components/GlobalKeyboardShortcuts.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/input/ShortcutService.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/store/pedalActions.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/ShortcutHelp.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/input/shortcutKeys.ts', import.meta.url), 'utf8'),
-  Promise.all([
-    readFile(new URL('../src/styles/panels.css', import.meta.url), 'utf8'),
-    readFile(new URL('../src/styles/responsive.css', import.meta.url), 'utf8'),
-  ]).then((sources) => sources.join('\n')),
-]);
-
-assert.equal(
-  [...globalSource.matchAll(/window\.addEventListener\('keydown'/g)].length,
-  1,
-  '전역 keydown listener는 정확히 하나여야 합니다.',
-);
-assert.equal([...globalSource.matchAll(/window\.removeEventListener\('keydown'/g)].length, 1);
-// 캡처 단계에서 듣는다: 컨트롤이 keydown 을 먼저 삼켜도 긴급 정지(Esc)가 통해야 한다. 등록과 해제의 옵션이 같아야 해제된다.
-assert.equal([...globalSource.matchAll(/\{ capture: true \}/g)].length, 2, '전역 keydown 은 캡처 단계로 달고 같은 옵션으로 떼어야 합니다.');
-// 컴포넌트는 처리기를 만들어 달기만 한다. 키를 해석·실행하는 코드는 input/ 에 있다(S2.11).
-assert.ok(globalSource.includes("from '../input/ShortcutService'"));
-assert.ok(globalSource.includes('createShortcutKeydownHandler({ isHelpOpen: () => helpOpenRef.current, openHelp, closeHelp })'));
-assert.ok(!globalSource.includes('executeShortcutCommand') && !globalSource.includes('resolveShortcutCommand'), '컴포넌트가 키 해석·실행을 직접 하면 안 됩니다.');
-assert.match(serviceSource, /tagName === 'input'[\s\S]*tagName === 'select'[\s\S]*tagName === 'textarea'/);
-assert.match(serviceSource, /tagName === 'button'/);
-assert.match(serviceSource, /tagName === 'a'[\s\S]*hasAttribute\('href'\)/);
-assert.match(serviceSource, /contenteditable/);
-assert.match(serviceSource, /\[role="button"\]/);
-assert.match(serviceSource, /\[tabindex\]:not/);
-
-// 단축키는 켜고 끄는 단일 입구(togglePedalActive → setPedalActive, S2.4)를 쓴다. store → engine 순서는 입구 한 곳에서 지킨다.
-assert.ok(serviceSource.includes('togglePedalActive(pedal.id);'), '단축키가 켜고 끄는 단일 입구를 쓰지 않습니다.');
-assert.ok(!serviceSource.includes('setPedalBypass') && !globalSource.includes('setPedalBypass'), '단축키가 옛 Bypass 경로를 씁니다.');
-const storeWrite = actionsSource.indexOf('usePedalStore.getState().setActive(pedalId, active);');
-const engineWrite = actionsSource.indexOf('AudioEngine.getInstance().setPedalActive(pedalId, active);');
-assert.ok(storeWrite >= 0 && engineWrite > storeWrite, '켜고 끄기가 store → engine 순서가 아닙니다.');
-assert.ok(serviceSource.includes('const pedal = usePedalStore.getState().pedals[command.index];'));
-assert.match(serviceSource, /command\.index < 0 \|\| command\.index > 14/);
-assert.match(serviceSource, /if \(audioState\.isLoading\) return true/);
-assert.match(serviceSource, /audioState\.isRunning[\s\S]*audioState\.stop\(\)[\s\S]*audioState\.start\(\)/);
-assert.match(serviceSource, /tapTempoTap\(\)/);
-assert.match(serviceSource, /activateSlot\(command\.slot\)/);
-assert.match(serviceSource, /getState\(\)\.panic\(\)/);
-// 긴급 정지(Esc)는 컨트롤에 포커스가 있어도 통하되, Esc 를 자기 일에 쓰는 컨트롤만 예외다(REFACTOR_LOG L-17).
-assert.match(serviceSource, /export function isEscapeOwnedByTarget/);
-assert.match(serviceSource, /export function isShortcutBlockedByTarget/);
-assert.match(
-  serviceSource,
-  /command\.type === 'panic'\) return event\.isComposing \|\| isEscapeOwnedByTarget\(event\.target\)/,
-);
-assert.match(serviceSource, /!command \|\| isShortcutBlockedByTarget\(command, event\)/);
-
-// 도움말이 열려 있을 때 Esc 우선순위: 처리기 안에서 '도움말 분기'가 '실행'보다 앞에 있어야 한다. 동작은 아래 createShortcutKeydownHandler 시험이 눌러 본다.
-const modalBranch = serviceSource.indexOf('if (context.isHelpOpen())');
-const globalExecution = serviceSource.indexOf('executeShortcutCommand(command, context.openHelp)');
-assert.ok(modalBranch >= 0 && globalExecution > modalBranch, '도움말 Esc 우선순위가 없습니다.');
-assert.match(
-  serviceSource.slice(modalBranch, globalExecution),
-  /command\?\.type === 'panic'[\s\S]*closeHelp\(\)[\s\S]*return/,
-);
-
-assert.match(routingSource, /event\.repeat/);
-assert.match(routingSource, /event\.ctrlKey \|\| event\.metaKey \|\| event\.altKey/);
-assert.match(routingSource, /SHIFT_PEDAL_KEY_CODES\.indexOf/);
-assert.match(routingSource, /Digit0/);
-
-assert.match(helpSource, /role="dialog"/);
-assert.match(helpSource, /aria-modal="true"/);
-assert.match(helpSource, /aria-labelledby="shortcut-help-title"/);
-assert.match(helpSource, /closeButtonRef\.current\?\.focus\(\)/);
-assert.match(helpSource, /previousFocus\?\.isConnected[\s\S]*previousFocus\.focus\(\)/);
-assert.match(helpSource, /event\.key !== 'Tab'/);
-assert.match(helpSource, /event\.shiftKey[\s\S]*firstElement[\s\S]*lastElement/);
-assert.match(helpSource, /querySelectorAll<HTMLElement>\(FOCUSABLE_SELECTOR\)/);
-assert.match(helpSource, /onKeyDown=\{handleKeyDown\}/);
-// 도움말은 키 표(shortcutKeys.ts)의 SHORTCUT_HELP_ROWS 를 그대로 그린다(S2.11). 표의 내용은 위에서 눌러 보며 시험했다.
-assert.ok(helpSource.includes("import { SHORTCUT_HELP_ROWS } from '../input/shortcutKeys'"));
-assert.ok(helpSource.includes('SHORTCUT_HELP_ROWS.map((item) =>'));
-assert.ok(helpSource.includes('<kbd>{item.label}</kbd>') && helpSource.includes('<dd>{item.description}</dd>'));
-assert.ok(!helpSource.includes('shortcutItems'), '도움말에 따로 적은 키 목록이 남아 있으면 실제 키와 어긋납니다.');
-assert.match(cssSource, /\.shortcut-help-backdrop/);
-assert.match(cssSource, /\.shortcut-help-dialog:focus-visible/);
-assert.match(cssSource, /@media \(prefers-reduced-motion: reduce\)/);
-
 const storageValues = new Map();
 globalThis.window = {
   localStorage: {
@@ -262,26 +179,21 @@ globalThis.window = {
   clearTimeout: globalThis.clearTimeout.bind(globalThis),
 };
 
-const harnessBundle = await build({
-  plugins: [workerUrlStub],
-  stdin: {
-    contents: [
-      "export { AudioEngine } from './audio/AudioEngine.ts';",
-      "export { createShortcutKeydownHandler, executeShortcutCommand, isEscapeOwnedByTarget, isInteractiveShortcutTarget, isShortcutBlockedByTarget } from './input/ShortcutService.ts';",
-      "export { useAudioStore } from './store/audioStore.ts';",
-      "export { clonePedals, usePedalStore } from './store/pedalStore.ts';",
-      "export { usePresetStore } from './store/presetStore.ts';",
-    ].join('\n'),
-    resolveDir: fileURLToPath(new URL('../src', import.meta.url)),
-    sourcefile: 'shortcut-harness.ts',
-  },
-  bundle: true,
-  format: 'esm',
-  platform: 'node',
-  target: 'node20',
-  write: false,
+const windowListeners = [];
+Object.assign(globalThis.window, {
+  addEventListener: (type, handler, options) => { windowListeners.push({ op: 'add', type, handler, options }); },
+  removeEventListener: (type, handler, options) => { windowListeners.push({ op: 'remove', type, handler, options }); },
 });
-const harnessUrl = `data:text/javascript;base64,${Buffer.from(harnessBundle.outputFiles[0].text).toString('base64')}`;
+const harness = await createSsrHarness({
+  extraExports: [
+    "{ AudioEngine } from './audio/AudioEngine.ts'",
+    "{ createShortcutKeydownHandler, executeShortcutCommand, isEscapeOwnedByTarget, isInteractiveShortcutTarget, isShortcutBlockedByTarget } from './input/ShortcutService.ts'",
+    "{ useAudioStore } from './store/audioStore.ts'",
+    "{ clonePedals, usePedalStore } from './store/pedalStore.ts'",
+    "{ usePresetStore } from './store/presetStore.ts'",
+    "{ GlobalKeyboardShortcuts } from './components/GlobalKeyboardShortcuts.tsx'",
+  ],
+});
 const {
   AudioEngine,
   clonePedals,
@@ -293,29 +205,13 @@ const {
   useAudioStore,
   usePedalStore,
   usePresetStore,
-} = await import(harnessUrl);
+  GlobalKeyboardShortcuts,
+} = harness.exports;
 
 // ── 긴급 정지(Esc)의 대상 판정 ────────────────────────────────────────────────
-// DOM 이 없는 환경이라 선택자를 쉼표 조각으로 나눠 '이 요소(또는 조상)가 해당하는 조각'이 있는지만 본다.
+// DOM 이 없는 환경이라 가짜 요소(lib/fake-element)는 선택자를 쉼표 조각으로 나눠 '이 요소(또는 조상)가 해당하는 조각'이 있는지만 본다.
 // 운영 코드의 선택자 문자열에 그 조각이 들어 있어야 통과하므로, 선택자에서 조각이 빠지면 여기서 걸린다.
-class FakeElement {
-  constructor(tagName, { type = '', attributes = [], matches = [] } = {}) {
-    this.tagName = tagName.toUpperCase();
-    this.type = type;
-    this.attributes = new Set(attributes);
-    this.matches = new Set(matches);
-  }
-
-  hasAttribute(name) {
-    return this.attributes.has(name);
-  }
-
-  closest(selector) {
-    const clauses = selector.split(',').map((clause) => clause.trim());
-    return clauses.some((clause) => this.matches.has(clause)) ? this : null;
-  }
-}
-globalThis.Element = FakeElement;
+installFakeElement();
 
 const escapeOwnedTargets = {
   '<select>': new FakeElement('select'),
@@ -378,6 +274,8 @@ for (const [label, element] of Object.entries(emergencyStopTargets)) {
   }
 }
 
+// href 가 없는 <a> 는 링크가 아니라 컨트롤로 보지 않는다.
+assert.equal(isInteractiveShortcutTarget(new FakeElement('a')), false, 'href 없는 <a> 는 컨트롤이 아닙니다.');
 for (const [label, element] of Object.entries(escapeOwnedTargets)) {
   assert.equal(
     isShortcutBlockedByTarget({ type: 'panic' }, { target: element, isComposing: false }),
@@ -419,6 +317,11 @@ usePedalStore.setState({
 engine.setPedalActive = (id, active) => {
   activeOrder.push(`engine:${id}:${active}`);
 };
+const originalEngineBypass = engine.setPedalBypass;
+let bypassCalls = 0;
+engine.setPedalBypass = () => {
+  bypassCalls += 1;
+};
 
 try {
   assert.equal(
@@ -433,9 +336,13 @@ try {
   assert.equal(usePedalStore.getState().pedals[2].active, !originalActive);
   assert.equal(executeShortcutCommand({ type: 'toggle-pedal', index: -1 }, () => {}), false);
   assert.equal(executeShortcutCommand({ type: 'toggle-pedal', index: 15 }, () => {}), false);
+  assert.equal(activeOrder.length, 2, '범위 밖 번호는 저장소도 엔진도 건드리지 않습니다.');
+  // 켜고 끄는 길은 setPedalActive(저장소 → 엔진) 하나뿐이다. 옛 setPedalBypass 는 불리지 않는다.
+  assert.equal(bypassCalls, 0, '단축키가 옛 Bypass 경로를 씁니다.');
 } finally {
   usePedalStore.setState({ setActive: originalSetActive });
   engine.setPedalActive = originalEngineActive;
+  engine.setPedalBypass = originalEngineBypass;
 }
 
 let starts = 0;
@@ -674,6 +581,149 @@ assert.deepEqual({ panics, closed, prevented: record.prevented, stopped: record.
   }
 }
 
+// ── 전역 keydown 리스너(GlobalKeyboardShortcuts): 하나만, 캡처 단계로 달고, 같은 처리기·같은 옵션으로 뗀다 ────────────
+// 컴포넌트가 만든 리스너로 실제 키를 눌러, 키 해석·실행은 ShortcutService 가 하고 컴포넌트는 도움말 열림만 쥔다는 것을 본다.
+{
+  const keydownEntries = () => windowListeners.filter((entry) => entry.type === 'keydown');
+  const tree = harness.render(GlobalKeyboardShortcuts);
+  const status = find(tree, (node) => node.tag === 'output');
+  assert.deepEqual(
+    [status.attrs.role, status.attrs['aria-live'], status.attrs['aria-atomic'], status.attrs.class],
+    ['status', 'polite', 'true', 'visually-hidden'],
+  );
+  assert.equal(textContent(status).trim(), '글로벌 템포 120 BPM, 탭 0회, 프리셋 비교 A 슬롯');
+  assert.equal(find(tree, (node) => node.attrs.role === 'dialog'), null, '처음에는 도움말이 닫혀 있습니다.');
+  assert.ok(find(harness.render(GlobalKeyboardShortcuts, {}, { states: { 0: true } }), (node) => node.attrs.role === 'dialog'), '열림 상태에서는 도움말 대화상자가 그려집니다.');
+
+  harness.render(GlobalKeyboardShortcuts);
+  windowListeners.length = 0;
+  const mounted = harness.runEffects();
+  assert.deepEqual(keydownEntries().map(({ op, options }) => [op, options]), [['add', { capture: true }]], '전역 keydown 은 캡처 단계로 하나만 닮니다.');
+  const listener = keydownEntries()[0].handler;
+
+  taps = 0;
+  panics = 0;
+  harness.stateSets.length = 0;
+  record = pressThrough(listener, 'ㅅ', { code: 'KeyT' });
+  assert.deepEqual({ taps, prevented: record.prevented }, { taps: 1, prevented: 1 }, '리스너가 실제 키 처리(ShortcutService)로 이어집니다.');
+  record = pressThrough(listener, '?', { code: 'Slash', shiftKey: true });
+  assert.deepEqual(harness.stateSets.map(({ action }) => action), [true], "'?' 는 도움말을 엽니다.");
+  harness.stateSets.length = 0;
+  record = pressThrough(listener, 'Escape', { code: 'Escape' });
+  assert.deepEqual({ panics, sets: harness.stateSets.map(({ action }) => action) }, { panics: 0, sets: [false] }, '도움말이 열려 있는 동안 Esc 는 도움말만 닫습니다.');
+  pressThrough(listener, 'Escape', { code: 'Escape' });
+  assert.equal(panics, 1, '도움말이 닫히면 Esc 는 다시 긴급 정지입니다.');
+
+  windowListeners.length = 0;
+  mounted.cleanup();
+  assert.deepEqual(
+    keydownEntries().map(({ op, options, handler }) => [op, options, handler === listener]),
+    [['remove', { capture: true }, true]],
+    '같은 처리기를 같은 옵션으로 뗍니다.',
+  );
+}
+
+// ── 도움말 대화상자는 실제 Chrome 에서: 접근성 속성, 열릴 때 포커스, Tab 가둠, Esc 로 닫고 포커스 복귀, CSS ────────────
+await verifyHelpDialogInBrowser();
+
 console.log(
   'Shortcut regression passed: code-based routing (Hangul), Shift+1-6 = pedals 10-15, table-driven help, guarded keydown handler, Esc emergency stop through focused controls, current-order bypass, audio/A-B/tap/panic actions, single listener and accessible focus-trapped help.',
 );
+
+async function verifyHelpDialogInBrowser() {
+  const app = await openApp({ purpose: 'Shortcut help dialog browser checks' });
+  if (!app) return;
+  try {
+    const active = `(() => {
+      const dialog = document.querySelector('[role="dialog"]');
+      const close = dialog?.querySelector('button');
+      return {
+        closeFocused: Boolean(close) && document.activeElement === close,
+        closeLabel: close?.getAttribute('aria-label') ?? null,
+        activeId: document.activeElement?.id ?? '',
+      };
+    })()`;
+
+    // 탭 순서 밖의 요소에 포커스를 두고 '?' 로 연다(열기 전 포커스 자리).
+    assert.equal(await app.evaluate(`(() => {
+      const probe = document.createElement('div');
+      probe.id = 'focus-probe';
+      probe.tabIndex = -1;
+      document.body.append(probe);
+      probe.focus();
+      return document.activeElement === probe;
+    })()`), true);
+    await app.press('?', { code: 'Slash', shift: true });
+    await app.waitFor(`document.querySelector('[role="dialog"]') !== null`, { label: '도움말 대화상자' });
+
+    const dialog = await app.evaluate(`(() => {
+      const dialog = document.querySelector('[role="dialog"]');
+      const labelledBy = document.getElementById(dialog.getAttribute('aria-labelledby') ?? '');
+      const describedBy = document.getElementById(dialog.getAttribute('aria-describedby') ?? '');
+      return {
+        modal: dialog.getAttribute('aria-modal'),
+        labelledById: dialog.getAttribute('aria-labelledby'),
+        title: labelledBy?.textContent ?? null,
+        description: describedBy?.textContent ?? null,
+        tabIndex: dialog.getAttribute('tabindex'),
+        rows: [...dialog.querySelectorAll('dl > div')].map((row) => [row.querySelector('dt kbd')?.textContent, row.querySelector('dd')?.textContent]),
+      };
+    })()`);
+    assert.equal(dialog.modal, 'true');
+    assert.equal(dialog.labelledById, 'shortcut-help-title');
+    assert.equal(dialog.title, '키보드 단축키');
+    assert.ok(dialog.description && dialog.description.length > 0, '대화상자 설명(aria-describedby)이 있어야 합니다.');
+    assert.equal(dialog.tabIndex, '-1');
+    assert.deepEqual(dialog.rows, SHORTCUT_HELP_ROWS.map((row) => [row.label, row.description]), '도움말 표는 SHORTCUT_HELP_ROWS 에서 그대로 나옵니다.');
+
+    // 열리면 포커스는 닫기 버튼으로 간다.
+    assert.deepEqual(await app.evaluate(active), { closeFocused: true, closeLabel: '키보드 단축키 도움말 닫기', activeId: '' });
+    // Tab·Shift+Tab 은 대화상자 안(닫기 버튼 하나뿐)에 갇힌다.
+    await app.press('Tab', { code: 'Tab' });
+    assert.equal((await app.evaluate(active)).closeFocused, true, 'Tab 이 대화상자 밖으로 나갔습니다.');
+    await app.press('Tab', { code: 'Tab', shift: true });
+    assert.equal((await app.evaluate(active)).closeFocused, true, 'Shift+Tab 이 대화상자 밖으로 나갔습니다.');
+
+    // 배경 덮개: 화면 전체를 덮고 모든 것 위에 있다.
+    const backdrop = await app.evaluate(`(() => {
+      const element = document.querySelector('.shortcut-help-backdrop');
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        position: style.position,
+        rect: [rect.left, rect.top, rect.width, rect.height],
+        viewport: [0, 0, document.documentElement.clientWidth, innerHeight],
+        topAtCorner: element.contains(document.elementFromPoint(4, 4)),
+        topAtCenter: element.contains(document.elementFromPoint(innerWidth / 2, innerHeight / 2)),
+        animation: style.animationName,
+      };
+    })()`);
+    assert.equal(backdrop.position, 'fixed');
+    assert.deepEqual(backdrop.rect, backdrop.viewport, '배경 덮개가 화면 전체를 덮어야 합니다.');
+    assert.deepEqual([backdrop.topAtCorner, backdrop.topAtCenter], [true, true], '배경 덮개 위에 다른 요소가 있습니다.');
+
+    // 대화상자 자체에 포커스가 오면(키보드로) 눈에 보이는 포커스 테두리가 있다.
+    const focusRing = await app.evaluate(`(() => {
+      const dialog = document.querySelector('.shortcut-help-dialog');
+      dialog.focus({ focusVisible: true });
+      const style = getComputedStyle(dialog);
+      return { matches: dialog.matches(':focus-visible'), style: style.outlineStyle, width: style.outlineWidth, offset: style.outlineOffset };
+    })()`);
+    assert.deepEqual(focusRing, { matches: true, style: 'solid', width: '3px', offset: '3px' }, '대화상자의 :focus-visible 테두리');
+
+    // 움직임 줄이기: 평소에는 나타나는 애니메이션이 있고, '줄이기' 를 켜면 없어진다.
+    const animations = () => app.evaluate(`['.shortcut-help-backdrop', '.shortcut-help-dialog'].map((selector) => getComputedStyle(document.querySelector(selector)).animationName)`);
+    assert.deepEqual(await animations(), ['shortcut-backdrop-in', 'shortcut-dialog-in']);
+    await app.emulateMedia([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+    assert.deepEqual(await animations(), ['none', 'none'], 'prefers-reduced-motion: reduce 에서 도움말 애니메이션이 남아 있습니다.');
+    await app.emulateMedia([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
+
+    // 닫기 버튼으로 포커스를 돌려 놓고 Esc: 대화상자가 닫히고 포커스는 열기 전 자리로 돌아간다.
+    await app.evaluate(`document.querySelector('.shortcut-help-close').focus()`);
+    await app.press('Escape', { code: 'Escape' });
+    await app.waitFor(`document.querySelector('[role="dialog"]') === null`, { label: '도움말 닫힘' });
+    assert.equal((await app.evaluate(active)).activeId, 'focus-probe', '닫으면 포커스가 열기 전 자리로 돌아가야 합니다.');
+  } finally {
+    await app.close();
+  }
+}
