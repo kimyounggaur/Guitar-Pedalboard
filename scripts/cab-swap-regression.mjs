@@ -581,7 +581,7 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   const factory = await readFile(new URL('src/audio/offline/effectFactory.ts', rootUrl), 'utf8');
   ok(/new CabEffect\(context, pedal, timers, userImpulse\)/.test(factory), '오프라인 팩토리는 렌더 시각 타이머와 사용자 IR 제공자를 Cab 에 넘긴다');
   const chain = await readFile(new URL('src/audio/offline/renderChain.ts', rootUrl), 'utf8');
-  ok(/createOfflineEffect\(context, pedal, impulseCache, timers\)/.test(chain), 'renderChain 은 이펙트 생성에 렌더 시각 타이머를 넘긴다');
+  ok(/createOfflineEffect\(context, pedal, impulseCache, timers, options\.userImpulse\)/.test(chain), 'renderChain 은 이펙트 생성에 렌더 시각 타이머와 사용자 IR 제공자를 넘긴다');
 }
 
 // ---------------------------------------------------------------------------------------------
