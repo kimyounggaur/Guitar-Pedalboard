@@ -45,7 +45,7 @@ import { clampTrimDb, PRESET_TRIM_RAMP_SECONDS } from './offline/loudnessSpec';
 import { clamp, dbToGain } from './utils/db';
 import { MAX_CAB_IR_BYTES, validateCabinetWav, validateDecodedCabinetIr } from './utils/cabinetIr';
 import { ImpulseCache } from './utils/impulseCache';
-import { rampParam } from './utils/smoothing';
+import { rampParam, smoothVolume } from './utils/smoothing';
 import { noiseGateProcessorSource } from './worklets/noise-gate-processor';
 import { envelopeFollowerProcessorSource } from './worklets/envelope-follower-processor';
 import { tunerProcessorSource } from './worklets/tuner-processor';
@@ -633,7 +633,7 @@ export class AudioEngine {
   setMasterVolume(value: number): void {
     this.masterVolume = clamp(value, 0, 1);
     if (this.masterGain && this.context) {
-      rampParam(this.masterGain.gain, this.masterVolume, this.context, 0.02);
+      smoothVolume(this.masterGain.gain, this.masterVolume, this.context);
     }
   }
 

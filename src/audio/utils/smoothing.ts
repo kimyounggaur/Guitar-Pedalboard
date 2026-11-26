@@ -9,6 +9,21 @@ export function smoothParam(
   param.setTargetAtTime(value, now, timeConstant);
 }
 
+/** 볼륨 같은 값이 목표의 98% 까지 가는 데 걸리는 시간(S5.2 설계: 값 스무딩 20 ms). */
+export const VOLUME_SMOOTHING_SECONDS = 0.02;
+
+/**
+ * 빠르게 움직이는 값(MIDI 볼륨 CC, 슬라이더)을 지퍼 잡음 없이 목표로 옮긴다(S5.2).
+ *
+ * `rampParam` 대신 쓰는 이유: Chrome 157 의 실제 렌더에서 `rampParam` 은 20 ms 램프가 아니라 한 표본 만에 거의 목표로 건너뛰는
+ * 계단이다(1 → 0.2 로 바꾸면 첫 표본 차 0.67). 연달아 오는 CC 마다 계단이 생기면 지퍼 잡음이 된다(REFACTOR_LOG L-222, F-5).
+ * `setTargetAtTime` 은 직전 자동화가 무엇이든 지금 값에서 출발하고, 새 목표가 연달아 와도 값이 이어진다.
+ * 시간 상수를 `VOLUME_SMOOTHING_SECONDS / 4` 로 잡아 20 ms 뒤에 98% 에 닿는다.
+ */
+export function smoothVolume(param: AudioParam, value: number, context: BaseAudioContext): void {
+  smoothParam(param, value, context, VOLUME_SMOOTHING_SECONDS / 4);
+}
+
 export function rampParam(
   param: AudioParam,
   value: number,
