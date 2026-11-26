@@ -4,6 +4,7 @@ import { connectGuitar, openApp } from '../helpers/app';
 import { BASE_URL } from '../helpers/env';
 import { expect, test } from '../helpers/fixtures';
 import { overlapsInCard, reachable, reachableAboveDock, visibleKnobs, visibleRatio } from '../helpers/geometry';
+import { describeItem, measureContrast, pickBackground, type ColorBucket } from '../helpers/text-metrics';
 import {
   bringOtherTabToFront,
   GET_USER_MEDIA_ERRORS,
@@ -99,6 +100,49 @@ test.describe('E-00 하네스', () => {
     const report = await overlapsInCard(page.locator('#card'));
     expect(report.count).toBe(1);
     expect(report.boxes).toBe(3);
+  });
+
+  // 글자 대비 측정의 배경 고르기(S4.5, E-21). CI(DejaVu Sans)에서 글로우 위의 글자가 대비 1.00:1 로 잘못 잡혀 배포가 막힌 일이 있었다.
+  test('E-00 도우미: pickBackground 는 글로우로 갈라진 어두운 배경을 글자색보다 먼저 고른다', () => {
+    const bucket = (n: number, rgb: readonly number[]): ColorBucket => ({ n, r: rgb[0] * n, g: rgb[1] * n, b: rgb[2] * n });
+    const fg = [219, 255, 193];
+    // 글자 칸 12 %, 어두운 배경이 5비트 칸 9개로 갈라져 한 칸은 모두 10 % 미만(합 88 % 가운데 가장 큰 칸 9.5 %)
+    const text = bucket(12, fg);
+    const dark = [bucket(9.5, [42, 83, 22]), bucket(9.5, [37, 76, 20]), bucket(9.5, [52, 99, 28]), bucket(9.5, [49, 93, 26]), bucket(9.5, [46, 90, 25]),
+      bucket(9.5, [60, 110, 32]), bucket(9.5, [66, 120, 36]), bucket(9.5, [72, 128, 40]), bucket(9.5, [80, 140, 44])];
+    const counts = new Map<number, ColorBucket>([[0, text], ...dark.map((entry, index) => [index + 1, entry] as const)]);
+    const pick = pickBackground(counts, fg);
+    expect(pick, '글자 칸이 가장 커도 먼 색이 절반 이상이면 그 가운데 가장 큰 칸이 배경').toBe(dark[0]);
+    // 한 칸이 상자의 10 % 이상이면 예전과 같이 그 칸(글자 칸보다 작아도)
+    const solid = new Map<number, ColorBucket>([[0, bucket(40, fg)], [1, bucket(11, [20, 30, 20])], [2, bucket(9, [90, 120, 60])]]);
+    expect(pickBackground(solid, fg)).toBe(solid.get(1));
+  });
+
+  test('E-00 도우미: pickBackground 는 글자색과 배경이 정말 비슷하거나 글자가 상자를 덮으면 글자 칸을 돌려줘 위반으로 잡히게 한다', () => {
+    const bucket = (n: number, rgb: readonly number[]): ColorBucket => ({ n, r: rgb[0] * n, g: rgb[1] * n, b: rgb[2] * n });
+    // 배경 회색 150 · 글자 회색 136(거리 24): 먼 색 없음 → 가장 많은 칸(배경)이어서 대비가 낮게 나온다
+    const gray = new Map<number, ColorBucket>([[0, bucket(70, [150, 150, 150])], [1, bucket(30, [136, 136, 136])]]);
+    expect(pickBackground(gray, [136, 136, 136])).toBe(gray.get(0));
+    // 먼 색이 있어도 합이 절반 미만(글자가 상자의 60 %)이면 가장 많은 칸 = 글자 칸 → 대비 1 → 위반으로 잡힌다
+    const covered = new Map<number, ColorBucket>([[0, bucket(60, [219, 255, 193])], [1, bucket(5, [30, 50, 20])], [2, bucket(5, [32, 52, 22])], [3, bucket(5, [44, 80, 30])],
+      [4, bucket(5, [46, 82, 30])], [5, bucket(5, [60, 100, 40])], [6, bucket(5, [62, 102, 40])], [7, bucket(5, [70, 120, 44])], [8, bucket(5, [72, 122, 44])], [9, bucket(5, [80, 140, 50])]]);
+    expect(pickBackground(covered, [219, 255, 193])).toBe(covered.get(0));
+    expect(pickBackground(new Map(), [0, 0, 0])).toBeNull();
+  });
+
+  test('E-00 도우미: measureContrast 는 낮은 대비 글자만 가려내고 어두운 바탕의 밝은 글자는 통과시킨다', async ({ page }) => {
+    await page.setContent(`
+      <style>body{margin:0;font:700 14px sans-serif} .row{position:absolute;left:10px;white-space:nowrap}</style>
+      <div style="position:absolute;left:0;top:0;width:320px;height:40px;background:#fff"></div>
+      <span class="row" style="top:10px;color:#111">fine dark on white</span>
+      <div style="position:absolute;left:0;top:50px;width:320px;height:40px;background:linear-gradient(90deg,#10300a,#4a8a28)"></div>
+      <span class="row" style="top:60px;color:#f2ffe6;text-shadow:0 0 10px rgba(143,235,78,.68)">fine light on glow</span>
+      <div style="position:absolute;left:0;top:100px;width:320px;height:40px;background:#888"></div>
+      <span class="row" style="top:110px;color:#777">too faint</span>`);
+    const report = await measureContrast(page);
+    expect(report.measured).toBe(3);
+    expect(report.failures.map(describeItem).join('\n')).toContain('too faint');
+    expect(report.failures).toHaveLength(1);
   });
 
   test('E-00 모의: 저장소 차단과 가득 참', async ({ page }) => {

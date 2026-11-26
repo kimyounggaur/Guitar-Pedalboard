@@ -191,6 +191,44 @@ const clippedAway = (el, r) => {
 };
 `;
 
+/** 글자 상자 안 색 칸(5비트로 묶은 색의 픽셀 수와 r·g·b 합). */
+export interface ColorBucket {
+  n: number;
+  r: number;
+  g: number;
+  b: number;
+}
+
+/**
+ * 글자 상자 안의 색 칸들에서 배경 칸을 고른다. 브라우저 안(SAMPLE)과 단위 시험(Node)이 같은 소스를 쓴다.
+ *  1. 글자색과 비슷한 색(거리 60 이하)은 글자로 보고 건너뛴다. 굵은 큰 글자는 상자의 절반을 넘기도 한다.
+ *  2. 건너뛰고 남은 색 중 한 칸이 상자의 10 % 이상이면 가장 큰 칸이 배경이다.
+ *  3. 그런 칸이 없어도, 글자색에서 먼 픽셀이 상자의 절반 이상이면 그 가운데 가장 큰 칸을 배경으로 본다 —
+ *     글로우(text-shadow)·그라데이션 위의 글자는 배경이 5비트 칸 여러 개로 갈라져 한 칸이 10 % 에 못 미치는데,
+ *     이때 가장 많은 칸이 글자 자신이 되어 대비 1.00:1 로 잘못 잡히던 것을 막는다(CI 의 글꼴 DejaVu Sans 에서 실제로 났다).
+ *  4. 먼 색이 거의 없으면(글자색과 배경이 정말 비슷하면) 가장 많은 색을 쓴다 — 그러면 대비가 1 에 가까워 위반으로 잡힌다.
+ */
+export const PICK_BACKGROUND_SOURCE = `(counts, fg) => {
+  let total = 0, best = null, bestFar = null, farTotal = 0, farBest = null;
+  for (const e of counts.values()) total += e.n;
+  for (const e of counts.values()) {
+    if (!best || e.n > best.n) best = e;
+    const far = Math.hypot(e.r / e.n - fg[0], e.g / e.n - fg[1], e.b / e.n - fg[2]) > 60;
+    if (!far) continue;
+    farTotal += e.n;
+    if (!farBest || e.n > farBest.n) farBest = e;
+    if (e.n >= total * 0.1 && (!bestFar || e.n > bestFar.n)) bestFar = e;
+  }
+  if (bestFar) return bestFar;
+  if (farBest && farTotal >= total * 0.5) return farBest;
+  return best;
+}`;
+
+export const pickBackground = new Function(`return ${PICK_BACKGROUND_SOURCE}`)() as (
+  counts: Map<number, ColorBucket>,
+  fg: readonly number[],
+) => ColorBucket | null;
+
 const SAMPLE = `
 async (b64) => {
   const probe = window.__textProbe;
@@ -220,6 +258,7 @@ async (b64) => {
   const parse = (css) => { colorCtx.clearRect(0, 0, 1, 1); colorCtx.fillStyle = '#000'; colorCtx.fillStyle = css; colorCtx.fillRect(0, 0, 1, 1); const d = colorCtx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255]; };
   const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
   const ratio = (a, b) => { const la = lum(a), lb = lum(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); };
+  const pickBackground = ${PICK_BACKGROUND_SOURCE};
   const hex = (c) => '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
   let sampled = 0;
   for (const rec of probe.records) {
@@ -252,16 +291,7 @@ async (b64) => {
       }
     }
     const fgRaw = parse(rec.color);
-    // 배경 = 글자 상자 안에서 가장 많은 색. 굵은 큰 글자는 상자의 절반을 넘기도 하므로, 글자색과 비슷한 색(거리 60 이하)은 글자로 보고 건너뛴다.
-    // 건너뛸 색만 남으면(글자색과 배경이 정말 비슷하면) 가장 많은 색을 쓴다 — 그러면 대비가 1 에 가까워 위반으로 잡힌다.
-    let total = 0, best = null, bestFar = null;
-    for (const e of counts.values()) total += e.n;
-    for (const e of counts.values()) {
-      if (!best || e.n > best.n) best = e;
-      const far = Math.hypot(e.r / e.n - fgRaw[0], e.g / e.n - fgRaw[1], e.b / e.n - fgRaw[2]) > 60;
-      if (far && e.n >= total * 0.1 && (!bestFar || e.n > bestFar.n)) bestFar = e;
-    }
-    const pick = bestFar || best;
+    const pick = pickBackground(counts, fgRaw);
     if (!pick) continue;
     const bg = [pick.r / pick.n, pick.g / pick.n, pick.b / pick.n];
     const alpha = fgRaw[3] * rec.opacity;
