@@ -7,6 +7,7 @@
 //   · `h.hosts` — 그린 DOM 요소(button·input 등)가 받은 props. `h.findHost('button', (props) => hostText(props.children) === 'A')?.props.onClick()` 처럼 처리기를 직접 불러 스토어가 바뀌는지 본다.
 //   · `h.runEffects()` — 렌더 중 등록된 useEffect 를 실행하고(서버 렌더는 효과를 돌리지 않는다), 돌려준 정리 함수들을 `cleanups` 로 준다.
 //   · `h.serverState(store, patch)` — zustand 는 서버 렌더에서 스토어의 '처음 상태' 를 그린다. 그 처음 상태를 잠시 바꿔 다른 상태의 화면을 그려 본다(돌려주는 함수를 부르면 되돌린다).
+//   · `h.render(Component, props, { states: { 0: true } })` — 렌더 안 useState 의 초기값을 순서(0부터)로 정해 '메뉴가 열린' 같은 화면을 그린다. 처리기가 부른 setState 는 `h.stateSets` 에 쌓인다.
 // `stubs` 는 컴포넌트가 가져오는 모듈 하나를 기록용 가짜로 바꾼다 — 예: ToggleSwitch 를 바꿔 "Sync 스위치가 어떤 onChange 를 받았나" 를 꺼내
 // 직접 불러 본다(실제 클릭 대신 처리기를 호출해 스토어가 바뀌는지 본다). 키는 src 기준 경로(확장자 없이), 값은 가짜 모듈의 TSX 소스다.
 // 가짜 모듈은 전역 `__ssrCalls`(배열)에 받은 props 를 쌓는다.
@@ -32,7 +33,15 @@ const EFFECT_RECORDING_REACT = `import * as React from 'react';
 export * from 'react';
 export default React;
 export function useEffect(effect: any, deps?: any) { (globalThis as any).__ssrEffects?.push({ effect, deps }); }
-export const useLayoutEffect = useEffect;`;
+export const useLayoutEffect = useEffect;
+// useState: 렌더 순서(0, 1, …)로 초기값을 바꿔 줄 수 있고(메뉴가 열린 화면 등), setState 호출은 globalThis.__ssrState.sets 에 쌓는다.
+export function useState(initial: any) {
+  const control = (globalThis as any).__ssrState;
+  if (!control) return React.useState(initial);
+  const index = control.index++;
+  const [value] = React.useState(index in control.initial ? control.initial[index] : initial);
+  return [value, (action: unknown) => { control.sets.push({ index, action }); }];
+}`;
 
 /** props.children 에서 글자만 모은다(요소는 그 아이들을 이어서 모은다). */
 export function hostText(node) {
@@ -99,7 +108,15 @@ export async function createSsrHarness({ extraExports = [], stubs = {}, windowOv
   globalThis.__ssrCalls = calls;
   globalThis.__ssrHosts = hosts;
   globalThis.__ssrEffects = effects;
-  globalThis.window = originalWindow ?? {
+  /** 가장 최근 렌더에서 불린 setState 들: { index(렌더 안 useState 순서), action(값 또는 함수) } */
+  const stateSets = [];
+  const beginRender = (states) => {
+    hosts.length = 0;
+    effects.length = 0;
+    stateSets.length = 0;
+    globalThis.__ssrState = { index: 0, initial: states, sets: stateSets };
+  };
+  if (originalWindow === undefined) globalThis.window = {
     localStorage: {
       getItem: (key) => storage.get(key) ?? null,
       setItem: (key, value) => { storage.set(key, String(value)); },
@@ -145,19 +162,26 @@ export async function createSsrHarness({ extraExports = [], stubs = {}, windowOv
     findHosts(type, predicate = () => true) {
       return hosts.filter((host) => host.type === type && predicate(host.props));
     },
-    /** 컴포넌트를 그려 요소 트리로 돌려준다. */
-    render(component, props = {}) {
-      return this.renderElement(createElement(component, props));
+    /** 가장 최근 렌더 중·뒤에 불린 setState 기록(처리기가 상태를 바꾸려 했는지 볼 때 쓴다). */
+    stateSets,
+    /** setState 에 넘긴 값(또는 이전 값을 받는 함수)을 `current` 에 적용한 결과 */
+    applyStateAction(action, current) {
+      return typeof action === 'function' ? action(current) : action;
     },
-    html(component, props = {}) {
-      hosts.length = 0;
-      effects.length = 0;
+    /**
+     * 컴포넌트를 그려 요소 트리로 돌려준다.
+     * `states`: 렌더 안 useState 호출 순서(0부터)별 초기값. 예: `{ 0: true }` 는 첫 useState 를 true 로 시작한다(열린 메뉴 화면).
+     */
+    render(component, props = {}, { states = {} } = {}) {
+      return this.renderElement(createElement(component, props), { states });
+    },
+    html(component, props = {}, { states = {} } = {}) {
+      beginRender(states);
       return renderToStaticMarkup(createElement(component, props));
     },
     /** 이미 만든 React 요소(예: 클래스 컴포넌트 인스턴스의 render() 결과)를 그려 트리로 돌려준다. */
-    renderElement(element) {
-      hosts.length = 0;
-      effects.length = 0;
+    renderElement(element, { states = {} } = {}) {
+      beginRender(states);
       return parseHtml(renderToStaticMarkup(element));
     },
     /** 가장 최근 렌더에서 등록된 효과를 모두 실행한다. 돌려주는 객체의 cleanup() 은 효과들이 돌려준 정리 함수를 모두 부른다. */
@@ -176,6 +200,7 @@ export async function createSsrHarness({ extraExports = [], stubs = {}, windowOv
       delete globalThis.__ssrCalls;
       delete globalThis.__ssrHosts;
       delete globalThis.__ssrEffects;
+      delete globalThis.__ssrState;
       if (documentOverrides) {
         if (originalDocument === undefined) delete globalThis.document;
         else globalThis.document = originalDocument;
