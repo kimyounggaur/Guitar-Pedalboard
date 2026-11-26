@@ -1,41 +1,10 @@
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
 import { workerUrlStub } from './lib/esbuild-plugins.mjs';
-
-const effectSource = await readFile(
-  new URL('../src/audio/nodes/TremoloEffect.ts', import.meta.url),
-  'utf8',
-);
-
-assert.match(effectSource, /export const TREMOLO_LFO_BANK_SIZE = TREMOLO_SHAPES\.length;/);
-assert.match(effectSource, /export const TREMOLO_SQUARE_SLEW_SECONDS = 0\.001;/);
-assert.match(effectSource, /type: 'lowpass'/);
-assert.match(effectSource, /frequency: TREMOLO_SQUARE_SLEW_FREQUENCY/);
-assert.match(effectSource, /oscillator\.connect\(slewFilter\);/);
-assert.match(effectSource, /slewFilter\.connect\(modulationGain\);/);
-assert.match(effectSource, /modulationGain\.connect\(this\.amplitude\.gain\);/);
-assert.doesNotMatch(effectSource, /\.value\s*=/, 'AudioParam 직접 대입이 있습니다.');
-
-const updateStart = effectSource.indexOf('override update(');
-const disposeStart = effectSource.indexOf('override dispose(');
-assert.ok(updateStart >= 0 && disposeStart > updateStart, 'update/dispose 구현을 찾을 수 없습니다.');
-const updateSource = effectSource.slice(updateStart, disposeStart);
-assert.doesNotMatch(
-  updateSource,
-  /new\s+(?:Gain|Delay|Oscillator|StereoPanner|BiquadFilter)Node/,
-  'update 중 오디오 노드를 재생성합니다.',
-);
-assert.match(updateSource, /smoothParam\(this\.amplitude\.gain/);
-assert.match(updateSource, /smoothParam\(bank\.oscillator\.frequency/);
-assert.match(updateSource, /smoothParam\([\s\S]*bank\.modulationGain\.gain/);
-assert.match(effectSource, /const lfoStartTime = context\.currentTime;/);
-assert.match(effectSource, /oscillator\.start\(lfoStartTime\);/);
-assert.match(effectSource, /bank\.oscillator\.stop\(\);/);
-assert.match(effectSource, /if \(this\.disposed\) return;/);
+import { installFakeAudio } from './lib/fake-audio.mjs';
 
 const effectBundle = await build({
   entryPoints: [fileURLToPath(new URL('../src/audio/nodes/TremoloEffect.ts', import.meta.url))],
@@ -72,6 +41,7 @@ const defaultParams = {
 
 assert.deepEqual(TREMOLO_SHAPES, ['sine', 'triangle', 'square']);
 assert.equal(TREMOLO_LFO_BANK_SIZE, 3);
+assert.equal(TREMOLO_LFO_BANK_SIZE, TREMOLO_SHAPES.length, 'LFO 묶음 수는 모양 수와 같아야 한다');
 assert.equal(TREMOLO_SQUARE_SLEW_SECONDS, 0.001);
 assert.ok(Math.abs(TREMOLO_SQUARE_SLEW_FREQUENCY - 1 / (Math.PI * 2 * 0.001)) < 1e-12);
 assert.deepEqual(TREMOLO_DIVISION_BEATS, {
@@ -158,90 +128,9 @@ for (const depth of [Number.NaN, -1000, 0, 25, 50, 100, 1000]) {
   assert.ok(bounds.center + bounds.modulationDepth <= 1, `${depth}: upper modulation bound`);
 }
 
-class MockAudioParam {
-  constructor(value) {
-    this.value = value;
-  }
-
-  cancelScheduledValues() {}
-
-  cancelAndHoldAtTime() {}
-
-  setValueAtTime(value) {
-    this.value = value;
-  }
-
-  setTargetAtTime(value) {
-    this.value = value;
-  }
-
-  linearRampToValueAtTime(value) {
-    this.value = value;
-  }
-}
-
-class MockAudioNode {
-  constructor() {
-    this.connections = [];
-    this.disconnected = false;
-  }
-
-  connect(destination) {
-    this.connections.push(destination);
-    return destination;
-  }
-
-  disconnect() {
-    this.disconnected = true;
-    this.connections = [];
-  }
-}
-
-class MockGainNode extends MockAudioNode {
-  constructor(_context, options = {}) {
-    super();
-    this.gain = new MockAudioParam(options.gain ?? 1);
-  }
-}
-
-class MockBiquadFilterNode extends MockAudioNode {
-  constructor(_context, options = {}) {
-    super();
-    this.type = options.type ?? 'lowpass';
-    this.frequency = new MockAudioParam(options.frequency ?? 350);
-    this.Q = new MockAudioParam(options.Q ?? 1);
-  }
-}
-
-class MockOscillatorNode extends MockAudioNode {
-  constructor(_context, options = {}) {
-    super();
-    this.type = options.type ?? 'sine';
-    this.frequency = new MockAudioParam(options.frequency ?? 440);
-    this.startTimes = [];
-    this.stopCount = 0;
-  }
-
-  start(time) {
-    this.startTimes.push(time);
-  }
-
-  stop() {
-    this.stopCount += 1;
-  }
-}
-
-Object.assign(globalThis, {
-  GainNode: MockGainNode,
-  BiquadFilterNode: MockBiquadFilterNode,
-  OscillatorNode: MockOscillatorNode,
-});
-
-const context = {
-  currentTime: 0.25,
-  sampleRate: 48_000,
-  createGain: () => new MockGainNode(),
-};
+// 진짜 TremoloEffect 를 가짜 오디오 노드 위에서 돌린다(S4.7: 소스 글자 검사 대신 노드 그래프와 파라미터 기록을 본다).
+const fake = installFakeAudio();
+const context = fake.createContext({ currentTime: 0.25 });
 const pedal = {
   id: 'tremolo',
   type: 'tremolo',
@@ -269,14 +158,22 @@ assert.ok(squareBank.slewFilter, 'square slew filter가 없습니다.');
 assert.equal(squareBank.slewFilter.type, 'lowpass');
 assert.equal(squareBank.slewFilter.Q.value, 0.5);
 assert.equal(squareBank.slewFilter.frequency.value, TREMOLO_SQUARE_SLEW_FREQUENCY);
-assert.ok(squareBank.oscillator.connections.includes(squareBank.slewFilter));
-assert.ok(squareBank.slewFilter.connections.includes(squareBank.modulationGain));
-assert.ok(squareBank.modulationGain.connections.includes(effect.amplitude.gain));
-assert.ok(
-  originalBanks
-    .filter((bank) => bank.shape !== 'square')
-    .every((bank) => bank.oscillator.connections.includes(bank.modulationGain)),
-);
+// 사각파는 오실레이터 → 슬루 필터 → 변조 게인 → 진폭 게인의 gain 파라미터(진폭 변조), 나머지는 슬루 필터 없이 바로 변조 게인으로 간다.
+assert.ok(squareBank.oscillator.connectsTo(squareBank.slewFilter));
+assert.ok(!squareBank.oscillator.connectsTo(squareBank.modulationGain), '사각파가 슬루 필터를 건너뛰었다');
+assert.ok(squareBank.slewFilter.connectsTo(squareBank.modulationGain));
+assert.ok(squareBank.modulationGain.connectsTo(effect.amplitude.gain));
+for (const bank of originalBanks.filter((entry) => entry.shape !== 'square')) {
+  assert.ok(bank.oscillator.connectsTo(bank.modulationGain), `${bank.shape}: 오실레이터 → 변조 게인`);
+  assert.ok(bank.modulationGain.connectsTo(effect.amplitude.gain), `${bank.shape}: 변조 게인 → 진폭 게인의 gain`);
+  assert.equal(bank.slewFilter, null, `${bank.shape}: 슬루 필터 없음`);
+}
+// 입력 → 진폭 게인 → 출력 길이 이어져 있다(진폭 게인이 소리 길 위에 있다).
+assert.ok(fake.pathExists(effect.effectInput, effect.amplitude), '입력 → 진폭 게인');
+assert.ok(fake.pathExists(effect.amplitude, effect.effectOutput), '진폭 게인 → 출력');
+const nodesAfterBuild = fake.nodeCount;
+// 직접 대입은 BaseEffect 가 연결 전에 초기값을 놓을 때뿐이다(그 뒤로는 늘면 안 된다).
+const directAssignmentsAfterBuild = fake.directAssignments();
 
 effect.update({
   ...pedal,
@@ -288,6 +185,7 @@ effect.update({
     division: '1/16',
   },
 });
+assert.equal(fake.nodeCount, nodesAfterBuild, 'update 중 오디오 노드를 새로 만들었다');
 assert.equal(effect.lfoBanks, originalBanks, 'shape 변경 중 LFO bank가 교체되었습니다.');
 assert.ok(
   effect.lfoBanks.every((bank, index) => bank.oscillator === originalOscillators[index]),
@@ -297,6 +195,13 @@ assert.ok(effect.lfoBanks.every((bank) => bank.oscillator.frequency.value === 8)
 assert.equal(effect.amplitude.gain.value, 0.5);
 assert.deepEqual(effect.lfoBanks.map((bank) => bank.modulationGain.gain.value), [0, 0.5, 0]);
 
+// update 는 파라미터를 `.value =` 로 곧바로 쓰지 않고 예약 메서드로 부드럽게 옮긴다(곧바로 쓰면 클릭 소리가 난다).
+for (const param of [effect.amplitude.gain, ...effect.lfoBanks.flatMap((bank) => [bank.oscillator.frequency, bank.modulationGain.gain])]) {
+  assert.equal(param.directAssignments, 0, '파라미터에 직접 대입했다');
+  assert.equal(param.automation.at(-1).kind, 'target', 'update 의 마지막 쓰기는 setTargetAtTime 이어야 한다');
+}
+assert.equal(fake.directAssignments(), directAssignmentsAfterBuild, 'update 가 파라미터에 직접 대입했다');
+
 effect.update({
   ...pedal,
   params: { ...defaultParams, depth: 80, shape: 'square' },
@@ -305,17 +210,24 @@ assert.equal(effect.amplitude.gain.value, 0.6);
 assert.deepEqual(effect.lfoBanks.map((bank) => bank.modulationGain.gain.value), [0, 0, 0.4]);
 
 effect.dispose();
+const disconnectCountsAfterFirstDispose = fake.created().map((node) => node.disconnectCalls);
 effect.dispose();
-assert.ok(effect.amplitude.disconnected);
+assert.deepEqual(
+  fake.created().map((node) => node.disconnectCalls),
+  disconnectCountsAfterFirstDispose,
+  '두 번째 dispose 가 노드를 또 끊었다',
+);
+assert.ok(effect.amplitude.disconnectedAll);
 assert.ok(
   effect.lfoBanks.every(
     (bank) =>
-      bank.oscillator.stopCount === 1 &&
-      bank.oscillator.disconnected &&
-      bank.modulationGain.disconnected &&
-      (!bank.slewFilter || bank.slewFilter.disconnected),
+      bank.oscillator.stopTimes.length === 1 &&
+      bank.oscillator.disconnectedAll &&
+      bank.modulationGain.disconnectedAll &&
+      (!bank.slewFilter || bank.slewFilter.disconnectedAll),
   ),
 );
+assert.equal(fake.directAssignments(), directAssignmentsAfterBuild, '시험 내내 직접 대입이 늘면 안 된다');
 
 const migrationBundle = await build({
   plugins: [workerUrlStub],
