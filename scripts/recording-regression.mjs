@@ -2,50 +2,15 @@ import assert from 'node:assert/strict';
 import { Blob, Buffer, File } from 'node:buffer';
 import console from 'node:console';
 import { setImmediate } from 'node:timers';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath, URL } from 'node:url';
 import { build } from 'esbuild';
+import { openApp } from './lib/app-browser.mjs';
 import { workerUrlStub } from './lib/esbuild-plugins.mjs';
+import { byClass, byRole, byTag, find, findAll, hasClass, textContent } from './lib/html-tree.mjs';
+import { createSsrHarness, hostText } from './lib/ssr-harness.mjs';
 
-const [engineSource, storeSource, meterSource, appShellSource, cssSource] = await Promise.all([
-  readFile(new URL('../src/audio/AudioEngine.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/store/audioStore.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/Meter.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/AppShell.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/styles/panels.css', import.meta.url), 'utf8'),
-]);
-
-assert.match(engineSource, /createRecorderStream\(\): MediaStream/);
-assert.match(engineSource, /this\.context\.createMediaStreamDestination\(\)/);
-// 녹음은 스피커와 같은 리미터 출력(OutputStage.output)에서 갈라진다.
-assert.match(engineSource, /this\.outputStage\?\.output\.connect\(this\.recorderDestination\)/);
-assert.match(engineSource, /destination\.stream\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/);
-assert.match(storeSource, /disposeRecordingRuntime[\s\S]*audioEngine\.disposeRecorderStream\(\)/);
-assert.match(storeSource, /export type RecordingStatus = 'idle' \| 'recording' \| 'ready'/);
-assert.match(storeSource, /let activeRecorder: MediaRecorder \| null/);
-assert.match(storeSource, /let recordingChunks: Blob\[\]/);
-assert.match(storeSource, /let recordingTimer: number \| null/);
-assert.match(storeSource, /selectRecorderMimeType/);
-assert.match(storeSource, /revokeRecordingUrl\(state\.recordedUrl\)/);
-assert.match(storeSource, /setSelectedDevice:[\s\S]*finishActiveRecording\('finalize'\)/);
-assert.match(storeSource, /startFile:[\s\S]*finishActiveRecording\('finalize'\)/);
-// 정지 이유가 무엇이든 정리 절차는 하나다(S1.2): Panic 도 stopSession → AudioSession.stop 을 지나고,
-// 그 ③ 단계(finalizeRecording 포트)가 녹음을 마감한다.
-assert.match(storeSource, /panic:[\s\S]*stopSession\('panic'\)/);
-assert.match(storeSource, /async function finalizeRecordingForStop\(\)[\s\S]*finishActiveRecording\('finalize'\)/);
-assert.match(storeSource, /finalizeRecording: finalizeRecordingForStop/);
-assert.doesNotMatch(storeSource, /audioEngine\.panic\(|AudioEngine\.getInstance\(\)\.stop\(/);
-assert.match(storeSource, /audioEngine\.setHowlHandler/);
-assert.match(appShellSource, /useEffect\(\(\) => \(\) => disposeRecording\(\)/);
-for (const label of ['녹음', '정지', '다운로드']) {
-  assert.match(meterSource, new RegExp(`>\\s*${label}\\s*<\\/button>`));
-}
-assert.match(meterSource, /disabled=\{!selectedRecordingSupported \|\| !isRunning/);
-assert.match(meterSource, /disabled=\{recordingStatus !== 'recording'\}/);
-assert.match(meterSource, /aria-live="polite"/);
-assert.match(meterSource, /createRecordingFilename\(new Date\(\), recordedFormat\)/);
-assert.match(cssSource, /\.recording-panel/);
-assert.match(cssSource, /\.recording-actions/);
+// 아래에서 performance 를 시계 가짜로 바꾸므로 진짜는 따로 둔다(브라우저 검사의 fetch 는 진짜 performance 가 필요하다).
+const realPerformance = globalThis.performance;
 
 const helperBundle = await build({
   plugins: [workerUrlStub],
@@ -74,7 +39,7 @@ assert.equal(recordingFormatFromMime('video/mp4'), 'mp4');
 assert.equal(recordingFormatFromMime('audio/ogg;codecs=opus'), 'ogg');
 assert.equal(recordingFormatFromMime('audio/webm;codecs=opus'), 'webm');
 assert.equal(recordingFormatFromMime(''), 'unknown');
-assert.doesNotMatch(createRecordingFilename(new Date(2026, 8, 28), 'unknown'), /\.[a-z]+$/);
+assert.equal(createRecordingFilename(new Date(2026, 8, 28), 'unknown'), 'pedalboard-20260928-000000', '형식을 모르면 확장자를 붙이지 않는다');
 assert.equal(
   createRecordingFilename(new Date(2026, 8, 28, 7, 5, 9)),
   'pedalboard-20260928-070509.webm',
@@ -96,7 +61,7 @@ assert.equal(wavData.getInt16(44, true), -32768);
 assert.equal(wavData.getInt16(46, true), 32767);
 assert.equal(wavData.getInt16(50, true), 16384);
 assert.equal(wavData.getUint32(40, true) / wavData.getUint32(28, true), 2 / 48000);
-assert.match(createRecordingFilename(new Date(2026, 8, 28), 'wav'), /\.wav$/);
+assert.equal(createRecordingFilename(new Date(2026, 8, 28), 'wav'), 'pedalboard-20260928-000000.wav');
 assert.throws(() => encodePcmWav([new Float32Array(1)], 48000));
 
 class MockWavContext {
@@ -278,14 +243,16 @@ const destination = {
   stream: recorderStream,
   disconnect: () => (destinationDisconnects += 1),
 };
-const masterConnects = [];
-const master = {
-  gain: {
-    cancelScheduledValues() {},
-    setValueAtTime() {},
-  },
-  connect: (node) => masterConnects.push(node),
-  disconnect() {},
+// 녹음은 스피커와 같은 리미터 출력(OutputStage.output)에서 갈라진다 — 입력 쪽(input)에서 갈라지면 리미터 앞 소리가 녹음된다.
+const outputConnects = [];
+const inputConnects = [];
+const outputDisconnects = [];
+const gainParam = { cancelScheduledValues() {}, setValueAtTime() {} };
+const masterInput = { gain: gainParam, connect: (node) => inputConnects.push(node), disconnect() {} };
+const masterOutput = {
+  gain: gainParam,
+  connect: (node) => outputConnects.push(node),
+  disconnect: (node) => outputDisconnects.push(node),
 };
 engine.context = {
   state: 'running',
@@ -295,19 +262,28 @@ engine.context = {
     return destination;
   },
 };
-engine.outputStage = { input: master, output: master, dispose() {} };
+engine.outputStage = { input: masterInput, output: masterOutput, dispose() {} };
 let inputStops = 0;
 engine.stream = { getTracks: () => [{ stop: () => inputStops++ }] };
 assert.equal(engine.createRecorderStream(), recorderStream);
 assert.equal(engine.createRecorderStream(), recorderStream);
 assert.equal(destinationCreates, 1, 'recorder destination을 재사용하지 않았습니다.');
-assert.deepEqual(masterConnects, [destination]);
+assert.deepEqual(outputConnects, [destination], '녹음 입구는 리미터 출력에서 갈라진다');
+assert.deepEqual(inputConnects, [], '리미터 앞(입력 쪽)에서는 갈라지지 않는다');
 engine.stopInput();
 assert.equal(inputStops, 1, '정지 절차는 마이크 입력 트랙을 바로 멈춰야 합니다');
 assert.equal(recorderTrackStops, 0, '녹음 마감을 기다리는 동안 recorder 트랙은 살아 있어야 합니다');
 engine.disposeRecorderStream();
 assert.equal(recorderTrackStops, 1);
 assert.equal(destinationDisconnects, 1);
+assert.deepEqual(outputDisconnects, [destination], '녹음 입구를 출력에서 떼어 낸다');
+engine.disposeRecorderStream();
+assert.equal(recorderTrackStops, 1, '두 번째 해제는 아무 일도 하지 않는다');
+// 컨텍스트가 닫혔거나 없으면 녹음 스트림을 만들 수 없다.
+engine.context = { ...engine.context, state: 'closed' };
+assert.throws(() => engine.createRecorderStream());
+assert.equal(destinationCreates, 1);
+engine.context = { ...engine.context, state: 'running' };
 
 let streamRequests = 0;
 let engineStops = 0; // 정리 절차가 AudioContext 를 닫은 횟수
@@ -367,6 +343,13 @@ engine.disposeRecorderStream = () => {
   recorderStreamDisposals += 1;
 };
 
+// 정지 절차는 엔진을 직접 멈추지 않고 정리 절차(AudioSession.stop)를 지나야 한다 — 직접 부르면 아래 호출 기록이 늘어난다.
+let directEngineStopCalls = 0;
+engine.panic = () => { directEngineStopCalls += 1; };
+engine.stop = async () => { directEngineStopCalls += 1; };
+
+assert.equal(useAudioStore.getState().recordingStatus, 'idle', '처음 녹음 상태는 idle');
+assert.equal(useAudioStore.getState().recordedUrl, null);
 useAudioStore.setState({ isRunning: true, inputMode: 'device', error: null });
 assert.equal(useAudioStore.getState().recordingSupported, true);
 useAudioStore.getState().startRecording();
@@ -385,6 +368,7 @@ const firstUrl = useAudioStore.getState().recordedUrl;
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
 assert.equal(firstUrl, 'blob:recording-1');
 assert.equal(createdBlobs.at(-1).type, 'audio/webm;codecs=opus');
+assert.equal(createdBlobs.at(-1).size, 'recorded-audio'.length, '녹음 조각이 파일이 된다');
 assert.equal(intervals.size, 0);
 assert.equal(timeouts.size, 0);
 assert.equal(recorder.stopCalls, 1);
@@ -456,11 +440,12 @@ assert.equal(recorder.stopCalls, 1);
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
 assert.ok(useAudioStore.getState().recordedUrl);
 assert.equal(createdUrls.length, urlsBeforePanic + 1, 'Panic should save recorded audio');
+assert.equal(createdBlobs.at(-1).size, 'recorded-audio'.length, '이전 녹음의 조각이 남아 섞이지 않는다');
 assert.equal(toastMessages().length, 1);
-assert.match(toastMessages()[0], /긴급 정지했습니다\. 마이크와 오디오를 모두 껐습니다\./);
-assert.match(toastMessages()[0], /녹음은 저장했습니다\./);
+assert.equal(toastMessages()[0], '긴급 정지했습니다. 마이크와 오디오를 모두 껐습니다. 녹음은 저장했습니다.');
 assert.equal(useAudioStore.getState().error, null);
 
+assert.equal(typeof engine.howlHandler, 'function', '스토어가 하울링 처리기를 엔진에 연결한다');
 await useAudioStore.getState().start();
 useAudioStore.setState({ howlProtectionEnabled: true });
 useAudioStore.getState().startRecording();
@@ -472,8 +457,7 @@ assert.equal(engineStops, stopsBeforeHowl + 1);
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
 assert.ok(useAudioStore.getState().recordedUrl);
 assert.equal(toastMessages().length, 1);
-assert.match(toastMessages()[0], /하울링이 감지되어 정지했습니다\. 스피커 음량을 줄이거나 헤드폰을 쓰세요\./);
-assert.match(toastMessages()[0], /녹음은 저장했습니다\./);
+assert.equal(toastMessages()[0], '하울링이 감지되어 정지했습니다. 스피커 음량을 줄이거나 헤드폰을 쓰세요. 녹음은 저장했습니다.');
 assert.equal(useAudioStore.getState().error, null);
 
 useAudioStore.setState({ isRunning: true, inputMode: 'device', error: null });
@@ -496,8 +480,8 @@ recorder = MockMediaRecorder.instances.at(-1);
 recorder.mimeType = 'audio/mp4;codecs=mp4a.40.2';
 await useAudioStore.getState().stopRecording();
 assert.equal(useAudioStore.getState().recordedFormat, 'm4a');
-assert.match(createdBlobs.at(-1).type, /^audio\/mp4/);
-assert.match(createRecordingFilename(new Date(2026, 8, 28), useAudioStore.getState().recordedFormat), /\.m4a$/);
+assert.equal(createdBlobs.at(-1).type, 'audio/mp4;codecs=mp4a.40.2');
+assert.equal(createRecordingFilename(new Date(2026, 8, 28), useAudioStore.getState().recordedFormat), 'pedalboard-20260928-000000.m4a');
 useAudioStore.getState().startRecording();
 await useAudioStore.getState().stopRecording();
 assert.equal(useAudioStore.getState().recordedFormat, 'unknown');
@@ -513,7 +497,7 @@ recorder.stop = function () {
 };
 await useAudioStore.getState().stopRecording();
 assert.equal(useAudioStore.getState().recordedFormat, 'ogg');
-assert.match(createdBlobs.at(-1).type, /^audio\/ogg/);
+assert.equal(createdBlobs.at(-1).type, 'audio/ogg;codecs=opus');
 
 globalThis.AudioContext = ShortLimitContext;
 useAudioStore.setState({ isRunning: true, inputMode: 'device', error: null });
@@ -525,7 +509,7 @@ await new Promise((resolve) => setImmediate(resolve));
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
 assert.equal(useAudioStore.getState().recordedFormat, 'wav');
 assert.ok(useAudioStore.getState().recordedUrl);
-assert.match(useAudioStore.getState().error, /WAV 녹음 제한/);
+assert.equal(useAudioStore.getState().error, 'WAV 녹음 제한에 도달했거나 오디오를 시작할 수 없어 녹음을 종료했습니다.');
 useAudioStore.getState().disposeRecording();
 delete globalThis.AudioContext;
 
@@ -548,7 +532,7 @@ await settleStop(stopsBeforeDisconnect + 1);
 assert.equal(engineStops, stopsBeforeDisconnect + 1);
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
 assert.equal(toastMessages().length, 1);
-assert.match(toastMessages()[0], /입력 장치 연결이 끊겼습니다\. 장치를 다시 연결한 뒤 연결하기를 누르세요\./);
+assert.equal(toastMessages()[0], '입력 장치 연결이 끊겼습니다. 장치를 다시 연결한 뒤 연결하기를 누르세요. 녹음은 저장했습니다.');
 assert.equal(useAudioStore.getState().error, null);
 assert.equal(useAudioStore.getState().isRunning, false);
 engine.sessionGeneration += 1;
@@ -556,6 +540,7 @@ endedCallback();
 await new Promise((resolve) => setImmediate(resolve));
 assert.equal(engineStops, stopsBeforeDisconnect + 1);
 useAudioStore.getState().disposeRecording();
+assert.equal(directEngineStopCalls, 0, '연결 해제·Panic·하울링·장치 분실 모두 정리 절차를 지난다(엔진을 직접 멈추지 않는다)');
 
 // S2.10(설계서 4.12): 입력·출력 지연과 끊김 수는 브라우저가 1초마다 갱신하므로 1초마다만 다시 읽고, 처리 지연(켜진 페달 + 리미터)은 매번 읽는다.
 {
@@ -670,6 +655,257 @@ useAudioStore.getState().disposeRecording();
   await settleStop(stopsBeforeReset + 1);
   assert.equal(useAudioStore.getState().underrunCount, null, '정지하면 끊김 수가 비워진다');
   assert.equal(useAudioStore.getState().latency.sampleRate, 0, '정지하면 지연 읽음이 비워진다');
+}
+
+// ── 화면 계약: 녹음 패널(Meter)·정리(AppShell)·스타일 ─────────────────────────────────────────────────────────────
+// 소스를 글자로 읽지 않고, 화면을 실제로 그려(서버 렌더) 버튼·접근성 속성을 묻고, 처리기를 직접 불러 스토어가 바뀌는지 본다.
+const matchMediaStub = () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
+const meterHarness = await createSsrHarness({
+  extraExports: [
+    "{ useAudioStore } from './store/audioStore.ts'",
+    "{ Meter } from './components/Meter.tsx'",
+    "{ ko } from './i18n/ko.ts'",
+  ],
+  windowOverrides: { matchMedia: matchMediaStub },
+});
+{
+  const { useAudioStore: uiStore, Meter, ko: uiKo } = meterHarness.exports;
+  const BASE = {
+    recordingSupported: true,
+    recordingFormat: 'webm',
+    recordingStatus: 'idle',
+    recordedUrl: null,
+    recordedFormat: 'webm',
+    recordingElapsed: 0,
+    isRunning: false,
+  };
+  /** 주어진 상태에서 녹음 패널을 그려 버튼·문구를 요약한다. */
+  function panelFor(patch) {
+    const restore = meterHarness.serverState(uiStore, { ...BASE, ...patch });
+    try {
+      const tree = meterHarness.render(Meter, {});
+      const panel = find(tree, byClass('recording-panel'));
+      assert.ok(panel, '녹음 패널이 그려진다');
+      const group = find(panel, byRole('group'));
+      const buttons = findAll(group, byTag('button'));
+      const status = find(panel, (node) => node.tag === 'p' && hasClass(node, 'recording-status'));
+      const select = find(panel, byTag('select'));
+      return {
+        groupLabel: group.attrs['aria-label'],
+        labels: buttons.map((button) => textContent(button).trim()),
+        disabled: buttons.map((button) => 'disabled' in button.attrs),
+        status: textContent(status),
+        statusLive: status.attrs['aria-live'],
+        selectDisabled: 'disabled' in select.attrs,
+        panelText: textContent(panel),
+      };
+    } finally {
+      restore();
+    }
+  }
+
+  const idleOff = panelFor({});
+  assert.equal(idleOff.groupLabel, '마스터 출력 녹음');
+  assert.deepEqual(idleOff.labels, ['녹음', '정지', '다운로드']);
+  assert.deepEqual(idleOff.disabled, [true, true, true], '연결 전에는 세 버튼 모두 눌러지지 않는다');
+  assert.equal(idleOff.status, '녹음 대기');
+  assert.equal(idleOff.statusLive, 'polite', '상태 문구는 스크린 리더에 정중하게 알린다');
+  assert.equal(idleOff.selectDisabled, false);
+
+  const idleOn = panelFor({ isRunning: true });
+  assert.deepEqual(idleOn.disabled, [false, true, true], '연결되면 녹음만 눌러진다');
+
+  const recordingNow = panelFor({ isRunning: true, recordingStatus: 'recording', recordingElapsed: 75 });
+  assert.deepEqual(recordingNow.disabled, [true, false, true], '녹음 중에는 정지만 눌러진다');
+  assert.equal(recordingNow.status, '녹음 중 01:15');
+  assert.equal(recordingNow.selectDisabled, true, '녹음 중에는 형식을 바꿀 수 없다');
+
+  const ready = panelFor({ isRunning: true, recordingStatus: 'ready', recordingElapsed: 5, recordedUrl: 'blob:take-1' });
+  assert.deepEqual(ready.disabled, [false, true, false], '녹음이 끝나면 다운로드가 눌러진다');
+  assert.equal(ready.status, '녹음 완료 00:05 · WEBM');
+  assert.equal(panelFor({ recordingStatus: 'ready', recordedUrl: 'blob:take-1' }).disabled[2], false, '연결이 끊겨도 받아 둔 녹음은 내려받을 수 있다');
+  assert.equal(
+    panelFor({ recordingStatus: 'ready', recordedUrl: 'blob:take-1', recordedFormat: 'unknown' }).status,
+    '녹음 완료 00:00 · 파일 형식 확인 불가 (확장자 없음)',
+  );
+  assert.equal(
+    panelFor({ recordingStatus: 'ready', recordedUrl: 'blob:take-1', recordedFormat: 'm4a', recordingElapsed: 61 }).status,
+    '녹음 완료 01:01 · M4A',
+  );
+
+  // 지원 여부는 '고른 형식' 기준이다: 압축 녹음은 MediaRecorder, WAV 는 ScriptProcessor 가 있어야 한다.
+  const unsupported = panelFor({ isRunning: true, recordingSupported: false });
+  assert.equal(unsupported.status, uiKo.meter.recordingUnsupported);
+  assert.equal(unsupported.status, '이 브라우저에서는 녹음을 지원하지 않습니다.');
+  assert.equal(unsupported.disabled[0], true, '지원하지 않으면 연결돼 있어도 녹음 버튼이 꺼진다');
+  assert.ok(unsupported.panelText.includes('압축 녹음 형식은 브라우저에 따라'), '압축 녹음 안내가 보인다');
+  assert.equal(unsupported.panelText.includes('WAV 녹음은 최대 2분'), false);
+
+  assert.equal(typeof globalThis.AudioContext, 'undefined');
+  const wavWithoutProcessor = panelFor({ isRunning: true, recordingFormat: 'wav', recordingSupported: true });
+  assert.equal(wavWithoutProcessor.disabled[0], true, 'ScriptProcessor 가 없으면 WAV 녹음은 꺼진다(압축 지원 여부와 무관)');
+  assert.equal(wavWithoutProcessor.status, uiKo.meter.recordingUnsupported);
+  assert.ok(wavWithoutProcessor.panelText.includes('WAV 녹음은 최대 2분'), 'WAV 안내가 보인다');
+  assert.equal(wavWithoutProcessor.panelText.includes('압축 녹음 형식은 브라우저에 따라'), false);
+
+  globalThis.AudioContext = class { createScriptProcessor() {} };
+  try {
+    const wavSupportedPanel = panelFor({ isRunning: true, recordingFormat: 'wav', recordingSupported: false });
+    assert.equal(wavSupportedPanel.disabled[0], false, 'WAV 는 압축 녹음 지원 여부와 무관하게 ScriptProcessor 만 있으면 된다');
+    assert.equal(wavSupportedPanel.status, '녹음 대기');
+  } finally {
+    delete globalThis.AudioContext;
+  }
+
+  // 처리기: 버튼이 스토어의 녹음 시작·정지를 부르고, 다운로드는 만든 링크로 파일 이름을 정해 내려받는다.
+  const uiCalls = [];
+  const handlerPatch = {
+    ...BASE,
+    isRunning: true,
+    recordingStatus: 'recording',
+    recordedUrl: 'blob:take-1',
+    recordedFormat: 'webm',
+    startRecording: () => uiCalls.push('start'),
+    stopRecording: async () => { uiCalls.push('stop'); },
+  };
+  const restoreHandlers = meterHarness.serverState(uiStore, handlerPatch);
+  const RealDate = globalThis.Date;
+  const links = [];
+  const originalDocument = globalThis.document;
+  try {
+    meterHarness.render(Meter, {});
+    const buttonByLabel = (label) => meterHarness.findHost('button', (props) => hostText(props.children).trim() === label);
+    buttonByLabel('녹음').props.onClick();
+    await buttonByLabel('정지').props.onClick();
+    assert.deepEqual(uiCalls, ['start', 'stop'], '녹음 버튼은 시작, 정지 버튼은 정지를 부른다');
+
+    globalThis.Date = class extends RealDate {
+      constructor(...args) { super(...(args.length ? args : [2026, 8, 28, 7, 5, 9])); }
+    };
+    globalThis.document = {
+      createElement(tag) {
+        const link = { tag, href: '', download: '', clicks: 0, click() { this.clicks += 1; } };
+        links.push(link);
+        return link;
+      },
+    };
+    buttonByLabel('다운로드').props.onClick();
+    assert.equal(links.length, 1);
+    assert.deepEqual([links[0].tag, links[0].href, links[0].download, links[0].clicks], ['a', 'blob:take-1', 'pedalboard-20260928-070509.webm', 1]);
+
+    // 형식은 지금 고른 형식이 아니라 '녹음된 파일의 형식'을 따른다.
+    restoreHandlers();
+    const restoreUnknown = meterHarness.serverState(uiStore, { ...handlerPatch, recordingFormat: 'wav', recordedFormat: 'unknown' });
+    try {
+      meterHarness.render(Meter, {});
+      buttonByLabel('다운로드').props.onClick();
+      assert.equal(links[1].download, 'pedalboard-20260928-070509', '형식을 모르면 확장자 없는 이름');
+    } finally {
+      restoreUnknown();
+    }
+    const restoreEmpty = meterHarness.serverState(uiStore, { ...handlerPatch, recordedUrl: null });
+    try {
+      meterHarness.render(Meter, {});
+      buttonByLabel('다운로드').props.onClick();
+      assert.equal(links.length, 2, '받을 녹음이 없으면 링크를 만들지 않는다');
+    } finally {
+      restoreEmpty();
+    }
+  } finally {
+    globalThis.Date = RealDate;
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+    restoreHandlers();
+  }
+}
+meterHarness.restore();
+
+// AppShell 이 닫히면(unmount) 녹음 정리를 한 번 부른다 — 열린 Blob URL 과 녹음 스트림을 남기지 않는다.
+const shellHarness = await createSsrHarness({
+  extraExports: [
+    "{ useAudioStore } from './store/audioStore.ts'",
+    "{ AppShell } from './components/AppShell.tsx'",
+  ],
+  stubs: {
+    'components/HistoryControls': 'export function HistoryControls() { return null; }',
+    'components/ChainText': 'export function ChainText() { return null; }',
+    'components/ConnectGuitarPanel': 'export function ConnectGuitarPanel() { return null; }',
+    'components/GlobalKeyboardShortcuts': 'export function GlobalKeyboardShortcuts() { return null; }',
+    'components/Meter': 'export function Meter() { return null; }',
+    'components/MidiReconnectBanner': 'export function MidiReconnectBanner() { return null; }',
+    'components/PedalBoard': 'export function PedalBoard() { return null; }',
+    'components/PresetPanel': 'export function PresetPanel() { return null; }',
+  },
+  windowOverrides: {
+    matchMedia: matchMediaStub,
+    addEventListener() {},
+    removeEventListener() {},
+  },
+});
+{
+  const { useAudioStore: shellStore, AppShell } = shellHarness.exports;
+  const shellCalls = [];
+  const original = shellStore.getState();
+  const patch = {
+    connectSavedMidi: async () => {},
+    disposeMidi: () => {},
+    disposeRecording: () => { shellCalls.push('disposeRecording'); },
+  };
+  shellStore.setState(patch);
+  const restoreShell = shellHarness.serverState(shellStore, patch);
+  globalThis.document = { documentElement: { style: { setProperty() {}, removeProperty() {} } } };
+  try {
+    shellHarness.render(AppShell);
+    const mounted = shellHarness.runEffects();
+    assert.deepEqual(shellCalls, [], '화면이 떠 있는 동안에는 녹음을 정리하지 않는다');
+    mounted.cleanup();
+    assert.deepEqual(shellCalls, ['disposeRecording'], '화면이 닫히면 녹음 정리를 정확히 한 번 부른다');
+  } finally {
+    delete globalThis.document;
+    restoreShell();
+    shellStore.setState({ connectSavedMidi: original.connectSavedMidi, disposeMidi: original.disposeMidi, disposeRecording: original.disposeRecording });
+    shellHarness.restore();
+  }
+}
+
+// 스타일은 브라우저가 계산한 값으로 본다(소스 글자가 아니라 실제로 그렇게 보이는지).
+Object.defineProperty(globalThis, 'performance', { configurable: true, value: realPerformance });
+await verifyRecordingPanelInBrowser();
+
+async function verifyRecordingPanelInBrowser() {
+  const app = await openApp({ purpose: '녹음 패널 스타일', waitFor: '.recording-panel' });
+  if (!app) return;
+  try {
+    const layout = await app.evaluate(`(() => {
+      const panel = document.querySelector('.recording-panel');
+      const actions = panel.querySelector('.recording-actions');
+      const buttons = [...actions.querySelectorAll('button')];
+      const panelStyle = getComputedStyle(panel);
+      const actionStyle = getComputedStyle(actions);
+      return {
+        panelDisplay: panelStyle.display,
+        panelRadius: panelStyle.borderTopLeftRadius,
+        actionsDisplay: actionStyle.display,
+        columns: actionStyle.gridTemplateColumns.split(' ').length,
+        labels: buttons.map((button) => button.textContent.trim()),
+        heights: buttons.map((button) => Math.round(button.getBoundingClientRect().height)),
+        widths: buttons.map((button) => Math.round(button.getBoundingClientRect().width)),
+        panelWidth: Math.round(panel.getBoundingClientRect().width),
+        disabled: buttons.map((button) => button.disabled),
+      };
+    })()`);
+    assert.equal(layout.panelDisplay, 'grid');
+    assert.equal(layout.panelRadius, '8px');
+    assert.equal(layout.actionsDisplay, 'grid');
+    assert.equal(layout.columns, 3, '녹음·정지·다운로드가 한 줄 세 칸');
+    assert.deepEqual(layout.labels, ['녹음', '정지', '다운로드']);
+    assert.ok(layout.heights.every((height) => height >= 36), `버튼 높이 36px 이상: ${layout.heights}`);
+    assert.ok(Math.max(...layout.widths) - Math.min(...layout.widths) <= 1, `세 칸의 너비가 같다: ${layout.widths}`);
+    assert.ok(layout.widths.reduce((sum, width) => sum + width, 0) <= layout.panelWidth, '버튼이 패널 밖으로 나가지 않는다');
+    assert.deepEqual(layout.disabled, [true, true, true], '연결 전에는 세 버튼이 모두 꺼져 있다');
+  } finally {
+    await app.close();
+  }
 }
 
 console.log(
