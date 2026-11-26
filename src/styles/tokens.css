@@ -19,6 +19,12 @@
   --warning: #f0b84b;
   --shadow: 0 18px 55px rgba(0, 0, 0, 0.34);
   --pedal-density: 0.86;
+  /* S4.5 글자 크기·잉크 토큰: 모든 글자는 --fs-min(11px) 이상, 라벨 12px, 값 13px. */
+  --fs-min: 11px;
+  --fs-label: 12px;
+  --fs-value: 13px;
+  --c-text-on-light: #1f2430;
+  --c-text-on-dark: #e8ecf3;
 }
 
 * {

@@ -35,7 +35,7 @@ const PEDALS: ReadonlyArray<{ name: string; type: EffectType }> = [
   { name: 'Reverb', type: 'reverb' },
 ];
 
-const pedalGroup = (page: Page, name: string): Locator => page.getByRole('group', { name: `${name} 이펙터`, exact: true });
+const pedalGroup = (page: Page, name: string): Locator => page.getByRole('region', { name: `${name} 이펙터`, exact: true });
 const sliderOf = (card: Locator, label: string): Locator => card.getByRole('slider', { name: label, exact: true });
 /** 슬라이더와 같은 조절기 안에 있는 값 표시(<output>). */
 const outputOf = (slider: Locator): Locator => slider.locator('xpath=ancestor::div[1]').locator('output');

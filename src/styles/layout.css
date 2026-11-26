@@ -372,7 +372,7 @@ h2 {
 
 .preset-library-list small {
   color: var(--ink-muted);
-  font-size: 0.66rem;
+  font-size: var(--fs-min);
   line-height: 1.2;
 }
 
@@ -384,7 +384,7 @@ h2 {
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.14);
   color: #aebbd0;
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-style: normal;
   font-weight: 900;
 }
@@ -417,7 +417,7 @@ h2 {
 
 .preset-search span {
   color: var(--ink-muted);
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -505,7 +505,7 @@ h2 {
 
 .section-heading .preset-load-button small {
   color: var(--ink-muted);
-  font-size: 0.68rem;
+  font-size: var(--fs-min);
   line-height: 1.25;
 }
 
@@ -670,12 +670,19 @@ h2 {
   bottom: 0;
   z-index: 41;
   width: min(440px, 94vw);
+  /* 서랍은 화면 높이로 고정이라 안의 내용이 더 길다. 행이 자동 크기면 '넘치면 안 보이는 칸'(프리셋 브라우저: min-height 0 + overflow hidden)의 행이 0 으로 접혀 프리셋 UI 가 통째로 사라진다. 행을 내용 높이로 못 박는다. */
+  grid-auto-rows: max-content;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 10px 12px 28px;
   border-left: 1px solid var(--border);
   background: #0d131c;
   box-shadow: -20px 0 48px rgba(0, 0, 0, 0.55);
+}
+
+/* 행을 내용 높이로 두면 프리셋 목록이 전부 펼쳐져 서랍이 몇 천 px 로 길어진다. 목록은 칸 안에서 스크롤한다. */
+.sidebar.is-drawer .preset-list {
+  max-height: 320px;
 }
 
 .sidebar-drawer-close {

@@ -1,4 +1,4 @@
-/* Keep parameter names and values readable at the default browser text size. */
+/* S4.5: 매개변수 이름(라벨)은 12px 이상 — 값은 아래 type-scale.css 에서 13px 로 올린다. */
 :is(.compressor-knob, .compressor-knob output, .fuzz-knob, .reverb-knob,
     .reverb-knob output, .graphic-eq-fader output, .vertical-fader-label,
     .vertical-fader output, .tap-tempo-button kbd, .tap-tempo-status,
@@ -8,7 +8,7 @@
     .auto-wah-ui .knob-control-head, .preset-tabs em, .preset-tool-title,
     .sidebar .preset-load-button span, .preset-library-list small,
     .preset-library-list em, .preset-search span) {
-  font-size: max(0.6875rem, 11px);
+  font-size: var(--fs-label);
   line-height: 1.2;
 }
 
@@ -71,13 +71,13 @@
   border-radius: 4px;
   background: #fff;
   color: #111;
-  font: 500 11px/1.2 system-ui, sans-serif;
+  font: 500 var(--fs-value)/1.2 system-ui, sans-serif;
   text-align: center;
 }
 
 :is(.noise-gate-knob, .tube-knob, .crunch-knob, .fuzz-knob, .delay-knob) output {
   color: currentColor;
-  font: 700 11px/1.2 system-ui, sans-serif;
+  font: 700 var(--fs-value)/1.2 system-ui, sans-serif;
 }
 
 @media (max-width: 767px) {

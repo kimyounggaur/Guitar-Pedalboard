@@ -163,7 +163,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
   return (
     <section className={`side-panel connect-panel${compact ? ' is-connected' : ''}`}>
       {isMobile && !isMobileNoticeDismissed ? (
-        <aside className="mobile-audio-notice" aria-label="모바일 오디오 안내">
+        <div className="mobile-audio-notice" role="note" aria-label="모바일 오디오 안내">
           <p>
             <span>모바일은 입력 지연이 커서 실시간 연주에 적합하지 않습니다.</span>
             <span>
@@ -177,7 +177,7 @@ export function ConnectGuitarPanel({ isMobile = false }: ConnectGuitarPanelProps
           >
             닫기
           </button>
-        </aside>
+        </div>
       ) : null}
 
       {compact ? (

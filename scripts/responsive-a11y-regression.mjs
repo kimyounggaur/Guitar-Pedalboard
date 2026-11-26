@@ -148,7 +148,7 @@ assert.match(connectSource, /safeStorage\.getRaw\(STORAGE_KEYS\.mobileAudioNotic
 assert.match(connectSource, /safeStorage\.setRaw\(STORAGE_KEYS\.mobileAudioNotice, 'true'\)/);
 assert.match(connectSource, /aria-label="모바일 오디오 안내 닫기"/);
 
-assert.match(pedalCardSource, /<article[\s\S]*role="group"[\s\S]*aria-label=\{`\$\{pedal\.name\} 이펙터`\}/);
+assert.match(pedalCardSource, /<section[\s\S]*aria-label=\{`\$\{pedal\.name\} 이펙터`\}/);
 assert.match(delaySource, /ariaValueText=\{delayModeLabels\[params\.mode\]\}/);
 assert.match(delaySource, /<div className="delay-led" aria-hidden="true" \/>/);
 assert.doesNotMatch(delaySource, /delay-led[^>]*aria-label/);

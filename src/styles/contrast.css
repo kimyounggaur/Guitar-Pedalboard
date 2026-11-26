@@ -1,0 +1,177 @@
+/* ============================================================================
+   S4.5 글자 대비(설계서 4.9절, 보고서 R4-5)
+   - 페달 면(카드 바탕) 하나에 글자 잉크 하나(--pedal-ink)를 정해, 그 면 위의 라벨·값·표시 글자에 통일해서 쓴다.
+   - 일반 글자 대비 4.5:1 이상. 면 색은 같은 계열을 유지하되, 그 잉크가 닿는 가장 밝거나 어두운 지점에서도
+     4.5:1 을 넘도록 그라데이션 끝 색만 조정했다. 측정은 e2e/helpers/text-metrics.ts(E-21).
+   - 이 파일은 pedals.css·controls.css 보다 뒤에 오므로 같은 특이도에서 이긴다.
+   ============================================================================ */
+
+/* 면 → 잉크. 어두운 잉크는 중간 밝기 이상의 면, 밝은 잉크는 어두운 면에 쓴다. */
+.pedal-card.pedal-card-compressor { --pedal-ink: #0a1620; }
+.pedal-card.pedal-card-reverb { --pedal-ink: #04100f; }
+.pedal-card.pedal-card-eq { --pedal-ink: #ffffff; }
+.pedal-card.pedal-card-crunch { --pedal-ink: #ffffff; }
+.pedal-card.pedal-card-cab { --pedal-ink: #f8f1e5; }
+.pedal-card.pedal-card-chorus { --pedal-ink: #0a1d26; }
+.pedal-card.pedal-card-flanger { --pedal-ink: #0a1430; }
+.pedal-card.pedal-card-phaser { --pedal-ink: #1c0b2e; }
+.pedal-card.pedal-card-tremolo { --pedal-ink: #28180a; }
+.pedal-card.pedal-card-auto-wah { --pedal-ink: #0f1d08; }
+.pedal-card.pedal-card-graphic-eq { --pedal-ink: #f4f7fc; }
+
+/* 면 바탕 색 보정(같은 계열, 그라데이션 끝만 조정) */
+.pedal-card-compressor { background-color: #1898e4; }
+.pedal-card-eq { background-color: #006c35; }
+.pedal-card-crunch { background-color: #aa1f1b; }
+.pedal-card-cab {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.08), transparent 34%),
+    linear-gradient(180deg, #6b5c49 0%, #594c3c 48%, #4a3f32 100%);
+}
+.pedal-card-chorus {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.2), transparent 34%),
+    linear-gradient(180deg, #6cb0c6 0%, #5da0b8 48%, #5599b0 100%);
+}
+.pedal-card-flanger {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.2), transparent 34%),
+    linear-gradient(180deg, #86a2d8 0%, #7898d2 48%, #6e90cc 100%);
+}
+.pedal-card-phaser {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.2), transparent 34%),
+    linear-gradient(180deg, #b78bdc 0%, #ae7ed5 48%, #a878d1 100%);
+}
+.pedal-card-tremolo {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.24), transparent 34%),
+    linear-gradient(180deg, #e4b265 0%, #d89c4e 48%, #c4843f 100%);
+}
+.pedal-card-auto-wah {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.25), transparent 34%),
+    linear-gradient(180deg, #93cd5d 0%, #7bb347 48%, #5f9b35 100%);
+}
+.pedal-card-graphic-eq {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.16), transparent 34%),
+    linear-gradient(180deg, #4a5873 0%, #3e4a65 48%, #2e394f 100%);
+}
+
+/* 면 위의 글자 — 잉크 통일 */
+:is(.pedal-card-compressor, .pedal-card-reverb, .pedal-card-eq, .pedal-card-crunch, .pedal-card-cab,
+    .pedal-card-chorus, .pedal-card-flanger, .pedal-card-phaser, .pedal-card-tremolo, .pedal-card-auto-wah,
+    .pedal-card-graphic-eq).pedal-card {
+  color: var(--pedal-ink);
+}
+
+:is(.pedal-card-compressor, .pedal-card-reverb, .pedal-card-eq, .pedal-card-crunch, .pedal-card-cab,
+    .pedal-card-chorus, .pedal-card-flanger, .pedal-card-phaser, .pedal-card-tremolo, .pedal-card-auto-wah,
+    .pedal-card-graphic-eq).pedal-card :is(
+  .pedal-kicker, .pedal-header h2, .drag-handle,
+  .knob-control-head, .knob-control-head > span, .knob-control-head output,
+  .toggle-switch > span, .select-control > span, .control-row > span, .control-row output,
+  .reverb-knob > span, .reverb-knob output, .reverb-title,
+  .crunch-knob > span, .crunch-knob output, .graphic-eq-fader > span, .graphic-eq-fader output,
+  .vertical-fader-label, .stomp-toggle-label, .stomp-toggle-label output,
+  .midi-mapping-status, .tap-tempo-status, .tap-tempo-status output, legend,
+  .cab-model-control > span, .cab-custom-ir, .cab-custom-ir label, .cab-custom-ir p, .cab-custom-ir small,
+  .cab-mic-legend, .cab-mic-legend span, .cab-range-control > span
+) {
+  color: var(--pedal-ink);
+  text-shadow: none;
+}
+
+/* 페달 안의 따로 칠한 판(그라데이션 끝 색이 아니라 판 자체의 바탕)에 맞춘 잉크 */
+.pedal-card.pedal-card-eq .graphic-eq-fader > span,
+.pedal-card.pedal-card-eq .graphic-eq-fader output { color: #04120a; }
+.pedal-card-eq .preset-buttons .text-button { color: var(--pedal-ink); }
+
+/* 밝은 면 위의 손잡이(::)는 어두운 면에서는 밝은 글자, 밝은 면에서는 어두운 글자 + 면 색을 따라가는 반투명 바탕 */
+.pedal-card-eq .drag-handle,
+.pedal-card-graphic-eq .drag-handle,
+.pedal-card-cab .drag-handle,
+.pedal-card-crunch .drag-handle { background: rgba(0, 0, 0, 0.34); }
+.pedal-card-compressor .drag-handle,
+.pedal-card-reverb .drag-handle,
+.pedal-card-chorus .drag-handle,
+.pedal-card-flanger .drag-handle,
+.pedal-card-phaser .drag-handle,
+.pedal-card-tremolo .drag-handle,
+.pedal-card-auto-wah .drag-handle { background: rgba(255, 255, 255, 0.34); }
+
+/* 밝은 면 페달의 이름판: 바탕을 어둡게 눌러 둔 것을 밝은 반투명으로 바꾸고 글자는 잉크 그대로 */
+:is(.chorus-brand-plate, .flanger-brand-plate, .phaser-brand-plate, .tremolo-brand-plate, .auto-wah-brand-plate) {
+  background: rgba(255, 255, 255, 0.24);
+}
+:is(.chorus-brand-plate, .flanger-brand-plate, .phaser-brand-plate, .tremolo-brand-plate, .auto-wah-brand-plate) :is(strong, span) {
+  color: var(--pedal-ink);
+  text-shadow: none;
+}
+.pedal-card-chorus .chorus-voice-selector { background: rgba(255, 255, 255, 0.22); }
+.pedal-card-chorus .chorus-voice-selector legend { color: var(--pedal-ink); }
+
+/* 드라이브 이름판은 밝은 판이라 어두운 글자 */
+.tube-brand-plate span { color: #1f2430; text-shadow: none; }
+
+/* 켜짐/꺼짐 눈금 글자(CHECK) — 어두운 판 위는 밝게, 밝은 회색 면 위는 어둡게 */
+.compressor-check-row span { color: #ff6b63; }
+.fuzz-check-row span { color: #7d0c0c; }
+.pedal-card-fuzz .pedal-kicker { color: #2b3032; }
+
+/* Delay Sync·Reverb Trails 같은 스위치 이름 */
+.pedal-card-delay .toggle-switch > span { color: #0b1014; }
+
+/* 오토 와 수동 노브는 쓰지 않는 모드에서 '노브만' 흐리게 하고 글자는 그대로 둔다(글자까지 흐리면 대비가 깨진다) */
+.auto-wah-manual-inactive,
+.auto-wah-manual-inactive:focus-within,
+.auto-wah-manual-inactive:hover { opacity: 1; }
+.auto-wah-manual-inactive .knob-control-shell { opacity: 0.48; transition: opacity 140ms ease; }
+.auto-wah-manual-inactive:focus-within .knob-control-shell,
+.auto-wah-manual-inactive:hover .knob-control-shell { opacity: 0.72; }
+
+/* 공통 */
+.performance-status > i { color: #8fa0b6; }
+.danger-button { color: #1f2430; }
+
+/* 고르지 않은 선택 버튼(Chorus 보이스 수, Auto Wah 모드): 판 위에서 4.5:1 이 되도록 글자는 진하게, 바탕은 면 색에 맞춘다 */
+.chorus-voice-selector button:not([aria-pressed="true"]) {
+  background: rgba(6, 35, 46, 0.7);
+  color: #f4fcff;
+}
+.auto-wah-mode-selector button:not([aria-pressed="true"]) {
+  background: rgba(255, 255, 255, 0.3);
+  color: #0f1d08;
+}
+
+/* MIDI 매핑 상태 글자는 카드 맨 아래(안쪽 그림자가 면을 어둡게 하는 자리)에 있다.
+   면 색에 기대지 않도록 글자 바로 뒤에 면 색과 반대로 칠한 얇은 판을 깐다. */
+.pedal-card .midi-mapping-status {
+  padding: 0 5px;
+  border-radius: 5px;
+}
+:is(.pedal-card-drive, .pedal-card-noise-gate, .pedal-card-fuzz, .pedal-card-delay, .pedal-card-compressor,
+    .pedal-card-reverb, .pedal-card-chorus, .pedal-card-flanger, .pedal-card-phaser, .pedal-card-tremolo,
+    .pedal-card-auto-wah).pedal-card .midi-mapping-status {
+  background: rgba(255, 255, 255, 0.4);
+}
+:is(.pedal-card-eq, .pedal-card-crunch, .pedal-card-cab, .pedal-card-graphic-eq).pedal-card .midi-mapping-status {
+  background: rgba(0, 0, 0, 0.32);
+}
+
+/* EQ 아래쪽 판(프리셋 단추·Mix)은 면보다 밝게 칠해져 있어 흰 글자가 4.5:1 에 못 미쳤다 — 면보다 어둡게 눌러 준다 */
+.pedal-card-eq .graphic-eq-utility-controls { background: rgba(0, 0, 0, 0.16); }
+
+/* Tremolo 파형 선택(고르지 않은 단추): 밝은 반투명 판 + 잉크 */
+.tremolo-shape-selector button:not([aria-pressed="true"]) {
+  background: rgba(255, 255, 255, 0.3);
+  color: #28180a;
+}
+
+/* Phaser 'Stages' 범례: 칸 배경(어두운 보라 반투명)이 면 색을 눌러 3.77:1 이었다 — 범례에만 밝은 알약 바탕을 깐다. */
+.pedal-card-phaser .phaser-stage-selector legend {
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.4);
+  color: #1c0b2e;
+}
