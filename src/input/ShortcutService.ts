@@ -50,6 +50,16 @@ export function isEscapeOwnedByTarget(target: EventTarget | null): boolean {
 }
 
 /**
+ * 실행 취소·다시 실행(Ctrl/⌘ + Z)을 그 컨트롤 자신이 먼저 써야 하는 대상인지(S5.3). 글자·숫자를 고치는 칸은 입력 취소가 그 칸의 몫이고,
+ * 열린 목록·메뉴·대화상자 안에서는 뒤에 있는 페달을 건드리지 않는다.
+ * 버튼·페달 스위치·노브(range)·슬라이더에 포커스가 있을 때는 단축키가 통한다. 노브를 끌고 나면 포커스가 그 노브의 range 입력에 남는데
+ * (`useKnobDrag` 가 포커스를 준다), 입력 칸을 모두 막으면 '끌고 나서 Ctrl+Z' 가 아무 일도 하지 않는다.
+ */
+export function isUndoOwnedByTarget(target: EventTarget | null): boolean {
+  return isEscapeOwnedByTarget(target);
+}
+
+/**
  * 포커스 위치 때문에 이 단축키를 막을지. 숫자·Space·T·A/B 는 컨트롤이 먼저 쓰므로 컨트롤에 포커스가 있으면 막지만,
  * 긴급 정지(Esc)는 컨트롤에 포커스가 있어도 통한다. 막는 것은 Esc 를 자기 일에 쓰는 곳(위)과 한글 조합 취소뿐이다.
  */

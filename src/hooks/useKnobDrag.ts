@@ -1,4 +1,5 @@
 import { useRef, type MouseEvent, type PointerEvent } from 'react';
+import { beginHistoryGesture, endHistoryGesture } from '../store/historyStore';
 
 /** 이만큼(px) 끌면 전체 범위를 지난다. */
 export const KNOB_DRAG_RANGE_PX = 200;
@@ -95,6 +96,8 @@ export function useKnobDrag(
         touch,
         mode: touch && touchAxis === 'x' ? 'pending' : 'drag',
       };
+      // 누르는 순간부터 떼는 순간까지가 실행 취소 한 단계다(S5.3). 누르기만 하고 값이 안 바뀌면 단계가 생기지 않는다.
+      beginHistoryGesture();
     },
     onPointerMove(event: PointerEvent<HTMLElement>) {
       const start = drag.current;
@@ -132,6 +135,7 @@ export function useKnobDrag(
       const start = drag.current;
       if (start?.pointerId !== event.pointerId) return;
       drag.current = null;
+      endHistoryGesture();
       if (!start.touch || start.mode !== 'pending') return;
       // 움직이지 않고 뗀 손가락 — 짧은 시간 안에 같은 자리를 두 번 누르면 기본값으로 되돌린다(더블탭).
       const now = event.timeStamp;
@@ -145,6 +149,12 @@ export function useKnobDrag(
     },
     onPointerCancel() {
       drag.current = null;
+      endHistoryGesture();
+    },
+    onLostPointerCapture() {
+      // 캡처를 잃었는데 끌기가 남아 있다면(요소가 바뀌었거나 브라우저가 가져갔다) 끝난 것으로 본다.
+      drag.current = null;
+      endHistoryGesture();
     },
     onDoubleClick(event: MouseEvent<HTMLElement>) {
       if (defaultValue === undefined || rangeInside(event.currentTarget)?.disabled) return;

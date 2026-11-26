@@ -2472,3 +2472,44 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - `setMasterVolume` 이 체인 재구성 페이드 구간에 끼어들 수 있다(이전부터).
 
 ---
+
+## S5.3 실행 취소·다시 실행
+
+- 브랜치·병합: `refactor/s5-3-undo-redo` → `phase/5`. 커밋: `94b6470`(체인 페이드·trim fadeParam + test:chain-fade), `a697ef2`(끌기 단위 묶기·단축키 대상 + 단위 시험), `64aba89`(e2e 6개)
+- 해결 항목: R5-3(RX-3). 'S2.8 토스트와 같은 구조'로 합치지는 않았다(L-355). 써 보며 찾은 세 결함을 고쳤다 — 노브 포커스에서 Ctrl+Z 무시(L-356), 시간 기준 묶기(L-357), 구조 변경 되돌리기·trim 클릭(L-358).
+- 변경 파일(`git diff --shortstat phase/5 HEAD`, 이 문서 커밋 전): 11 files changed, 686 insertions(+), 19 deletions(-). 제품 — `src/store/historyStore.ts`(끌기 묶기)·`src/hooks/useKnobDrag.ts`(끌기 신호)·`src/components/HistoryControls.tsx`(단축키 대상·안전장치)·`src/input/ShortcutService.ts`(`isUndoOwnedByTarget`)·`src/audio/AudioEngine.ts`(체인 페이드·trim 을 `fadeParam` 으로). 시험 — `scripts/chain-fade-regression.mjs` 신설, `history-regression`·`shortcuts-regression`·`preset-loudness-regression` 수정, `e2e/tests/s5-3-undo-redo.spec.ts` 신설. `package.json` 스크립트 1줄.
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| 노브 끌기 1회는 실행 취소 1번에 돌아온다 | **충족** | 700 ms 멈춘 실제 끌기 → Ctrl+Z 한 번 → 처음 값, Shift+Ctrl+Z → 끝 값(e2e), 단위 시험 9가지 |
+| 프리셋 불러오기도 되돌릴 수 있다 | **충족** | 버튼 포커스에서 Ctrl+Z → 페달·음량 보정 함께 복원, 다시 실행(e2e), 50단계 한도(단위) |
+| 되돌릴 때 오디오 클릭이 없다 | **구조 변경·trim 충족**, 값만 되돌리기는 이펙터 스무딩에 맡김 | 실제 Chrome 렌더: 체인 페이드·trim 표본 간 변화 0.0288 = 신호 기울기(옛 방식 0.900·0.379) |
+
+**전후**
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| 노브를 끌고 Ctrl+Z (포커스가 노브) | 값 92 → 92, 아무 일 없음 | 처음 값으로 돌아옴 |
+| 끌다가 700 ms 멈춤 | 실행 취소 두 번 필요 | 한 번 |
+| 체인 페이드(8 ms) 표본 간 최대 변화(220 Hz 사인) | 0.900(계단 두 번) | 0.0288(신호 기울기) |
+| trim 1 → 0.5 (30 ms) | 0.379 | 0.0288 |
+| `npm test` | 55개 통과(S5.2, 602초) | 56개 통과(642초) |
+| 전체 e2e | 346개(S5.2, 24.5분) | 352개(26.2분) 모두 통과(실패 0, 재시도 없음) |
+| 프로브 | 30개, 값 2,468개 | 그대로 — `npm test` 안의 `test:probe` 통과(체인 페이드·trim 은 프로브가 거치지 않는 실시간 경로) |
+
+- 검증(최종 커밋 위에서)
+  - `npx tsc -b --noEmit`·`npx tsc -p tsconfig.e2e.json --noEmit`·`npx eslint e2e`·`npm run build`·`npm run lint` 오류 0, 정규식 단언 목록 그대로(0곳), `npm test` 56개 통과.
+  - 전체 e2e 352개 모두 통과(실패 0, 재시도 없음).
+  - **새 검사가 정말 잡는지**: 체인 페이드 변이 9/9, 단위 변이 12/12(처음 2개가 살아남아 시험을 보강한 뒤), e2e 변이 7/7(L-359).
+- 만난 문제
+  - 처음 계획은 '끌기 묶기'만이었으나 실제 브라우저로 재 보니 키 자체가 죽어 있었고(L-356) 구조 변경 되돌리기에 클릭이 있었다(L-358). 둘 다 설계의 수용 기준에 걸린다.
+  - 켜고 끄기(우회)는 체인 연결을 바꾸지 않아 체인 페이드가 없다 — 처음 시험은 이를 연결 변경으로 잘못 가정해 실패했고, 순서 바꾸기를 구조 변경 예로 쓰도록 고쳤다.
+  - `preset-loudness-regression` 이 옛 trim 예약 순서(`hold → ramp`)를 못박고 있어 새 순서에 맞췄다.
+- 사람 확인 필요
+  - 실제 소리로 순서 바꾸기·프리셋 전환·되돌리기의 클릭, 휴대폰 터치 끌기 후 [실행 취소], 맥 ⌘+Z·한글 자판, 끌기 도중 실행 취소 무시가 어색하지 않은지.
+- 남은 위험
+  - F-5(`rampParam` 계단)는 입력 게인·`InputStage` 램프·리버브 웻 페이드·`BaseEffect.setRoutingParam` 에 남아 있다.
+  - `setMasterVolume` 이 체인 재구성 페이드 구간에 끼어들 수 있다(이전부터).
+  - 끌기 도중 실행 취소를 무시하므로, 끝 신호를 영영 못 받는 이상 상황에서는 다음 포인터 끝(창 전체 안전장치)까지 실행 취소가 막힌다.
+
+---

@@ -388,7 +388,9 @@ try {
   const events = [];
   const gain = {
     value: 1,
-    cancelAndHoldAtTime: (time) => events.push(['hold', time]),
+    // S5.3: 램프는 fadeParam 으로 건다 — 앞선 예약을 지우고, 지금 값을 못 박은 뒤, 직선 램프(cancelAndHoldAtTime 은 Chrome 에서 계단이 된다).
+    cancelScheduledValues: (time) => events.push(['cancel', time]),
+    setValueAtTime: (value, time) => events.push(['set', value, time]),
     linearRampToValueAtTime: (value, time) => events.push(['ramp', value, time]),
   };
   const savedContext = engine.context;
@@ -397,10 +399,11 @@ try {
   engine.outputStage = { presetTrim: { gain }, input: { gain: {} }, output: {}, dispose() {} };
   try {
     engine.setPresetTrimDb(6);
-    assert.deepEqual(events[0], ['hold', 2]);
-    assert.equal(events[1][0], 'ramp');
-    assert.ok(Math.abs(events[1][1] - 10 ** (6 / 20)) < 1e-12, '+6 dB 는 이득 1.995');
-    assert.ok(Math.abs(events[1][2] - (2 + spec.PRESET_TRIM_RAMP_SECONDS)) < 1e-12, '30 ms 램프');
+    assert.deepEqual(events[0], ['cancel', 2]);
+    assert.deepEqual(events[1], ['set', 1, 2], '지금 값(1)에서 출발하도록 못 박는다');
+    assert.equal(events[2][0], 'ramp');
+    assert.ok(Math.abs(events[2][1] - 10 ** (6 / 20)) < 1e-12, '+6 dB 는 이득 1.995');
+    assert.ok(Math.abs(events[2][2] - (2 + spec.PRESET_TRIM_RAMP_SECONDS)) < 1e-12, '30 ms 램프');
     engine.setPresetTrimDb(99);
     assert.ok(Math.abs(events.at(-1)[1] - 10 ** (24 / 20)) < 1e-12, '한도 +24 dB');
     engine.setPresetTrimDb(Number.NaN);
