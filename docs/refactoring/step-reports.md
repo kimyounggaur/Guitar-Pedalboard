@@ -2599,3 +2599,25 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
 - 남은 위험: 저장하지 않은 녹음(`ready`)은 이탈 경고가 없다(설계 범위 밖). 실제 휴대폰의 화면 꺼짐 방지는 미확인.
 
 ---
+
+## 배포 후속 — CI 에서 드러난 E-21 실패(S4.5 수정)
+
+- 브랜치·병합: `fix/e21-contrast-bg-pick` → `main`. 커밋: `c718efc`, `e0076bf`
+- 계기: 사용자가 main 병합·푸시·배포를 요청했다. main 병합(`dfb3e63`)·푸시 뒤 `Deploy GitHub Pages` 가 e2e 의 E-21 ② 9개 화면 실패로 멈췄다(L-375). deploy 단계는 실행되지 않아 사이트는 이전 그대로.
+- 변경 파일(`git diff --shortstat main HEAD`, 이 문서 커밋 전): 3 files changed, 93 insertions(+), 10 deletions(-). 제품 — `src/styles/contrast.css`(컴프레서 그림자 알파·코러스 ENSEMBLE 색). 시험 — `e2e/helpers/text-metrics.ts`(`pickBackground`), `e2e/tests/e00-harness.spec.ts`(3개).
+
+| 실패 | 원인 | 처리 |
+|---|---|---|
+| 'ENVELOPE SWEEP'·'AMPLITUDE PULSE' 1.00:1(9개 화면) | **측정 오류**: 글로우 위 배경이 색 칸 여러 개로 갈라져 한 칸이 10 % 미만, 글자 자신이 배경으로 뽑힘. 실제 7.4:1 | `pickBackground` 로 규칙 추가(먼 픽셀이 절반 이상이면 그 가운데 가장 큰 칸). DejaVu Sans·FreeSans 로 재현해 고침 확인 |
+| 컴프레서 'ON' 4.37:1(1366×768·1440×900) | **실제 값**: 낮은 화면에서 바닥 11 px 위, 안쪽 그림자에 눌린 면 | 그림자 알파 0.42 → 0.18 |
+| (같은 점검에서 발견) 코러스 'ENSEMBLE' 4.51:1 | 문턱과 0.01 차 | 글자색 #ecfbff → #ffffff(4.76:1) |
+
+- 검증(수정 커밋 위에서)
+  - `npx tsc -b --noEmit`·`npx tsc -p tsconfig.e2e.json --noEmit`·`npx eslint e2e`·`npm run build`·`npm run lint` 오류 0, 정규식 단언 목록 그대로, `npm test` 58개 통과(613초).
+  - 전체 e2e 379개 중 378 통과·1 실패 — S4.3 ① 노브 시간(4 ms 기준)이 이 기계가 느려진 시점에 4.4~4.9 ms. 수정 전 CSS 로도 같아 수정과 무관(L-378).
+  - E-21 ② 9개 화면: 기본 글꼴·DejaVu Sans 강제 모두 통과. `pickBackground` 변이 5개 모두 잡음.
+- 만난 문제: 실패 산출물(스크린샷)을 내려받을 수 없어 CI 와 같은 렌더를 보지 못했다. 로그의 위반 문구(색 값까지 같음)와 글꼴을 바꾼 로컬 재현으로 갈음했다.
+- 사람 확인 필요: 컴프레서 아래쪽 그림자가 옅어진 모양, 코러스 'ENSEMBLE' 흰색. 수정판의 GitHub 러너 결과는 Actions 기록에서.
+- 남은 위험: CI 환경을 그대로 재현하지 못했다. S4.3 ① 은 절대 시간 기준이라 느린 러너에서 다시 막을 수 있다.
+
+---
