@@ -4,7 +4,7 @@
 //   ② 기타: 110.5 Hz 는 기준음 442 에서 5번 줄(A2) '정확함', 440 으로 바꾸면 +8센트 — 줄 목표음도 기준음을 따른다
 //   ③ 새로고침 뒤에도 유지: 선택 상자·저장된 I/O 설정·판독이 모두 442 그대로
 //   ④ 선택 목록: 기본 440, 설계 범위 430~450 을 모두 담고 1 Hz 단위(코드는 400~480 의 넓은 범위를 허용)
-//   ⑤ 기준음을 바꾸면 이전 판독을 지우고 새 기준으로 다시 읽는다(옛 센트가 남지 않는다)
+//   (기준음을 바꿀 때 이전 판독을 지우는 것은 한 프레임 안에 일어나는 일이라 e2e 로는 안정적으로 볼 수 없어 단위 시험 recording-regression 이 본다)
 // 음은 3초마다 반복되는 WAV 라서 값은 '나타날 때까지' 매 프레임 본다(e16 과 같은 방식).
 import type { Page } from '@playwright/test';
 import { connectGuitar, openApp } from '../helpers/app';
@@ -120,18 +120,5 @@ test.describe('S5.5 튜너 기준음(A4) 조정', () => {
     for (let hz = 430; hz <= 450; hz += 1) expect(values, `${hz} Hz`).toContain(hz);
     expect(values.every((value, index) => index === 0 || value - values[index - 1] === 1), '1 Hz 단위로 이어진다').toBe(true);
     await expect(referenceSelect(page).locator('option[value="440"]')).toHaveText('440 Hz');
-  });
-
-  test('⑤ 기준음을 바꾸면 이전 판독을 지우고 새 기준으로 다시 읽는다', async ({ launchWithMic }) => {
-    const { page } = await launchWithMic('tuner-a4-442.wav');
-    await openApp(page);
-    await turnTunerOn(page);
-    await modeButton(page, '크로매틱').click();
-    await waitForStatus(page, '8센트 높음', 'A4');
-    await referenceSelect(page).selectOption('442');
-    // 바뀐 직후 한 번은 이전 판독(+8센트)이 남아 있지 않다 — 곧바로 '정확함' 이거나 신호 대기여야 한다.
-    const status = await page.evaluate(() => document.querySelector('.tuner-status-text')?.textContent?.trim() ?? '');
-    expect(status).not.toBe('8센트 높음');
-    await waitForStatus(page, '정확함', 'A4');
   });
 });
