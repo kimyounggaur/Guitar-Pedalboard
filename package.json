@@ -64,6 +64,7 @@
     "test:file-mode": "node scripts/file-mode-regression.mjs",
     "test:cdp-client": "node scripts/cdp-client-regression.mjs",
     "test:cabinet-response": "node scripts/cabinet-response-analysis.mjs",
+    "test:test-system": "node scripts/test-system-guard.mjs",
     "test:probe": "node scripts/audio-render-probe.mjs",
     "probe": "node scripts/audio-render-probe.mjs",
     "trims": "node scripts/compute-preset-trims.mjs",

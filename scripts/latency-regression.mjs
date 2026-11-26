@@ -313,7 +313,7 @@ assert.equal(formatLatency({ ...atThreshold, input: atThreshold.input + 0.1 }).a
 for (const needle of ['유선 헤드폰', '블루투스', '다른 오디오 앱', '48 kHz', '노트북 전원']) assert.ok(LATENCY_ADVICE.includes(needle), `안내에 '${needle}'`);
 assert.ok(LATENCY_ADVICE.startsWith('지연을 줄이려면:'));
 const everyText = [LATENCY_ADVICE, UNDERRUN_UNAVAILABLE_REASON, display.headline, ...formatLatency(full).items.map((item) => item.text)];
-for (const text of everyText) assert.ok(!/asio/i.test(text), `'ASIO' 가 화면 문구에 없다: ${text}`);
+for (const text of everyText) assert.ok(!text.toLowerCase().includes('asio'), `'ASIO' 가 화면 문구에 없다: ${text}`);
 assert.ok(UNDERRUN_UNAVAILABLE_REASON.includes('playbackStats'), '측정 불가의 이유를 말한다');
 
 // ---------------------------------------------------------------------------------------------
@@ -404,7 +404,7 @@ const meterSource = await read('src/components/Meter.tsx');
 const connectSource = await read('src/components/ConnectGuitarPanel.tsx');
 const readme = await read('README.md');
 for (const [name, source] of [['Meter.tsx', meterSource], ['ConnectGuitarPanel.tsx', connectSource], ['README.md', readme]]) {
-  assert.ok(!/asio/i.test(source), `${name} 에 ASIO 안내가 없다`);
+  assert.ok(!source.toLowerCase().includes('asio'), `${name} 에 ASIO 안내가 없다`);
 }
 assert.ok(meterSource.includes('formatLatency(latency)'), 'Meter 는 formatLatency 로 문구를 만든다(합계와 항목이 같은 계산에서 나온다)');
 assert.ok(meterSource.includes('UNDERRUN_UNAVAILABLE_REASON'), '측정 불가의 이유를 툴팁으로 보인다');

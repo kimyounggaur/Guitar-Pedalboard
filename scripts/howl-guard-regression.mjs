@@ -5,18 +5,20 @@
 //      L-44 보강(새 음 재시작·기준 음 붙들기·기울기 앞 프레임 제외)이 왜 필요한지 '글자 그대로' 판정과 비교해 기록한다.
 //   4. level-meter / output-guard 워클릿: 실제 파일을 esbuild 로 묶어 오디오 스레드를 흉내 낸 vm 에서 돌린다.
 //   5. levelReading / MonitorService / monitorStore: 화면·세션 쪽 순수 계산과 메시지 처리.
-//   6. 소스 단언: 워클릿이 화면·시계 API 에 기대지 않는다(C1), 옛 문자열 워클릿이 없다, 엔진 배선.
+//   6. 배선: 묶음에 실제로 들어가는 파일로 계층을 확인하고(워클릿은 화면·시계 API 에 기대지 않는다, C1), 진짜 AudioEngine·audioStore 를
+//      가짜 오디오 위에서 돌려 가드 입력 연결·미터·차단 → 정지 절차·측정값 전달을 확인한다(S4.7 이전에는 소스 정규식 14개였다).
 // 소리가 실제로 어떻게 나는지(렌더 결과)는 오디오 렌더 프로브 P-07/P-17 이 잰다. 실기기 하울링은 사람이 확인한다.
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, URL } from 'node:url';
 import vm from 'node:vm';
 import { build } from 'esbuild';
+import { createEngineHarness } from './lib/engine-harness.mjs';
 
 const root = (relative) => fileURLToPath(new URL(`../${relative}`, import.meta.url));
-const read = (relative) => readFileSync(root(relative), 'utf8');
 /** vm 안에서 만든 객체는 프로토타입이 달라 deepStrictEqual 이 거절한다. JSON 으로 바깥 영역의 평범한 값으로 바꾼다. */
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const near = (actual, expected, tolerance, message) =>
@@ -64,7 +66,7 @@ function loadProcessor(code, sampleRate) {
   const state = { currentFrame: 0 };
   const registered = [];
   let Processor;
-  vm.runInNewContext(code, {
+  const sandbox = {
     sampleRate,
     get currentFrame() {
       return state.currentFrame;
@@ -79,7 +81,16 @@ function loadProcessor(code, sampleRate) {
       registered.push(name);
       Processor = klass;
     },
-  });
+  };
+  // C1: 판정·측정은 화면·탭·문서 상태나 시계에 기대지 않는다. 이 이름들은 건드리는 순간 던지는 전역으로 둔다(typeof 도 던진다).
+  for (const name of ['document', 'window', 'requestAnimationFrame', 'setTimeout', 'setInterval', 'performance', 'visibilityState', 'navigator']) {
+    Object.defineProperty(sandbox, name, {
+      get() {
+        throw new Error(`오디오 스레드 코드가 ${name} 를 건드렸다`);
+      },
+    });
+  }
+  vm.runInNewContext(code, sandbox);
   return { Processor, registered, state };
 }
 
@@ -618,6 +629,19 @@ for (const [label, options] of [
   assert.deepEqual(Array.from(left.subarray(length - 4096)), Array.from(program.subarray(length - 4096)), `${label}: 끝까지 그대로다`);
 }
 
+// 판정은 출력(프로그램) 입력의 레벨·내용을 보지 않는다(설계서 4.3). 같은 하울링 음이 프로그램 입력으로만 들어오면 판정하지 않고, 분석 입력으로 들어오면 판정한다.
+{
+  const length = samplesFor(48000, 3);
+  const howl = tone(48000, 1000, 0.3, 3);
+  const programOnly = createGuard({ mode: 'device' });
+  const heard = runGuard(programOnly, length, { program: [howl, howl], analysis: [] });
+  assert.equal(messagesOf(programOnly, 'howl-suspect').length + messagesOf(programOnly, 'howl-cut').length, 0, '프로그램 입력만으로는 의심도 차단도 없다');
+  assert.deepEqual(Array.from(heard.left.subarray(length - 2048)), Array.from(howl.subarray(length - 2048)), '프로그램 소리는 끝까지 그대로 지난다');
+  const analysed = createGuard({ mode: 'device' });
+  runGuard(analysed, length, { program: [], analysis: [howl, howl] });
+  assert.equal(messagesOf(analysed, 'howl-cut').length, 1, '같은 음이 분석 입력(입력 1)으로 들어오면 판정한다');
+}
+
 // arm 명령: 켜고 끄기. 다시 켤 때 이전 입력 이력을 비운다.
 {
   const guard = createGuard({ mode: 'off' });
@@ -892,48 +916,153 @@ for (const [label, options] of [
 }
 
 // ---------------------------------------------------------------------------------------------
-// 6. 소스 단언
+// 6. 배선: 계층(묶음에 실제로 들어가는 파일) · 엔진 연결 · 차단 → 정지 절차 · 측정값 전달
 // ---------------------------------------------------------------------------------------------
 {
   assert.equal(existsSync(root('src/audio/worklets/howl-guard-processor.ts')), false, '문자열로 들고 있던 옛 하울링 가드는 없다');
-  const withoutComments = (source) => source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/.*$/gm, '');
-  const importsOf = (source) => [...source.matchAll(/from\s+'([^']+)'/g)].map((match) => match[1]).sort();
 
-  // 순수 모듈 층: guardSpec 은 import 가 없고, 판정기는 guardSpec 만, 워클릿은 둘만 가져온다(앱 코드·스토어를 모른다).
-  assert.deepEqual(importsOf(read('src/audio/engine/guardSpec.ts')), [], 'guardSpec.ts 는 값만 있는 순수 모듈이다');
-  assert.deepEqual(importsOf(read('src/audio/monitor/howlDetector.ts')), ['../engine/guardSpec'], '판정기는 guardSpec 만 쓴다');
-  assert.deepEqual(importsOf(read('src/audio/worklets/output-guard.worklet.ts')), ['../engine/guardSpec', '../monitor/howlDetector'], 'output-guard 는 guardSpec 과 판정기만 쓴다');
-  assert.deepEqual(importsOf(read('src/audio/worklets/level-meter.worklet.ts')), ['../engine/guardSpec'], 'level-meter 는 guardSpec 만 쓴다');
-  assert.deepEqual(importsOf(read('src/audio/monitor/levelReading.ts')).filter((from) => !from.startsWith('..')), [], 'levelReading 은 외부 패키지를 쓰지 않는다');
-  assert.doesNotMatch(read('src/audio/monitor/MonitorService.ts'), /from '\.\.\/\.\.\/store|from 'zustand'|useMonitorStore/, 'MonitorService 는 저장소를 직접 부르지 않는다(sink 로 내보낸다)');
+  // 순수 모듈 층: esbuild 가 실제로 묶은 파일 목록으로 본다(import 문 글자가 아니라 해석된 의존). 앱 코드·스토어를 모른다.
+  const bundledFiles = async (entry) => {
+    const result = await build({
+      entryPoints: [root(entry)],
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      target: 'node20',
+      write: false,
+      metafile: true,
+      logLevel: 'silent',
+    });
+    return Object.keys(result.metafile.inputs).map((file) => file.replace(/\\/g, '/')).sort();
+  };
+  assert.deepEqual(await bundledFiles('src/audio/engine/guardSpec.ts'), ['src/audio/engine/guardSpec.ts'], 'guardSpec.ts 는 값만 있는 순수 모듈이다');
+  assert.deepEqual(
+    await bundledFiles('src/audio/monitor/howlDetector.ts'),
+    ['src/audio/engine/guardSpec.ts', 'src/audio/monitor/howlDetector.ts'],
+    '판정기는 guardSpec 만 쓴다',
+  );
+  assert.deepEqual(
+    await bundledFiles('src/audio/worklets/output-guard.worklet.ts'),
+    ['src/audio/engine/guardSpec.ts', 'src/audio/monitor/howlDetector.ts', 'src/audio/worklets/output-guard.worklet.ts'],
+    'output-guard 는 guardSpec 과 판정기만 쓴다',
+  );
+  assert.deepEqual(
+    await bundledFiles('src/audio/worklets/level-meter.worklet.ts'),
+    ['src/audio/engine/guardSpec.ts', 'src/audio/worklets/level-meter.worklet.ts'],
+    'level-meter 는 guardSpec 만 쓴다',
+  );
+  const levelReadingFiles = await bundledFiles('src/audio/monitor/levelReading.ts');
+  assert.ok(!levelReadingFiles.some((file) => file.startsWith('node_modules/')), 'levelReading 은 외부 패키지를 쓰지 않는다');
+  const monitorServiceFiles = await bundledFiles('src/audio/monitor/MonitorService.ts');
+  assert.ok(
+    !monitorServiceFiles.some((file) => file.startsWith('src/store/') || file.startsWith('node_modules/')),
+    'MonitorService 는 저장소(zustand)를 직접 부르지 않는다(sink 로 내보낸다)',
+  );
 
-  // C1: 판정·측정은 화면·탭·문서 상태에 기대지 않는다
-  // `this.window`(분석 창 배열)나 `window:` 필드는 전역 window 가 아니므로 점·콜론이 붙은 것은 거른다.
-  const forbidden = /(?<![.\w])(document|window|requestAnimationFrame|setTimeout|setInterval|performance|visibilityState|navigator)(?![\w:])/;
-  for (const file of ['src/audio/worklets/output-guard.worklet.ts', 'src/audio/worklets/level-meter.worklet.ts', 'src/audio/monitor/howlDetector.ts']) {
-    const code = withoutComments(read(file));
-    assert.doesNotMatch(code, forbidden, `${file}: 오디오 스레드 코드는 화면·시계 API 를 쓰지 않는다`);
+  // 엔진 배선: 진짜 AudioEngine 과 audioStore 가 같은 묶음에서 돈다(audioStore 가 불러올 때 엔진에 건 훅이 그대로 살아 있다).
+  const harness = await createEngineHarness({
+    extraExports: [
+      "{ useAudioStore } from './store/audioStore.ts'",
+      "{ AudioSession } from './audio/engine/AudioSession.ts'",
+      "{ readInputLevel, readOutputLevel } from './store/monitorStore.ts'",
+      "{ registerWorklets } from './audio/offline/workletModules.ts'",
+      "{ GUARD_ANALYSIS_INPUT } from './audio/engine/monitorNodes.ts'",
+    ],
+  });
+  const { engine, fake, context, exports: app } = harness;
+  const guardInput = app.GUARD_ANALYSIS_INPUT;
+  assert.equal(guardInput, 1, '입력 0 = 프로그램, 입력 1 = 분석 전용(설계서 4.3)');
+  const deviceStream = {
+    getAudioTracks: () => [{ getSettings: () => ({ channelCount: 1 }), addEventListener() {}, removeEventListener() {} }],
+    getTracks: () => [],
+  };
+
+  // 장치(마이크) 모드: 입력 트림 뒤 → 가드 입력 1(분석), 가드는 device 모드로 만들어지고, 레벨 미터는 입력·출력 두 곳이다.
+  engine.stream = deviceStream;
+  const deviceSource = new fake.classes.GainNode(context);
+  engine.createProcessingGraph(deviceSource);
+  assert.ok(engine.inputGain.connectsTo(engine.outputGuard, { output: 0, input: guardInput }), '입력 트림 뒤 → 가드 입력 1(분석)');
+  assert.ok(!engine.inputGain.connectsTo(engine.outputGuard, { input: 0 }), '분석 입력이 프로그램 입력(0)으로 들어가지 않는다');
+  assert.ok(engine.outputStage.input.connectsTo(engine.outputGuard, { output: 0, input: 0 }), '프로그램은 마스터 게인에서 가드 입력 0 으로 간다');
+  assert.ok(engine.outputGuard.connectsTo(engine.outputStage.limiter), '가드 → 리미터');
+  assert.equal(engine.outputGuard.processorName, spec.OUTPUT_GUARD_PROCESSOR_NAME);
+  assert.equal(engine.outputGuard.options.processorOptions.mode, 'device', '마이크 입력이면 가드는 device 모드로 만들어진다');
+  const meters = fake.created('AudioWorkletNode').filter((node) => node.processorName === spec.LEVEL_METER_PROCESSOR_NAME);
+  assert.deepEqual(meters.map((node) => node.options.processorOptions.tap).sort(), ['in', 'out'], '입력·출력 미터 두 곳');
+  assert.equal(engine.inputTap, meters.find((node) => node.options.processorOptions.tap === 'in'));
+  assert.equal(engine.outputTap, meters.find((node) => node.options.processorOptions.tap === 'out'));
+  assert.ok(deviceSource.connectsTo(engine.inputTap), '소스 → 입력 레벨 미터');
+  assert.ok(engine.outputStage.limiter.connectsTo(engine.outputTap), '리미터 → 출력 레벨 미터');
+
+  // 측정값 전달: 미터 워클릿이 보낸 레벨이 엔진의 sink 를 거쳐 monitorStore 로 간다.
+  engine.inputTap.port.onmessage({ data: { type: 'level', tap: 'in', rmsDb: [-20], peakDb: [-6.0206], clipped: false, frame: 4800 } });
+  engine.outputTap.port.onmessage({ data: { type: 'level', tap: 'out', rmsDb: [-10], peakDb: [-3], clipped: false, frame: 4800 } });
+  near(app.readInputLevel(0).db, -20, 1e-9, '입력 측정값이 화면 저장소에 닿는다');
+  near(app.readOutputLevel(0).db, -10, 1e-9, '출력 측정값이 화면 저장소에 닿는다');
+
+  // 파일 재생·보호 끔: 분석 입력을 잇지 않고, 가드는 각각 file · off 모드다.
+  engine.stream = null;
+  const fileSource = new fake.classes.GainNode(context);
+  engine.createProcessingGraph(fileSource);
+  assert.ok(!engine.inputGain.connectsTo(engine.outputGuard), '파일 재생은 분석 입력을 잇지 않는다');
+  assert.equal(engine.outputGuard.options.processorOptions.mode, 'file');
+  engine.stream = deviceStream;
+  engine.setHowlProtection(false);
+  engine.createProcessingGraph(new fake.classes.GainNode(context));
+  assert.equal(engine.outputGuard.options.processorOptions.mode, 'off', '보호를 끄면 마이크 입력이어도 판정하지 않는다');
+  engine.setHowlProtection(true);
+
+  // 워클릿 등록: 엔진도 오프라인 렌더도 level-meter · output-guard 파일을 올리고, 옛 이름은 남기지 않았다.
+  const engineBlobs = await harness.loadWorklets();
+  for (const name of ['level-meter', 'output-guard']) {
+    assert.ok(harness.workletModules.includes(`/assets/${name}.worklet.js`), `라이브 엔진도 ${name} 를 등록한다`);
   }
+  const offlineModules = [];
+  await app.registerWorklets(fake.createContext({ audioWorklet: { addModule: async (url) => { offlineModules.push(url); } } }));
+  for (const name of ['level-meter', 'output-guard']) {
+    assert.ok(offlineModules.includes(`/assets/${name}.worklet.js`), `오프라인 렌더에도 ${name} 가 등록된다`);
+  }
+  assert.ok(
+    !engineBlobs.some(({ text }) => text.includes('howl-guard') || text.includes('howlGuard')),
+    '문자열 워클릿 어디에도 옛 하울링 가드 이름이 없다',
+  );
+  // 그래프에 만든 워클릿 노드의 이름은 모두 어떤 모듈이 실제로 등록하는 이름이어야 한다(등록 안 된 이름으로 만들면 브라우저가 던진다).
+  const registeredNames = new Set([
+    ...engineBlobs.flatMap(({ text }) => loadProcessor(text, 48000).registered),
+    ...loadProcessor(levelMeterCode, 48000).registered,
+    ...loadProcessor(outputGuardCode, 48000).registered,
+    ...loadProcessor(await compileWorklet('src/audio/worklets/limiter.worklet.ts'), 48000).registered,
+  ]);
+  const usedNames = [...new Set(fake.created('AudioWorkletNode').map((node) => node.processorName))];
+  assert.deepEqual(usedNames.filter((name) => !registeredNames.has(name)), [], '그래프에 쓴 워클릿 이름은 모두 등록되는 이름이다');
+  for (const name of ['level-meter', 'output-guard', 'limiter-processor']) assert.ok(usedNames.includes(name), `${name} 는 출력 쪽 그래프에 들어 있다`);
+  // 차단 알림 → 하나뿐인 정지 절차(AudioSession.stop)에 이유 'howl' 과 감지한 주파수를 싣는다. 파일 재생 중·세션 밖에서는 부르지 않는다.
+  const { useAudioStore, AudioSession } = app;
+  const stops = [];
+  const originalStop = AudioSession.prototype.stop;
+  AudioSession.prototype.stop = function recordStop(reason, detail) {
+    stops.push(plain({ reason, detail }));
+    return originalStop.call(this, reason, detail);
+  };
+  const settle = () => delay(30);
+  useAudioStore.setState({ isRunning: true, inputMode: 'file' });
+  engine.howlHandler(440);
+  await settle();
+  assert.equal(useAudioStore.getState().isRunning, true, '파일 재생 중의 차단 알림은 세션을 끝내지 않는다');
+  assert.deepEqual(stops, [], '파일 재생 중에는 정지 절차를 부르지 않는다');
+  useAudioStore.setState({ isRunning: false, inputMode: 'idle' });
+  engine.howlHandler(440);
+  await settle();
+  assert.deepEqual(stops, [], '세션이 없으면 차단 알림이 와도 정지 절차를 부르지 않는다');
+  useAudioStore.setState({ isRunning: true, inputMode: 'device' });
+  engine.howlHandler(440.4);
+  await settle();
+  assert.deepEqual(stops, [{ reason: 'howl', detail: { howlFrequencyHz: 440.4 } }], '마이크 입력의 차단 알림은 정지 절차에 이유와 주파수를 넘긴다');
+  assert.equal(useAudioStore.getState().isRunning, false);
+  assert.equal(useAudioStore.getState().inputMode, 'idle');
+  AudioSession.prototype.stop = originalStop;
 
-  // 판정은 출력 레벨을 보지 않는다(설계서 4.3 — 기본 구성은 출력 최고치가 낮아 레벨 기준이 닿지 않는다)
-  const guardCode = withoutComments(read('src/audio/worklets/output-guard.worklet.ts'));
-  assert.match(guardCode, /this\.analyze\(analysis, frames\)/, '판정기는 분석 입력(입력 1)을 먹는다');
-  assert.doesNotMatch(guardCode, /detector\.push\([^)]*program/, '프로그램(출력) 입력은 판정에 쓰지 않는다');
-
-  // 엔진 배선
-  const engine = read('src/audio/AudioEngine.ts');
-  assert.match(engine, /connect\(this\.outputGuard, 0, GUARD_ANALYSIS_INPUT\)/, '입력 트림 뒤 → 가드 입력 1(분석)');
-  assert.match(engine, /createOutputGuard\(context, this\.currentGuardMode\(\)\)/, '가드는 만들 때 모드를 받는다');
-  assert.match(engine, /createLevelMeter\(context, 'in'\)[\s\S]{0,80}createLevelMeter\(context, 'out'\)/, '입력·출력 미터 두 곳');
-  const store = read('src/store/audioStore.ts');
-  assert.match(store, /audioEngine\.setHowlHandler\(\(freqHz\) => \{[\s\S]{0,400}stopSession\('howl', \{ howlFrequencyHz: freqHz \}\)/, '차단 알림 → 정지 절차(S1.2)에 주파수를 넘긴다');
-  assert.match(store, /audioEngine\.setMonitorSink\(monitorSink\)/, '엔진의 측정 결과는 monitorStore 로 간다');
-  const workletModules = read('src/audio/offline/workletModules.ts');
-  assert.match(workletModules, /levelMeterWorkletUrl[\s\S]*outputGuardWorkletUrl/, '오프라인 렌더에도 level-meter · output-guard 가 등록된다');
-  assert.doesNotMatch(workletModules, /howl-guard|howlGuard/, '옛 이름은 남기지 않는다');
-  assert.match(engine, /levelMeterWorkletUrl/, '라이브 엔진도 level-meter 를 등록한다');
-  assert.match(engine, /outputGuardWorkletUrl/, '라이브 엔진도 output-guard 를 등록한다');
-  assert.doesNotMatch(engine, /howl-guard|howlGuard/, '라이브 엔진에도 옛 이름이 없다');
+  harness.restore();
 }
 
 console.log(

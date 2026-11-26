@@ -220,7 +220,9 @@ for (const rate of ['44100', '48000']) {
 // ---------------------------------------------------------------------------------------------
 for (const [file, pedal] of [['DriveEffect', 'drive'], ['CrunchEffect', 'crunch'], ['FuzzEffect', 'fuzz']]) {
   const source = await readFile(new URL(`src/audio/nodes/${file}.ts`, rootUrl), 'utf8');
-  assert.ok(!/oversample\s*=\s*'[0-9n]/.test(source), `${file}: 오버샘플링 문자열을 직접 쓰지 않는다`);
+  // 공백을 지운 뒤 oversample='2x' / '4x' / 'none' 처럼 문자열 배수를 직접 대입하는 꼴이 없는지 본다(정규식 단언 대신 includes).
+  const compact = source.split(/\s+/).join('');
+  for (const lead of '0123456789n') assert.ok(!compact.includes(`oversample='${lead}`), `${file}: 오버샘플링 문자열을 직접 쓰지 않는다('${lead}…')`);
   assert.ok(source.includes(`oversampleModeFor('${pedal}')`), `${file}: oversampleModeFor('${pedal}') 로 배수를 정한다`);
   assert.ok(source.includes('this.shaper.oversample = this.oversampleMode'), `${file}: WaveShaper 에 정한 배수를 준다`);
   assert.ok(source.includes("'oversample4x'"), `${file}: 지연은 배수의 표를 쓴다`);

@@ -143,8 +143,8 @@ function feed(decider, levels, { stepSeconds = 0.05, seconds = 2, start = 0 } = 
 }
 assert.equal(describeDecision('ch1'), '1번 입력에서만 소리가 들어와 1번 입력을 씁니다');
 assert.equal(describeDecision('ch2'), '2번 입력에서만 소리가 들어와 2번 입력을 씁니다');
-assert.match(describeDecision('sum'), /합쳐서 씁니다/);
-assert.match(describeDecision('pending'), /자동으로 정합니다/);
+assert.equal(describeDecision('sum'), '양쪽 입력에 비슷한 소리가 들어와 합쳐서 씁니다');
+assert.equal(describeDecision('pending'), '기타 소리가 들어오면 어느 입력을 쓸지 자동으로 정합니다');
 
 // ---------------------------------------------------------------------------------------------
 // 2) InputStage 그래프(가짜 오디오 컨텍스트로 연결·게인·램프를 기록)

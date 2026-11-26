@@ -1,70 +1,9 @@
 import assert from 'node:assert/strict';
-import { Buffer } from 'node:buffer';
 import console from 'node:console';
 import { setTimeout as delay } from 'node:timers/promises';
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath, URL } from 'node:url';
-import { build } from 'esbuild';
-import { workerUrlStub } from './lib/esbuild-plugins.mjs';
-
-// S2.11: 키 해석은 input/shortcutKeys.ts, 포커스 규칙·실행은 input/ShortcutService.ts, 리스너는 컴포넌트에 있다.
-const [presetStoreSource, panelSource, keyboardComponentSource, keyboardServiceSource, shortcutRoutingSource, chainActionsSource] = await Promise.all([
-  readFile(new URL('../src/store/presetStore.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/PresetPanel.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/components/GlobalKeyboardShortcuts.tsx', import.meta.url), 'utf8'),
-  readFile(new URL('../src/input/ShortcutService.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/input/shortcutKeys.ts', import.meta.url), 'utf8'),
-  readFile(new URL('../src/store/chainActions.ts', import.meta.url), 'utf8'),
-]);
-const keyboardSource = `${keyboardComponentSource}\n${keyboardServiceSource}`;
-
-assert.match(presetStoreSource, /slotA: PedalState\[\] \| null/);
-assert.match(presetStoreSource, /slotB: PedalState\[\] \| null/);
-assert.match(presetStoreSource, /activeSlot: PresetComparisonSlot/);
-assert.match(presetStoreSource, /captureCurrentToSlot: \(slot: PresetComparisonSlot\) => void/);
-assert.match(presetStoreSource, /activateSlot: \(slot: PresetComparisonSlot\) => boolean/);
-assert.match(presetStoreSource, /const capturedPedals = clonePedals\(usePedalStore\.getState\(\)\.pedals\)/);
-
-const activateStart = presetStoreSource.indexOf('activateSlot: (slot) => {');
-assert.ok(activateStart >= 0, '슬롯 활성화 action을 찾을 수 없습니다.');
-const activateSource = presetStoreSource.slice(activateStart);
-assert.match(activateSource, /applyPresetPedals\(storedPedals, storedTrimDb\)/, '슬롯을 켜면 슬롯에 담긴 음량 보정(S1.4c)도 함께 적용한다');
-assert.match(presetStoreSource, /clearAllCabinetIrs\(\);[\s\S]*setPedals\(clonePedals\(pedals\), clampTrimDb\(trimDb\)\);[\s\S]*adoptTempoFromPedals\(\);[\s\S]*rebuildChain\(\)/);
-assert.match(panelSource, /applyPresetPedals\(preset\.pedals, preset\.trimDb\)/);
-// S2.8: '기본 페달 설정' 은 `chainActions` 로 옮겼다(되돌리기 스냅숏을 함께 다루려고). IR 을 지운 뒤 페달을 처음 값으로 돌리는 순서는 그대로다.
-assert.match(chainActionsSource, /clearAllCabinetIrs\(\);[\s\S]*resetPedalOrder\(\)/);
-assert.ok(panelSource.includes('resetToDefaultChain()'), "패널의 '기본 페달 설정' 은 chainActions 의 resetToDefaultChain 을 부른다");
-const midiSource = await readFile(new URL('../src/components/MidiAdvancedControls.tsx', import.meta.url), 'utf8');
-assert.match(midiSource, /applyPresetPedals\(preset\.pedals, preset\.trimDb\)/);
-
-
-assert.match(panelSource, /className="preset-ab-buttons"/);
-const abButtonsStart = panelSource.indexOf('<div className="preset-ab-buttons"');
-const abButtonsEnd = panelSource.indexOf('</div>', abButtonsStart);
-const abButtonsSource = panelSource.slice(abButtonsStart, abButtonsEnd);
-assert.equal([...abButtonsSource.matchAll(/<button/g)].length, 4, 'A/B toolbar 버튼은 정확히 4개여야 합니다.');
-for (const label of ['A', 'B', 'A←현재', 'B←현재']) {
-  assert.ok(abButtonsSource.includes(label), `${label} 버튼 누락`);
-}
-assert.match(abButtonsSource, /disabled=\{!slotA\}/);
-assert.match(abButtonsSource, /disabled=\{!slotB\}/);
-assert.equal([...abButtonsSource.matchAll(/aria-pressed=/g)].length, 2);
-assert.match(panelSource, /<p role="status" aria-live="polite">/);
-
-assert.match(shortcutRoutingSource, /key === 't'/);
-assert.match(shortcutRoutingSource, /key === 'a' \|\| key === 'b'/);
-assert.match(shortcutRoutingSource, /slot: key === 'a' \? 'A' : 'B'/);
-assert.match(shortcutRoutingSource, /event\.repeat/);
-assert.match(shortcutRoutingSource, /event\.isComposing/);
-assert.match(shortcutRoutingSource, /event\.(?:ctrlKey|metaKey|altKey|shiftKey)/);
-assert.match(keyboardSource, /input'[\s\S]*select'[\s\S]*textarea'[\s\S]*contenteditable/);
-assert.match(keyboardSource, /activateSlot\(command\.slot\)/);
-assert.equal(
-  [...keyboardSource.matchAll(/addEventListener\('keydown'/g)].length,
-  1,
-  'keydown listener는 하나여야 합니다.',
-);
-assert.equal([...keyboardSource.matchAll(/removeEventListener\('keydown'/g)].length, 1);
+import { FakeElement, installFakeElement } from './lib/fake-element.mjs';
+import { byClass, find, findAll, textContent } from './lib/html-tree.mjs';
+import { createSsrHarness, hostText } from './lib/ssr-harness.mjs';
 
 // S2.4: 사용자 프리셋과 작업 상태는 v2 키에 쓴다(옛 v1 키는 백업이라 앱이 다시 쓰지 않는다).
 const USER_PRESETS_KEY = 'guitar-pedalboard:v2:presets';
@@ -89,29 +28,26 @@ globalThis.window = {
   clearTimeout: globalThis.clearTimeout.bind(globalThis),
 };
 
-const harnessBundle = await build({
-  plugins: [workerUrlStub],
-  stdin: {
-    contents: [
-      "export { AudioEngine } from './audio/AudioEngine.ts';",
-      "export { CabEffect } from './audio/nodes/CabEffect.ts';",
-      "export { useAudioStore } from './store/audioStore.ts';",
-      "export { clonePedals, usePedalStore } from './store/pedalStore.ts';",
-      "export { usePresetStore, parsePresetJson } from './store/presetStore.ts';",
-      "export { useToastStore } from './store/toastStore.ts';",
-    ].join('\n'),
-    resolveDir: fileURLToPath(new URL('../src', import.meta.url)),
-    sourcefile: 'preset-ab-harness.ts',
-  },
-  bundle: true,
-  format: 'esm',
-  platform: 'node',
-  target: 'node20',
-  write: false,
+// 실제 스토어·엔진·화면 컴포넌트를 올린다. 화면 구조와 처리기는 소스를 글자로 읽는 대신 그려서(SSR) 확인한다(S4.7).
+const harness = await createSsrHarness({
+  extraExports: [
+    "{ AudioEngine } from './audio/AudioEngine.ts'",
+    "{ CabEffect } from './audio/nodes/CabEffect.ts'",
+    "{ useAudioStore } from './store/audioStore.ts'",
+    "{ clonePedals, usePedalStore } from './store/pedalStore.ts'",
+    "{ usePresetStore, parsePresetJson, applyPresetPedals } from './store/presetStore.ts'",
+    "{ useToastStore } from './store/toastStore.ts'",
+    "{ resetToDefaultChain } from './store/chainActions.ts'",
+    "{ PresetPanel } from './components/PresetPanel.tsx'",
+    "{ GlobalKeyboardShortcuts } from './components/GlobalKeyboardShortcuts.tsx'",
+    "{ createShortcutKeydownHandler } from './input/ShortcutService.ts'",
+  ],
+  windowOverrides: { matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }) },
 });
-const harnessUrl = `data:text/javascript;base64,${Buffer.from(harnessBundle.outputFiles[0].text).toString('base64')}`;
-const { AudioEngine, CabEffect, clonePedals, useAudioStore, usePedalStore, usePresetStore, parsePresetJson, useToastStore } =
-  await import(harnessUrl);
+const {
+  AudioEngine, CabEffect, GlobalKeyboardShortcuts, PresetPanel, applyPresetPedals, clonePedals, createShortcutKeydownHandler,
+  parsePresetJson, resetToDefaultChain, useAudioStore, usePedalStore, usePresetStore, useToastStore,
+} = harness.exports;
 
 function pedalsWithTempo(bpm, driveAmount) {
   return clonePedals(usePedalStore.getState().pedals).map((pedal) => {
@@ -145,6 +81,12 @@ engine.rebuildChain = () => {
 };
 
 try {
+  // 처음 상태: 슬롯 둘이 모두 비어 있고 A 가 활성이며, 슬롯의 음량 보정은 0 dB 이다.
+  const freshSlots = usePresetStore.getState();
+  assert.deepEqual(
+    { slotA: freshSlots.slotA, slotB: freshSlots.slotB, slotATrimDb: freshSlots.slotATrimDb, slotBTrimDb: freshSlots.slotBTrimDb, activeSlot: freshSlots.activeSlot },
+    { slotA: null, slotB: null, slotATrimDb: 0, slotBTrimDb: 0, activeSlot: 'A' },
+  );
   usePresetStore.setState({ slotA: null, slotB: null, activeSlot: 'A' });
   assert.equal(usePresetStore.getState().slotA, null);
   assert.equal(usePresetStore.getState().slotB, null);
@@ -288,6 +230,212 @@ try {
       .every(({ value }) => !/"slotA"|"slotB"|"activeSlot"/.test(value)),
     '사용자 프리셋 localStorage에 세션 슬롯이 저장되었습니다.',
   );
+
+  // ── 슬롯에는 음량 보정(S1.4c)도 담겨, 슬롯을 켜면 함께 적용된다 ───────────────────────────────────────
+  usePedalStore.getState().setPedals(clonePedals(usePedalStore.getState().pedals), 3);
+  usePresetStore.getState().captureCurrentToSlot('A');
+  usePedalStore.getState().setPedals(clonePedals(usePedalStore.getState().pedals), -2);
+  usePresetStore.getState().captureCurrentToSlot('B');
+  usePedalStore.getState().setPedals(clonePedals(usePedalStore.getState().pedals), 0);
+  usePresetStore.getState().activateSlot('A');
+  assert.equal(usePedalStore.getState().presetTrimDb, 3, '슬롯 A 를 켜면 A 에 담긴 음량 보정이 적용됩니다.');
+  usePresetStore.getState().activateSlot('B');
+  assert.equal(usePedalStore.getState().presetTrimDb, -2, '슬롯 B 를 켜면 B 에 담긴 음량 보정이 적용됩니다.');
+
+  // ── 프리셋을 적용하는 하나의 길: 캐비닛 IR 정리 → 페달·음량 보정 → 템포 이어받기 → 체인 재구성 (이 순서) ──────
+  // 엔진·스토어 함수를 감싸 호출 순서만 기록한다(실제 동작은 그대로 실행).
+  const orderOf = (action) => {
+    const order = [];
+    const restorers = [];
+    const wrapEngine = (name) => {
+      const original = engine[name];
+      engine[name] = (...args) => {
+        order.push(name);
+        return original.apply(engine, args);
+      };
+      restorers.push(() => {
+        engine[name] = original;
+      });
+    };
+    const wrapStore = (store, name) => {
+      const original = store.getState()[name];
+      store.setState({ [name]: (...args) => {
+        order.push(name);
+        return original(...args);
+      } });
+      restorers.push(() => store.setState({ [name]: original }));
+    };
+    wrapEngine('clearAllCabinetIrs');
+    wrapEngine('rebuildChain');
+    wrapStore(usePedalStore, 'setPedals');
+    wrapStore(usePedalStore, 'resetPedalOrder');
+    wrapStore(useAudioStore, 'adoptTempoFromPedals');
+    try {
+      action();
+    } finally {
+      restorers.reverse().forEach((restore) => restore());
+    }
+    return order;
+  };
+  const APPLY_ORDER = ['clearAllCabinetIrs', 'setPedals', 'adoptTempoFromPedals', 'rebuildChain'];
+  const studio = usePresetStore.getState().presets.find((preset) => preset.name === 'Studio Clean');
+  assert.ok(studio, '팩토리 프리셋 Studio Clean 이 목록에 있어야 합니다.');
+  assert.deepEqual(orderOf(() => applyPresetPedals(studio.pedals, studio.trimDb)), APPLY_ORDER);
+  assert.deepEqual(usePedalStore.getState().pedals, studio.pedals);
+  assert.equal(usePedalStore.getState().presetTrimDb, studio.trimDb ?? 0);
+  usePedalStore.getState().setPedals(clonePedals(usePedalStore.getState().pedals), -4);
+  applyPresetPedals(studio.pedals);
+  assert.equal(usePedalStore.getState().presetTrimDb, 0, '음량 보정이 없는 프리셋을 불러오면 앞 프리셋의 보정이 남지 않습니다.');
+
+  // ── 화면 처리기: 패널의 프리셋 불러오기·기본 페달 설정·A/B 단추가 같은 길을 쓴다 ─────────────────────────────────
+  harness.render(PresetPanel);
+  const loadButton = harness.findHost('button', (props) => props.className === 'preset-load-button' && hostText(props.children).startsWith('Warm Jazz Clean'));
+  assert.ok(loadButton, '프리셋 목록에 불러오기 단추가 있어야 합니다.');
+  const warm = usePresetStore.getState().presets.find((preset) => preset.name === 'Warm Jazz Clean');
+  usePedalStore.getState().setPedals(clonePedals(usePedalStore.getState().pedals).reverse(), 5);
+  assert.deepEqual(orderOf(() => loadButton.props.onClick()), APPLY_ORDER, '패널에서 프리셋을 불러오면 applyPresetPedals 와 같은 길을 지납니다.');
+  assert.deepEqual(usePedalStore.getState().pedals, warm.pedals);
+  assert.equal(usePedalStore.getState().presetTrimDb, warm.trimDb ?? 0);
+
+  const resetButton = harness.findHost('button', (props) => typeof props.className === 'string' && props.className.includes('preset-reset-button'));
+  assert.equal(hostText(resetButton.props.children).trim(), '기본 페달 설정');
+  usePedalStore.getState().setPedals(clonePedals(usePedalStore.getState().pedals).reverse(), 0);
+  assert.deepEqual(orderOf(() => resetButton.props.onClick()), ['clearAllCabinetIrs', 'resetPedalOrder', 'rebuildChain'], "'기본 페달 설정' 은 IR 정리 → 순서·값 되돌리기 → 체인 재구성입니다.");
+  assert.deepEqual(usePedalStore.getState().pedals, usePedalStore.getInitialState().pedals, '모든 페달이 처음 순서와 값으로 돌아옵니다.');
+  assert.deepEqual(orderOf(() => resetButton.props.onClick()), [], '이미 기본 페달 설정이면 아무것도 바꾸지 않습니다.');
+  assert.deepEqual(orderOf(() => resetToDefaultChain()), ['clearAllCabinetIrs', 'resetPedalOrder', 'rebuildChain'], 'resetToDefaultChain 의 순서');
+
+  // ── A/B 도구줄: 단추 넷, 빈 슬롯은 켤 수 없고, 켜진 슬롯만 눌림 표시, 상태 문구는 정중한 알림 영역 ─────────────────
+  const toolbarAt = (state) => {
+    const restore = harness.serverState(usePresetStore, state);
+    try {
+      const tree = harness.render(PresetPanel);
+      const buttons = findAll(find(tree, byClass('preset-ab-buttons')), (node) => node.tag === 'button');
+      const status = find(find(tree, byClass('preset-ab-toolbar')), (node) => node.tag === 'p' && node.attrs.role === 'status');
+      return {
+        labels: buttons.map(textContent),
+        disabled: buttons.map((button) => 'disabled' in button.attrs),
+        pressed: buttons.map((button) => button.attrs['aria-pressed'] ?? null),
+        live: status.attrs['aria-live'],
+        status: textContent(status),
+      };
+    } finally {
+      restore();
+    }
+  };
+  const somePedals = usePedalStore.getState().pedals;
+  assert.deepEqual(toolbarAt({ slotA: null, slotB: null, activeSlot: 'A' }), {
+    labels: ['A', 'B', 'A←현재', 'B←현재'],
+    disabled: [true, true, false, false],
+    pressed: ['false', 'false', null, null],
+    live: 'polite',
+    status: 'A/B 비교 슬롯이 비어 있습니다.',
+  });
+  assert.deepEqual(toolbarAt({ slotA: somePedals, slotB: null, activeSlot: 'A' }), {
+    labels: ['A', 'B', 'A←현재', 'B←현재'],
+    disabled: [false, true, false, false],
+    pressed: ['true', 'false', null, null],
+    live: 'polite',
+    status: 'A 슬롯 활성 · A 저장됨 · B 비어 있음',
+  });
+  assert.deepEqual(toolbarAt({ slotA: somePedals, slotB: somePedals, activeSlot: 'B' }), {
+    labels: ['A', 'B', 'A←현재', 'B←현재'],
+    disabled: [false, false, false, false],
+    pressed: ['false', 'true', null, null],
+    live: 'polite',
+    status: 'B 슬롯 활성 · A 저장됨 · B 저장됨',
+  });
+  assert.deepEqual(toolbarAt({ slotA: null, slotB: somePedals, activeSlot: 'A' }).pressed, ['false', 'false', null, null], '빈 슬롯은 활성이어도 눌림 표시가 없습니다.');
+  assert.deepEqual(toolbarAt({ slotA: somePedals, slotB: null, activeSlot: 'B' }).pressed, ['false', 'false', null, null], '비어 있는 B 슬롯은 활성이어도 눌림 표시가 없습니다.');
+
+  // 단추 처리기: '←현재' 는 지금 체인을 그 슬롯에 담고, 'A'·'B' 는 그 슬롯을 켠다.
+  harness.render(PresetPanel);
+  const abButton = (label) => harness.findHost('button', (props) => hostText(props.children) === label);
+  usePedalStore.getState().setPedals(pedalsWithTempo(161, 31));
+  abButton('A←현재').props.onClick();
+  assert.deepEqual(usePresetStore.getState().slotA, usePedalStore.getState().pedals);
+  assert.equal(usePresetStore.getState().activeSlot, 'A');
+  usePedalStore.getState().setPedals(pedalsWithTempo(97, 12));
+  abButton('B←현재').props.onClick();
+  assert.equal(usePresetStore.getState().activeSlot, 'B');
+  rebuildCount = 0;
+  abButton('A').props.onClick();
+  assert.equal(usePresetStore.getState().activeSlot, 'A');
+  assert.equal(usePedalStore.getState().pedals.find((pedal) => pedal.id === 'delay').params.bpm, 161);
+  assert.equal(rebuildCount, 1, '슬롯을 켜면 체인을 한 번 다시 만듭니다.');
+
+  // ── 키보드: A·B 로 슬롯을 켜고, 막아야 할 때는 막으며, keydown 리스너는 캡처 단계로 하나만 달고 같은 것을 뗀다 ─────────
+  const restoreElement = installFakeElement();
+  const activated = [];
+  const realActivateSlot = usePresetStore.getState().activateSlot;
+  let activateResult = true;
+  usePresetStore.setState({ activateSlot: (slot) => {
+    activated.push(slot);
+    return activateResult;
+  } });
+  const keydown = createShortcutKeydownHandler({ isHelpOpen: () => false, openHelp() {}, closeHelp() {} });
+  const press = (init, target = new FakeElement('body')) => {
+    const record = { prevented: 0 };
+    keydown({
+      key: 'a', repeat: false, isComposing: false, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...init, target,
+      preventDefault() { record.prevented += 1; },
+      stopPropagation() {},
+    });
+    return record.prevented;
+  };
+  try {
+    assert.equal(press({ key: 'a', code: 'KeyA' }), 1);
+    assert.equal(press({ key: 'ㅠ', code: 'KeyB' }), 1, '한글 입력 상태의 B(물리 키)');
+    assert.equal(press({ key: 'B' }), 1, 'code 가 없는 환경은 key 로 알아봅니다.');
+    assert.deepEqual(activated, ['A', 'B', 'B']);
+    activated.length = 0;
+    for (const [label, init, target] of [
+      ['누르고 있는 반복', { key: 'a', code: 'KeyA', repeat: true }],
+      ['한글 조합 중인 글자(code 없음)', { key: 'a', isComposing: true }],
+      ['Ctrl+A', { key: 'a', code: 'KeyA', ctrlKey: true }],
+      ['⌘+A', { key: 'a', code: 'KeyA', metaKey: true }],
+      ['Alt+A', { key: 'a', code: 'KeyA', altKey: true }],
+      ['Shift+A', { key: 'A', code: 'KeyA', shiftKey: true }],
+      ['input 에 포커스', { key: 'a', code: 'KeyA' }, new FakeElement('input', { type: 'text' })],
+      ['select 에 포커스', { key: 'a', code: 'KeyA' }, new FakeElement('select')],
+      ['textarea 에 포커스', { key: 'a', code: 'KeyA' }, new FakeElement('textarea')],
+      ['contenteditable 에 포커스', { key: 'a', code: 'KeyA' }, new FakeElement('div', { matches: ['[contenteditable]:not([contenteditable="false"])'] })],
+    ]) {
+      assert.equal(press(init, target), 0, `${label} 에서는 슬롯을 켜지 않습니다.`);
+    }
+    assert.deepEqual(activated, [], '막힌 키는 activateSlot 을 부르지 않습니다.');
+    activateResult = false; // 빈 슬롯: 켜지 못했으면 키의 기본 동작을 막지 않는다.
+    assert.equal(press({ key: 'a', code: 'KeyA' }), 0);
+    assert.deepEqual(activated, ['A']);
+    activateResult = true;
+
+    harness.render(GlobalKeyboardShortcuts);
+    const added = [];
+    const removed = [];
+    const realAdd = globalThis.window.addEventListener;
+    const realRemove = globalThis.window.removeEventListener;
+    globalThis.window.addEventListener = (...args) => added.push(args);
+    globalThis.window.removeEventListener = (...args) => removed.push(args);
+    try {
+      const effects = harness.runEffects();
+      assert.deepEqual(added.map(([type, , options]) => [type, options]), [['keydown', { capture: true }]], 'keydown 은 캡처 단계로 하나만 듣습니다.');
+      assert.deepEqual(removed, []);
+      activated.length = 0;
+      added[0][1]({
+        key: 'b', code: 'KeyB', repeat: false, isComposing: false, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false,
+        target: new FakeElement('body'), preventDefault() {}, stopPropagation() {},
+      });
+      assert.deepEqual(activated, ['B'], '달아 둔 처리기가 단축키를 실행합니다.');
+      effects.cleanup();
+      assert.deepEqual(removed.map(([type, listener, options]) => [type, listener === added[0][1], options]), [['keydown', true, { capture: true }]], '같은 처리기를 같은 옵션으로 뗍니다.');
+    } finally {
+      globalThis.window.addEventListener = realAdd;
+      globalThis.window.removeEventListener = realRemove;
+    }
+  } finally {
+    usePresetStore.setState({ activateSlot: realActivateSlot });
+    restoreElement();
+  }
 } finally {
   engine.rebuildChain = originalRebuildChain;
 }
@@ -351,6 +499,7 @@ assert.equal(usePedalStore.getState().pedals.find((pedal) => pedal.id === 'delay
 await delay(400);
 assert.equal(pedalWriteCount(), writesBeforeKnob + 1);
 
+harness.restore();
 console.log(
-  'Preset A/B regression passed: isolated snapshots, overwrite/empty guards, active slot, single guarded keyboard listener, session-only export/storage and tempo-aware rebuild.',
+  'Preset A/B regression passed: isolated snapshots, overwrite/empty guards, active slot with trim, rendered A/B toolbar and handlers, shared apply path order, single guarded capture keydown listener, session-only export/storage and tempo-aware rebuild.',
 );

@@ -1,14 +1,15 @@
 // 마스터 리미터(S1.4a, 설계서 GS-6) 시험.
 //   · limiter.worklet.ts 를 실제 파일 그대로 읽어 오디오 스레드를 흉내 낸 vm 에서 돌린다(문자열 복사본이 아니다).
 //   · S1.5: 최근 100 ms 의 최대 이득 감소량을 포트로 알린다({type:'limiter', maxGrDb, frame}).
-//   · OutputStage 는 가짜 컨텍스트로 연결 모양만 본다. 엔진 연결(스피커·미터·녹음)은 소스 단언 몇 개로 지킨다.
+//   · OutputStage 는 가짜 컨텍스트로 연결 모양만 본다. 엔진 연결(스피커·미터·녹음)은 진짜 AudioEngine 을 가짜 오디오 위에서 돌려 그래프로 확인한다(S4.7).
 // 소리 자체(최악 조합 피크)는 오디오 렌더 프로브 P-03 이 잰다.
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
-import { readFile } from 'node:fs/promises';
+import { access } from 'node:fs/promises';
 import vm from 'node:vm';
 import { build } from 'esbuild';
+import { createEngineHarness } from './lib/engine-harness.mjs';
 
 const SAMPLE_RATE = 48000;
 const LOOKAHEAD = Math.round(SAMPLE_RATE * 0.001); // 48 샘플
@@ -330,34 +331,177 @@ function runInQuanta(node, left, right) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 8. 소스 단언: 스피커·미터·녹음이 같은 리미터 출력을 받고, 워클릿 파일이 앱과 오프라인 렌더에 모두 등록된다
+// 8. 엔진·오프라인 등록 동작: 스피커·미터·녹음이 같은 리미터 출력을 받고, 워클릿 파일이 앱과 오프라인 렌더에 모두 등록된다
 // ---------------------------------------------------------------------------------------------
-const [engine, urls, modules, renderChain] = await Promise.all([
-  readFile('src/audio/AudioEngine.ts', 'utf8'),
-  readFile('src/audio/worklets/urls.ts', 'utf8'),
-  readFile('src/audio/offline/workletModules.ts', 'utf8'),
-  readFile('src/audio/offline/renderChain.ts', 'utf8'),
-]);
-assert.match(urls, /from '\.\/limiter\.worklet\.ts\?worker&url'/, '리미터는 별도 파일을 ?worker&url 로 불러온다');
-assert.match(engine, /new OutputStage\(context, \{ guard: this\.outputGuard, levelMeter: this\.outputTap \}\)/);
-assert.match(engine, /this\.outputStage\.output\.connect\(context\.destination\)/);
-assert.match(engine, /this\.outputStage\.output\.connect\(this\.outputMeter\.input\)/);
-assert.match(engine, /this\.outputStage\?\.output\.connect\(this\.recorderDestination\)/, '녹음은 같은 리미터 출력을 받는다');
-assert.match(engine, /limiterWorkletUrl/, '엔진이 리미터 워클릿 파일을 등록한다');
-assert.match(modules, /limiterWorkletUrl/, '오프라인 렌더도 같은 파일을 등록한다');
-assert.match(renderChain, /new OutputStage\(context, \{ guard, levelMeter: outputTap \}\)/, '오프라인 렌더도 같은 출력 단계를 쓴다');
-assert.match(engine, /levelMeterWorkletUrl[\s\S]*outputGuardWorkletUrl/, '엔진이 레벨 미터·출력 가드 워클릿 파일도 등록한다');
-assert.match(modules, /levelMeterWorkletUrl[\s\S]*outputGuardWorkletUrl/, '오프라인 렌더도 같은 파일들을 등록한다');
-assert.match(urls, /level-meter\.worklet\.ts\?worker&url/);
-assert.match(urls, /output-guard\.worklet\.ts\?worker&url/);
-// 프리셋 음량 보정(S1.4c): 체인 끝은 trim 으로 들어간다. 엔진과 오프라인 렌더가 같은 자리를 쓴다.
-assert.match(engine, /to: chainEnd/, '엔진은 체인 끝을 마스터 게인이 아니라 trim 에 잇는다');
-assert.match(engine, /this\.buildChainConnections\(\s*pedals,\s*nextEffects,\s*chainInput,\s*presetTrim,?\s*\)/);
-assert.match(engine, /presetTrim\.gain\.value = dbToGain\(clampTrimDb\(this\.getPresetTrimDb\(\)\)\)/, '그래프를 만들 때 trim 의 처음 값은 스토어 값이다');
-assert.match(engine, /rampParam\(trim\.gain, dbToGain\(clampTrimDb\(db\)\), context, PRESET_TRIM_RAMP_SECONDS\)/, 'trim 변경은 램프로 옮긴다');
-assert.match(renderChain, /previous\.connect\(presetTrim\)/, '오프라인 렌더도 체인 끝을 trim 에 잇는다');
-assert.doesNotMatch(engine, /previous\.connect\(masterGain\)|to: masterGain/, '체인 끝이 마스터 게인으로 곧장 가는 연결은 없다');
-assert.doesNotMatch(engine + modules + renderChain, /peak-limiter-processor|peakLimiterProcessorSource/, '옛 리미터는 남기지 않는다');
+// 예전에는 AudioEngine.ts·urls.ts·workletModules.ts·renderChain.ts 를 글자로 읽어 19개 정규식으로 확인했다(S4.7 전).
+// 이제는 진짜 AudioEngine 으로 그래프를 만들어 연결을 묻고, 등록 함수를 실행해 올라간 모듈을 묻는다.
+// 오프라인 렌더(renderChain)가 같은 출력 단계·trim 자리를 쓰는지는 실제 브라우저에서 렌더하는 오디오 프로브(P-03 리미터, 음량 맞추기 프로브)가 소리로 확인한다.
+{
+  const harness = await createEngineHarness({
+    extraExports: [
+      "{ registerWorklets, workletSources } from './audio/offline/workletModules.ts'",
+      "{ levelMeterWorkletUrl, limiterWorkletUrl, outputGuardWorkletUrl } from './audio/worklets/urls.ts'",
+      "{ clampTrimDb, PRESET_TRIM_RAMP_SECONDS } from './audio/offline/loudnessSpec.ts'",
+      "{ LIMITER_PROCESSOR_NAME } from './audio/engine/limiterSpec.ts'",
+    ],
+  });
+  const { fake, engine, context, exports: app } = harness;
+  const gainOf = (db) => 10 ** (db / 20);
+
+  // --- 별도 파일 워클릿의 주소: 리미터·레벨 미터·출력 가드가 각자 자기 파일을 가리킨다 -----------------
+  const fileWorklets = [
+    ['limiter', app.limiterWorkletUrl],
+    ['level-meter', app.levelMeterWorkletUrl],
+    ['output-guard', app.outputGuardWorkletUrl],
+  ];
+  for (const [name, url] of fileWorklets) {
+    assert.equal(url, `/assets/${name}.worklet.js`, `${name} 워클릿 주소는 자기 파일(${name}.worklet.ts)이어야 한다`);
+    await access(`src/audio/worklets/${name}.worklet.ts`);
+  }
+
+  // --- 워클릿 모듈 등록: 엔진(실시간)과 오프라인 렌더가 같은 9개를 올린다 -------------------------------
+  const engineBlobs = await harness.loadWorklets();
+  assert.equal(harness.workletModules.length, 9, '엔진은 워클릿 모듈 9개를 올린다');
+  const engineTexts = engineBlobs.map(({ text }) => text);
+  assert.deepEqual(engineTexts, [...app.workletSources], '엔진이 올린 문자열 워클릿 6개는 오프라인 렌더의 목록과 같은 소스·같은 순서다');
+  for (const [name, url] of fileWorklets) {
+    assert.ok(harness.workletModules.includes(url), `엔진이 ${name} 워클릿 파일을 등록한다`);
+  }
+
+  const offlineModules = [];
+  const blobCountBefore = harness.blobs.length;
+  const offlineContext = fake.createContext({
+    audioWorklet: { addModule: async (url) => { offlineModules.push(url); } },
+  });
+  await app.registerWorklets(offlineContext);
+  assert.equal(offlineModules.length, 9, '오프라인 렌더도 같은 9개를 올린다');
+  for (const [name, url] of fileWorklets) {
+    assert.ok(offlineModules.includes(url), `오프라인 렌더도 ${name} 워클릿 파일을 등록한다`);
+  }
+  const offlineBlobs = harness.blobs.slice(blobCountBefore);
+  assert.deepEqual(
+    await Promise.all(offlineBlobs.map(({ blob }) => blob.text())),
+    [...app.workletSources],
+    '오프라인 렌더가 올린 문자열 워클릿은 같은 목록이다',
+  );
+  assert.deepEqual(
+    harness.revokedUrls.slice(0, offlineBlobs.length).sort(),
+    offlineBlobs.map(({ url }) => url).sort(),
+    '오프라인 렌더는 등록이 끝나면 임시 주소를 바로 해제한다',
+  );
+  harness.revokedUrls.length = 0;
+
+  // --- 등록된 프로세서 이름: 그래프가 쓰는 워클릿이 전부 등록되어 있고, 옛 리미터는 남지 않았다 -------------------
+  const registeredNames = [];
+  const collect = (code) => {
+    vm.runInNewContext(code, {
+      sampleRate: SAMPLE_RATE,
+      currentFrame: 0,
+      AudioWorkletProcessor: class {
+        constructor() {
+          this.port = { postMessage() {}, onmessage: null };
+        }
+      },
+      registerProcessor: (name) => registeredNames.push(name),
+    });
+  };
+  engineTexts.forEach(collect);
+  for (const [name] of fileWorklets) {
+    const compiledFile = await build({
+      entryPoints: [`src/audio/worklets/${name}.worklet.ts`],
+      bundle: true,
+      format: 'iife',
+      target: 'es2022',
+      write: false,
+    });
+    collect(compiledFile.outputFiles[0].text);
+  }
+  assert.equal(new Set(registeredNames).size, 9, '워클릿 9개는 서로 다른 이름을 등록한다');
+  assert.ok(registeredNames.includes(app.LIMITER_PROCESSOR_NAME));
+  assert.ok(
+    !registeredNames.some((name) => /peak-limiter/.test(name)),
+    '옛 리미터(peak-limiter-processor)는 남기지 않는다',
+  );
+
+  // --- 엔진 그래프: 체인 → trim → 마스터 게인 → 가드 → 리미터 → 출력 미터 → [스피커, 파형 분석, 녹음] ------
+  const wah = (id) => ({
+    id,
+    type: 'autoWah',
+    name: id,
+    active: true,
+    color: '#6fa83f',
+    params: { mix: 100, level: 100, sensitivity: 55, range: 60, resonance: 45, mode: 'auto', manual: 50 },
+  });
+  let pedals = [wah('wah-1'), wah('wah-2')];
+  engine.setPedalsProvider(() => pedals);
+  engine.setPresetTrimProvider(() => -6);
+  const source = new fake.classes.GainNode(context);
+  engine.createProcessingGraph(source);
+
+  const stage = engine.outputStage;
+  assert.ok(stage, '엔진이 출력 단계를 만들었다');
+  const trim = stage.presetTrim;
+  assert.ok(Math.abs(trim.gain.value - gainOf(-6)) < 1e-9, '그래프를 만들 때 trim 의 처음 값은 스토어(provider) 값이다');
+  assert.equal(trim.gain.automation.length, 0, '처음 값은 램프 없이 바로 둔다(아직 소리가 흐르기 전이다)');
+
+  assert.equal(stage.output, engine.outputTap, '출력 단계의 출력은 level-meter#out 이다');
+  assert.ok(stage.limiter.connectsTo(engine.outputTap), '리미터 뒤에 level-meter#out');
+  assert.ok(fake.pathExists(stage.input, stage.limiter), '마스터 게인에서 리미터까지 이어진다');
+  assert.ok(stage.input.connectsTo(engine.outputGuard) && engine.outputGuard.connectsTo(stage.limiter), '마스터 게인 → 가드 → 리미터');
+  assert.equal(stage.limiter.processorName, app.LIMITER_PROCESSOR_NAME);
+  assert.ok(stage.output.connectsTo(context.destination), '스피커는 리미터 출력을 받는다');
+  assert.ok(stage.output.connectsTo(engine.outputMeter.input), '파형 분석은 리미터 출력을 받는다');
+  assert.deepEqual(
+    fake.created().filter((node) => node.connectsTo(context.destination)),
+    [stage.output],
+    '스피커로 가는 길은 리미터 출력 하나뿐이다(리미터를 건너뛰는 연결이 없다)',
+  );
+
+  engine.createRecorderStream();
+  assert.ok(stage.output.connectsTo(engine.recorderDestination), '녹음은 같은 리미터 출력을 받는다');
+  assert.deepEqual(
+    fake.created().filter((node) => node.connectsTo(engine.recorderDestination)),
+    [stage.output],
+    '녹음으로 가는 길도 리미터 출력 하나뿐이다',
+  );
+
+  // 처음 그래프에는 체인에 이펙터가 아직 없다(rebuild 전). 체인을 만들면 끝이 trim 으로 들어간다.
+  engine.rebuildChain();
+  await engine.rebuildQueue;
+  const [first, second] = pedals.map((pedal) => engine.effects.get(pedal.id));
+  assert.ok(first && second, '엔진이 페달마다 이펙터를 만들었다');
+  assert.ok(engine.chainInput.connectsTo(first.input), '체인 입력 → 첫 이펙터');
+  assert.ok(first.output.connectsTo(second.input), '이펙터 → 다음 이펙터');
+  assert.ok(second.output.connectsTo(trim), '체인 끝은 마스터 게인이 아니라 trim 에 이어진다');
+  assert.deepEqual(
+    fake.created().filter((node) => node.connectsTo(stage.input)),
+    [trim],
+    '마스터 게인으로 들어오는 길은 trim 하나뿐이다(체인 끝이 마스터 게인으로 곧장 가지 않는다)',
+  );
+
+  pedals = [];
+  engine.rebuildChain();
+  await engine.rebuildQueue;
+  assert.ok(engine.chainInput.connectsTo(trim), '이펙터가 없으면 체인 입력이 곧바로 trim 에 이어진다');
+  assert.ok(!engine.chainInput.connectsTo(stage.input), '이펙터가 없어도 마스터 게인으로 곧장 가지 않는다');
+
+  // --- trim 변경은 램프로 옮기고, 허용 범위로 자른다 -------------------------------------------------
+  const directBefore = trim.gain.directAssignments;
+  context.currentTime = 1.5;
+  engine.setPresetTrimDb(-3);
+  const ramp = trim.gain.automation.at(-1);
+  assert.ok(ramp, 'trim 변경이 예약되지 않았다');
+  assert.equal(ramp.kind, 'linear', 'trim 변경은 직선 램프다');
+  assert.ok(Math.abs(ramp.value - gainOf(-3)) < 1e-9);
+  assert.ok(Math.abs(ramp.time - (1.5 + app.PRESET_TRIM_RAMP_SECONDS)) < 1e-9, '램프는 지금부터 PRESET_TRIM_RAMP_SECONDS 뒤에 끝난다');
+  engine.setPresetTrimDb(99);
+  const clamped = trim.gain.automation.at(-1);
+  assert.ok(Math.abs(clamped.value - gainOf(app.clampTrimDb(99))) < 1e-9, '허용 범위 밖 trim 은 잘라서 쓴다');
+  assert.ok(clamped.value < gainOf(99), '잘리지 않은 값이 그대로 들어가지 않았다');
+  assert.equal(trim.gain.directAssignments, directBefore, 'trim 변경은 직접 대입이 아니라 램프다(클릭 소리 방지)');
+
+  harness.restore();
+}
 
 // ---------------------------------------------------------------------------------------------
 // 9. 감소량 보고(S1.5): 최근 100 ms 의 최대 이득 감소량을 포트로 알린다. 줄일 일이 없으면 보내지 않는다.
