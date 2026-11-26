@@ -677,6 +677,21 @@ async function verifyLayoutInBrowser() {
     const board = await app.style('.pedal-board', ['display', 'gridAutoFlow', 'gridAutoColumns', 'scrollSnapType', 'overflowX']);
     assert.deepEqual([board.display, board.gridAutoFlow, board.scrollSnapType, board.overflowX], ['grid', 'column', 'x mandatory', 'auto']);
     approx(Number.parseFloat(board.gridAutoColumns), Math.min(360, Math.max(300, 0.86 * 390)), '페달 한 칸 너비 clamp(300px, 86vw, 360px)', 0.1);
+    // 390px 에서는 자르개(300px·360px)가 걸리지 않으므로, 폭을 바꿔 양쪽 끝도 본다.
+    for (const width of [340, 600]) {
+      await app.setViewport({ width, height: 844, mobile: true });
+      await app.waitFor(`window.innerWidth === ${width}`, { label: `폭 ${width}` });
+      const expectedColumn = Math.min(360, Math.max(300, 0.86 * width));
+      const column = await waitForLayout(
+        app,
+        `(() => { const board = document.querySelector('.pedal-board'); return board ? Number.parseFloat(getComputedStyle(board).gridAutoColumns) : null; })()`,
+        (value) => Math.abs(value - expectedColumn) < 0.1,
+      );
+      approx(column, expectedColumn, `${width}px: 페달 한 칸 너비`, 0.1);
+    }
+    await app.setViewport({ width: 390, height: 844, mobile: true });
+    await app.waitFor('window.innerWidth === 390', { label: '폭 390' });
+    await waitForLayout(app, MOBILE_LAYOUT_EXPRESSION, dockVarMatches);
     assert.deepEqual(
       await app.evaluate(`[...new Set([...document.querySelectorAll('.sortable-pedal')].map((pedal) => getComputedStyle(pedal).scrollSnapAlign))]`),
       ['start'],
@@ -875,6 +890,7 @@ async function verifyDesktopLayout() {
     for (const width of [1280, 1279, 1000, 768, 767]) {
       await app.setViewport({ width, height: 900 });
       await app.waitFor(`window.innerWidth === ${width}`, { label: `폭 ${width}` });
+      await delay(300); // 미디어 쿼리 변화가 React 상태로 반영되어 다시 그려질 시간(곧바로 읽으면 이전 배치가 읽힌다)
       boundaries[width] = await waitForLayout(
         app,
         `(() => {
