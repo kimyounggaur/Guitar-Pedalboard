@@ -106,7 +106,7 @@
 | RX-3 실행 취소·다시 실행 | 충족(S5.3 후) | `historyStore.ts`(끌기 묶기), `HistoryControls.tsx`, `ShortcutService.ts` `isUndoOwnedByTarget`, `AudioEngine.ts`(체인 페이드·trim `fadeParam`), `history-regression.mjs`, `chain-fade-regression.mjs` | 'S2.8 토스트와 같은 구조'로 합치지는 않음(L-355) |
 | RX-4 캐비닛 IR 불러오기 | 충족(S5.4 후) | `cabinetIr.ts`, `cabinetIrStore.ts`, `cabinetIrLibrary.ts`, `cabinetIrAudio.ts`, `AudioEngine.ts`(`importCabinetIr`), `CabEffect.ts`(`my-ir`), `CabPedal.tsx` | S5.4 완료(L-361~L-368) |
 | RX-5 튜너 기준음 조정 | 충족(S5.5 후) | `AudioEngine.ts`(`setTuningReferenceHz` 400~480 Hz), `audioStore.ts` `tuningReferenceHz` 저장, `tunings.ts` `getPitchReading`, `Meter.tsx` 선택 상자, `s5-5-tuner-a4.spec.ts` | S5.5 완료(L-369~L-371) |
-| RX-6 화면 꺼짐 방지·이탈 경고 | 해결 | `SessionProtection.tsx`, `App.tsx:7` 장착 | S5.6 축소 |
+| RX-6 화면 꺼짐 방지·이탈 경고 | 충족(S5.6 후, 실기기 미확인) | `SessionProtection.tsx`(요청 겹침 방지 추가), `App.tsx:7` 장착, `s5-6-session-protection.spec.ts` | S5.6 완료(L-372~L-374) |
 
 ## 3. Step별 코드 지도
 
@@ -191,7 +191,7 @@
 | S5.3 | (실행 취소) | `historyStore.ts:1-88`, `HistoryControls.tsx`, `AppShell.tsx:2,92` | 없음(대상 미지정) | S5.3 완료(끌기 단위 묶기, 노브 포커스에서 단축키, 체인 페이드·trim 클릭 수정) |
 | S5.4 | (IR 불러오기) | `cabinetIr.ts:1-63`, `AudioEngine.ts:376-424`, `CabEffect.ts:19,59-77`, `CabPedal.tsx` | 없음(대상 미지정) | S5.4 완료(코드 지도의 '이미 구현'은 세션 한정 IR 이었다 — 저장소·`my-ir` 모델·정규화를 새로 만듦) |
 | S5.5 | (기준음 조정) | `AudioEngine.ts:493-497`, `tuner-processor.ts`, `audioStore.ts:744-755` | 없음(대상 미지정) | S5.5 완료(제품 코드 그대로, e2e·단위·변이 시험 보강) |
-| S5.6 | (화면 꺼짐 방지) | `SessionProtection.tsx:1-43`, `App.tsx:7` | 없음(대상 미지정) | 이미 구현 |
+| S5.6 | (화면 꺼짐 방지) | `SessionProtection.tsx:1-43`, `App.tsx:7` | 없음(대상 미지정) | S5.6 완료(겹침 결함 수정, e2e 8개·변이 시험 추가) |
 
 ### 3.1 '없음'(설계서가 말하는 파일이 아직 없는 것) 목록
 
