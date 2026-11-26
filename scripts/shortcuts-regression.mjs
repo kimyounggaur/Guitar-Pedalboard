@@ -187,7 +187,7 @@ Object.assign(globalThis.window, {
 const harness = await createSsrHarness({
   extraExports: [
     "{ AudioEngine } from './audio/AudioEngine.ts'",
-    "{ createShortcutKeydownHandler, executeShortcutCommand, isEscapeOwnedByTarget, isInteractiveShortcutTarget, isShortcutBlockedByTarget } from './input/ShortcutService.ts'",
+    "{ createShortcutKeydownHandler, executeShortcutCommand, isEscapeOwnedByTarget, isInteractiveShortcutTarget, isShortcutBlockedByTarget, isUndoOwnedByTarget } from './input/ShortcutService.ts'",
     "{ useAudioStore } from './store/audioStore.ts'",
     "{ clonePedals, usePedalStore } from './store/pedalStore.ts'",
     "{ usePresetStore } from './store/presetStore.ts'",
@@ -202,6 +202,7 @@ const {
   isEscapeOwnedByTarget,
   isInteractiveShortcutTarget,
   isShortcutBlockedByTarget,
+  isUndoOwnedByTarget,
   useAudioStore,
   usePedalStore,
   usePresetStore,
@@ -273,6 +274,17 @@ for (const [label, element] of Object.entries(emergencyStopTargets)) {
     );
   }
 }
+
+// S5.3 실행 취소(Ctrl/⌘ + Z): 글자·숫자 칸·목록·메뉴·대화상자는 자기 일이 먼저고, 버튼·페달 스위치·노브(range)·슬라이더·체크박스에서는 통한다.
+// 노브를 끌고 나면 포커스가 그 노브의 range 입력에 남으므로, 여기서 막으면 '끌고 나서 Ctrl+Z' 가 아무 일도 하지 않는다.
+for (const [label, element] of Object.entries(escapeOwnedTargets)) {
+  assert.equal(isUndoOwnedByTarget(element), true, `${label}: Ctrl+Z 는 그 칸·메뉴가 먼저 써야 합니다.`);
+}
+for (const [label, element] of Object.entries(emergencyStopTargets)) {
+  assert.equal(isUndoOwnedByTarget(element), false, `${label}: 포커스가 있어도 Ctrl+Z 실행 취소는 통해야 합니다.`);
+}
+assert.equal(isUndoOwnedByTarget(null), false);
+assert.equal(isUndoOwnedByTarget({}), false);
 
 // href 가 없는 <a> 는 링크가 아니라 컨트롤로 보지 않는다.
 assert.equal(isInteractiveShortcutTarget(new FakeElement('a')), false, 'href 없는 <a> 는 컨트롤이 아닙니다.');

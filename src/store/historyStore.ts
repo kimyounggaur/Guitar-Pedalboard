@@ -18,6 +18,30 @@ interface HistoryStore {
 let restoring = false;
 let lastParameterKey: string | null = null;
 let lastChangeAt = 0;
+// 노브 끌기 한 번(포인터를 누르고 떼기까지)은 도중에 얼마나 멈추든 실행 취소 한 단계다(S5.3). 시간(350 ms)만으로 묶으면
+// 끌다가 잠깐 멈추는 순간 두 단계로 갈라진다.
+let gestureActive = false;
+/** 이번 끌기가 이미 자기 단계(스냅숏)를 하나 남겼는가 — 남겼다면 이어지는 값 변화는 그 단계에 묶는다. */
+let gestureOpen = false;
+
+/** 끌기를 시작한다. 이 끌기의 첫 값 변화가 새 단계가 되고, 끝날 때까지의 값 변화는 모두 그 단계에 묶인다. */
+export function beginHistoryGesture(): void {
+  gestureActive = true;
+  gestureOpen = false;
+  lastParameterKey = null;
+}
+
+/** 끌기를 끝낸다. 이어서 오는 변화(키보드 화살표 등)는 새 단계다. 끌기가 아닐 때 불러도 아무 일도 없다. */
+export function endHistoryGesture(): void {
+  gestureActive = false;
+  gestureOpen = false;
+  lastParameterKey = null;
+}
+
+/** 지금 노브를 끌고 있는가 */
+export function isHistoryGestureActive(): boolean {
+  return gestureActive;
+}
 
 // Group consecutive moves of the same knob as one edit, while keeping unrelated edits separate.
 function changedParameterKey(before: PedalState[], after: PedalState[]): string | null {
@@ -36,6 +60,15 @@ function changedParameterKey(before: PedalState[], after: PedalState[]): string 
     }
   }
   return key;
+}
+
+/** 페달의 값(params)만 달라졌는가 — 순서·종류·켜짐이 같다. 노브를 끄는 동안의 변화가 이런 모양이다. */
+function onlyParametersChanged(before: PedalState[], after: PedalState[]): boolean {
+  if (before.length !== after.length) return false;
+  return before.every((oldPedal, index) => {
+    const newPedal = after[index];
+    return oldPedal === newPedal || (oldPedal.id === newPedal.id && oldPedal.type === newPedal.type && oldPedal.active === newPedal.active);
+  });
 }
 
 /**
@@ -66,6 +99,7 @@ function restore(snapshot: Snapshot) {
   } finally {
     restoring = false;
     lastParameterKey = null;
+    gestureOpen = false;
   }
 }
 
@@ -74,9 +108,11 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
   clear: () => {
     lastParameterKey = null;
     lastChangeAt = 0;
+    gestureOpen = false;
     set({ past: [], future: [] });
   },
   undo: () => {
+    if (gestureActive) return; // 노브를 끄는 도중에는 되돌리지 않는다(끌던 값과 어긋난다)
     const { past, future } = get();
     const previous = past.at(-1);
     if (!previous) return;
@@ -85,6 +121,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
     set({ past: past.slice(0, -1), future: [...future, current].slice(-MAX_HISTORY) });
   },
   redo: () => {
+    if (gestureActive) return;
     const { past, future } = get();
     const next = future.at(-1);
     if (!next) return;
@@ -102,11 +139,16 @@ usePedalStore.subscribe((state, previous) => {
   // 노브 하나를 계속 돌리는 편집만 한 단계로 묶는다. 음량 보정이 함께 바뀐 편집(프리셋 불러오기, 음량 맞추기)은 항상 한 단계다.
   const key = trimChanged ? null : changedParameterKey(previous.pedals, state.pedals);
   const now = Date.now();
-  const coalesce = key !== null && key === lastParameterKey && now - lastChangeAt <= COALESCE_MS;
+  // 끌기 도중: 값만 바뀌는 변화는 시간과 상관없이 이 끌기의 단계 하나에 묶는다. 끌기가 아닐 때(키보드 화살표 등)는 350 ms 안의 같은 노브만 묶는다.
+  const parametersOnly = !trimChanged && onlyParametersChanged(previous.pedals, state.pedals);
+  const coalesce = gestureActive && gestureOpen && parametersOnly
+    ? true
+    : key !== null && key === lastParameterKey && now - lastChangeAt <= COALESCE_MS;
   useHistoryStore.setState((history) => ({
     past: coalesce ? history.past : [...history.past, snapshotOf(previous.pedals, previous.presetTrimDb)].slice(-MAX_HISTORY),
     future: [],
   }));
   lastParameterKey = key;
   lastChangeAt = now;
+  if (gestureActive) gestureOpen = parametersOnly;
 });
