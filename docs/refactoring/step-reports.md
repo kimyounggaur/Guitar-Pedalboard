@@ -2356,3 +2356,43 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - 옛 Git 기록에 이미지가 남아 있다.
 
 ---
+
+## S4.9 저장소 정리
+
+- 브랜치·병합: `refactor/s4-9-repo-cleanup` → `phase/4`. 커밋: `106e690`(assets 제거)·`f92d31c`(npm audit fix)·`412095f`(README 수치 시험)
+- 해결 항목: R4-9. 선택 항목(소스맵·DEV 점검 코드·문자열 워클릿)은 하지 않고 기록만 했다(L-342). 설계서의 "경고 16건" 은 시작 때 14건이었다(L-340).
+- 변경 파일(`git diff --shortstat phase/4 HEAD`, 이 문서 커밋 전): 6 files changed, 249 insertions(+), 20086 deletions(-)(삭제 줄은 거의 전부 `assets/` 옛 번들). 제품 코드 — 없음. 저장소 — `assets/` 2파일 제거, `package-lock.json`(19개 버전 상승·전이 의존성 1개 추가, `package.json` 은 `test:readme` 한 줄뿐). 시험 — `scripts/readme-numbers-regression.mjs`. 문서 — `README.md` 알려진 제약 2줄.
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| `git ls-files assets \| wc -l` = 0 | **충족** | 2 → 0, 폴더도 삭제 |
+| `npm audit` high 이상 0(남는 항목은 README 에 이유 기록) | **충족** | 14건(high 2) → 4건(전부 moderate), `npm audit --audit-level=high` 종료 코드 0, 이유는 README 알려진 제약 |
+| README 수치가 코드와 같다(이펙트 수는 테스트로 자동 검사) | **충족**(검사 범위 안) | `test:readme` 25개 확인, 변이 13/13. 검사 밖 항목은 L-343 |
+
+**전후**
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| `git ls-files assets` | 2줄(776 KB) | 0줄 |
+| `npm audit` | 14건(low 1·moderate 11·high 2) | 4건(moderate 4, high 이상 0) |
+| `npm audit --omit=dev`(배포 의존성) | 0건 | 0건 |
+| `package.json` 직접 의존성 | — | 변경 0(스크립트 1줄만 추가) |
+| README 수치 자동 검사 | 없음 | `npm run test:readme`(25개 확인) |
+| `npm test` | 53개 통과(S4.7, 577초) | 54개 통과(621초) |
+| 전체 e2e | 333개 통과(S4.8) | 333개 통과(22.7분) |
+| 프로브 | 30개, 값 2,468개 | 다시 돌리지 않음 — `src/audio`·`src/config`·기준선 불변(`npm test` 안의 `test:probe` 는 통과) |
+
+- 검증(최종 커밋 + 문서 변경 위에서)
+  - `npx tsc -b --noEmit`·`npx tsc -p tsconfig.e2e.json --noEmit`·`npx eslint e2e`·`npm run build`·`npm run lint` 오류 0, 정규식 단언 목록 `regex-assertions.md` 그대로(0곳).
+  - `npm test` 54개 통과(621초), 전체 e2e 333개 통과(22.7분) — 의존성(`vite` 7.3.8 등)이 바뀌었으므로 e2e 도 다시 돌렸다.
+  - **새 검사가 정말 잡는지**: 가짜 README 13종 모두 실패(L-341). 가드(`test:test-system`)는 66개 파일에서 정규식 단언 0·소스 읽는 시험 19개 그대로.
+- 만난 문제
+  - 처음 쓴 `readme-numbers-regression.mjs` 가 `createRequire(import.meta.url)` 배너 때문에 data: 주소에서 실패했다 → 다른 시험처럼 배너 없이 `target: 'node20'` 로 고쳤다.
+  - 설계서의 "경고 16건"·"문자열 워클릿 3개"·"1,077줄" 은 낡았다(실제 14건·코드 지도 기준 8개·1,084줄).
+- 사람 확인 필요
+  - 남은 moderate 4건(`vite-plugin-pwa` 메이저 교체) 적용 여부, 소스맵 `'hidden'` 여부, 옛 Git 기록에 남은 `assets/` 2파일(D8), 바뀐 잠금 파일로 실제 GitHub Actions `npm ci` 가 통과하는지(L-343).
+- 남은 위험
+  - 잠금 파일에 전이 의존성이 1개 늘었다(`@isaacs/nonrecursive-glob-match`, minimatch 갱신과 함께). 직접 의존성은 그대로다.
+  - `test:readme` 는 검사 범위 밖의 README 숫자(WAV 600만 프레임, 모드 개수 등)를 지키지 않는다.
+
+---

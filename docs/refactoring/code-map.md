@@ -95,7 +95,7 @@
 | R4-6 한국어·영어 혼용 | 해결 | `src/i18n/ko.ts`(문구 178개·20묶음), `i18n/paramName.ts`·`ParamScope.tsx`(조절기 한국어 접근성 이름), `scripts/ko-catalog-regression.mjs`(정적 검사). 페달 얼굴 글자(이름·노브 약어·프리셋 이름)는 설계서 허용대로 영어 유지 | S4.6 완료(E-22 `e22-copy.spec.ts`; 옛 코드는 영어 시스템 문구 30~50곳·내부 이름 3~6곳·한글 없는 접근성 이름 103개) |
 | R4-7 테스트가 소스 문자열 검사, 배포 때 미실행 | 부분(S4.7 후: 정규식 단언 0, 소스 글자 읽기 19개 58곳 동결) | 배포 전 lint·test·responsive 실행(`deploy.yml:35-41`). 정규식 단언 337 → 394(Phase 1~4 에서 늘어남) → 0(S4.7) | PR용 `verify.yml` 없음, Chrome 없으면 반응형 테스트를 조용히 건너뜀(`responsive-a11y-regression.mjs:256-259`), 프로브·E2E 없음 → S0.2~S0.4, S4.7 |
 | R4-8 상표명·저작물 | 부분(S4.8 후) | `Source/` 의 이미지는 제거됨(옛 Git 기록에는 남음 — D8), AI 기획 문서 3개는 `docs/planning/` 으로 이동하고 `/Source/` 는 `.gitignore`. 'TS Clean'·'TS Boost' 는 'Mid Clean'·'Mid Boost' 로 바꾸고 E-22 가 화면 상표 표기를 지킨다 | 'Plexi Lead' 프리셋·'British Crunch'·Cab 라벨 'Blue'·'Tweed'·Fuzz 'Velcro'(사람이 정함), Cab 내부 id `v30`·`greenback`·`jensen`·`tweed`(저장값이라 이름 못 바꿈) → S4.8 완료(L-333~L-338) |
-| R4-9 저장소 정리 | 부분 | `esbuild`가 devDependency로 명시(`package.json:51`) | `assets/` 2파일이 추적 중(.gitignore에는 있음), `sourcemap: true`(`vite.config.ts:73`), `engines` 없음, `__migration_check.ts` 1,085줄 → S0.2, S4.9 |
+| R4-9 저장소 정리 | 충족(S4.9 후) | `esbuild`가 devDependency로 명시(`package.json:51`). `assets/` 추적 파일 0개. `npm audit` high 이상 0(남은 moderate 4건은 `vite-plugin-pwa` 메이저 교체 필요, README 에 기록). README 수치는 `test:readme` 가 지킴 | `sourcemap: true`(`vite.config.ts:73`), `engines` 없음, `__migration_check.ts` 1,084줄(이미 `npm test` 의 시험 6개가 실행), 문자열 워클릿 → 선택 항목이라 기록만(L-342) |
 
 ### 2.5 보완 기능 (RX) — 전부 구현됨
 
@@ -180,7 +180,7 @@
 | S4.6 | `ko.ts`, 영어 문구, 내부 이름 노출, `PedalBoard.tsx:96` | `ko.ts` 는 이미 있었고(4묶음) 20묶음 178개로 늘림. `PedalBoard.tsx` 의 알림은 이미 한국어였다 | 위치 다름 | 완료(L-307~L-319) — 얼굴 글자는 영어 유지(L-308) |
 | S4.7 | `scripts/*-regression.mjs` 정규식 단언, `pwa-regression.mjs`, 프로브·E2E | 정규식 단언 394곳(`regex-assertions.md`, S4.7 시작 시점) | 위치 다름 | S4.7 완료(정규식 단언 0, 가드 `test:test-system`) |
 | S4.8 | Drive·Crunch UI·프리셋 이름, `cabinet.ts` 223~229행, `Source/`, `.gitignore`, `README.md` 118행 | `DrivePedal.tsx:15-16`, `presetStore.ts:218`, `CabPedal.tsx:15-19`, `README.md:130`; `Source/`에는 이미지가 없고 AI 기획 문서 3개만 남음(설계서 S4.8의 `git mv docs/planning/` 대상) | 위치 다름 | S4.8 완료(바꾼 곳은 `DrivePedal.tsx` 단추 2개·`Source/` 이동) |
-| S4.9 | `assets/`, `package.json`, `README.md`, `vite.config.ts` 73행, `__migration_check.ts` + `main.tsx` 10~14행, 문자열 워클릿 3개 | `assets/` 추적 2파일, `vite.config.ts:73`, `__migration_check.ts`(1,085줄), `main.tsx:10-14`, 문자열 워클릿은 8개로 늘었음(`worklets/*.ts`) | 위치 다름 | 미착수 |
+| S4.9 | `assets/`, `package.json`, `README.md`, `vite.config.ts` 73행, `__migration_check.ts` + `main.tsx` 10~14행, 문자열 워클릿 3개 | `assets/` 추적 2파일, `vite.config.ts:73`, `__migration_check.ts`(1,085줄), `main.tsx:10-14`, 문자열 워클릿은 8개로 늘었음(`worklets/*.ts`) | 위치 다름 | S4.9 완료(`assets/` 제거·잠금 파일 갱신·`test:readme` 추가, 선택 항목은 기록만) |
 
 ### Phase 5 — 보완 기능
 
