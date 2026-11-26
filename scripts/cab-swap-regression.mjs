@@ -579,7 +579,7 @@ const makeupOf = (model, mic, dist) => 10 ** (createCabinet(createFakeWorld().co
   equal(CAB_IR_DEBOUNCE_MS, 120, '설계서: 마이크·거리 노브는 120 ms 멈춘 뒤에만 IR 을 다시 만든다');
   equal(CAB_IR_SWAP_FADE_SECONDS, 0.02, '설계서: IR 을 바꿀 때 20 ms 웻 페이드');
   const factory = await readFile(new URL('src/audio/offline/effectFactory.ts', rootUrl), 'utf8');
-  ok(/new CabEffect\(context, pedal, timers\)/.test(factory), '오프라인 팩토리는 렌더 시각 타이머를 Cab 에 넘긴다');
+  ok(/new CabEffect\(context, pedal, timers, userImpulse\)/.test(factory), '오프라인 팩토리는 렌더 시각 타이머와 사용자 IR 제공자를 Cab 에 넘긴다');
   const chain = await readFile(new URL('src/audio/offline/renderChain.ts', rootUrl), 'utf8');
   ok(/createOfflineEffect\(context, pedal, impulseCache, timers\)/.test(chain), 'renderChain 은 이펙트 생성에 렌더 시각 타이머를 넘긴다');
 }

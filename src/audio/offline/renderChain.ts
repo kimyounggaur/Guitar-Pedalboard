@@ -14,6 +14,7 @@ import { ImpulseCache } from '../utils/impulseCache';
 import { clampTrimDb } from './loudnessSpec';
 import { createContextTimers } from './contextTimers';
 import { clearContextTimers, setContextTimers } from '../utils/timers';
+import type { UserImpulseSource } from '../nodes/CabEffect';
 import { createOfflineEffect } from './effectFactory';
 import { registerWorklets } from './workletModules';
 
@@ -78,6 +79,8 @@ export interface RenderChainOptions {
    * 실제 처리 지연을 재는 측정(P-16)만 false 로 두어 리미터의 지연까지 읽는다.
    */
   alignOutput?: boolean;
+  /** Cab 모델 '내 IR'(S5.4)이 쓸 사용자 IR 제공자. AudioBuffer 는 렌더 컨텍스트와 같은 샘플레이트로 만든 것이어야 한다. */
+  userImpulse?: UserImpulseSource;
   events?: ChainEvent[];
   /** 여러 번 렌더하는 시험이 임펄스 응답 생성 비용을 나누도록 밖에서 만든 캐시를 넘길 수 있다. 넘기면 여기서 닫지 않는다. */
   impulseCache?: ImpulseCache;
@@ -245,7 +248,7 @@ export async function renderChain(options: RenderChainOptions): Promise<OfflineR
 
     let previous: AudioNode = chainInput;
     for (const pedal of livePedals) {
-      const effect = createOfflineEffect(context, pedal, impulseCache, timers);
+      const effect = createOfflineEffect(context, pedal, impulseCache, timers, options.userImpulse);
       effects.set(pedal.id, effect);
       previous.connect(effect.input);
       previous = effect.output;

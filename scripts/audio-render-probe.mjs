@@ -35,7 +35,7 @@ const HEADLINES = {
   'P-01': ['noiseOutDb', 'playedOutDb', 'differenceDb'],
   'P-02': ['inputDropDb', 'outputDropDb'],
   'P-03': ['peakWithLimiterDb', 'peakWithoutLimiterDb', 'defaultCabOffPeakDb', 'defaultCabOffPeakWithoutLimiterDb'],
-  'P-04': ['defaultDiffDb', 'maxAbsDiffDb'],
+  'P-04': ['defaultDiffDb', 'maxAbsDiffDb', 'myIrRealMaxAbsDiffDb', 'myIrStressMaxAbsDiffDb'],
   'P-05': ['rawMinDb', 'rawMaxDb', 'minDb', 'maxDb', 'spreadDb', 'maxAbsDeviationDb', 'maxLimiterReductionDb', 'cleanDrive.maxDiffDb', 'quick.maxAbsErrorDb'],
   'P-06': ['auto.left.decision', 'auto.left.lrDiffDb', 'auto.left.lossDb', 'auto.left.decisionSeconds', 'auto.right.lrDiffDb', 'auto.both.lossDb'],
   'P-08': ['mix75.rippleDb', 'mix45.rippleDb'],
