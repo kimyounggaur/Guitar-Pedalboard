@@ -4,7 +4,7 @@
 // 녹음 중에 멈춰도 파일이 남는지, 대화상자가 열린 상태의 Esc 는 대화상자만 닫는지,
 // 정지→연결을 10번 되풀이해도 AudioContext 가 동시에 둘 이상 열리지 않는지 확인한다.
 import { readFileSync } from 'node:fs';
-import { connectButton, connectGuitar, disconnectButton, openApp, panicButton } from '../helpers/app';
+import { chooseRecordingFormat, connectButton, connectGuitar, disconnectButton, openApp, panicButton, type RecordingFormat } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { markTriggers, mockHowlGuard, readAudioTracking, trackAudioContexts, triggerHowl } from '../helpers/mocks';
 import { waitForTeardown } from '../helpers/teardown';
@@ -138,10 +138,16 @@ test.describe('E-01 정지 정리', () => {
     await connectGuitar(page);
   });
 
-  test('E-01 녹음 중 Panic: 파일이 남고 길이 = 녹음 시간 ±0.5초', async ({ page }) => {
+  // S5.1: 기본 형식이 WAV 로 바뀌었으므로 두 녹음 경로(WAV 는 ScriptProcessor, 작은 파일은 MediaRecorder) 모두 같은 정지 절차를 지나는지 본다.
+  const recordingFormats: Array<{ format: RecordingFormat; label: string; extension: string }> = [
+    { format: 'wav', label: 'WAV', extension: 'wav' },
+    { format: 'webm', label: '작은 파일', extension: '(webm|m4a|mp4|ogg)' },
+  ];
+  for (const { format, label, extension } of recordingFormats) test(`E-01 녹음 중 Panic(${label}): 파일이 남고 길이 = 녹음 시간 ±0.5초`, async ({ page }) => {
     await openConnected(page);
+    await chooseRecordingFormat(page, format);
     await page.getByRole('button', { name: '녹음', exact: true }).click();
-    await expect(page.getByText(/녹음 중/)).toBeVisible();
+    await expect(page.locator('.recording-status', { hasText: '녹음 중' })).toBeVisible();
     const recordStartedAt = await page.evaluate(() => (window as unknown as { __lastTrigger: number }).__lastTrigger);
     await page.waitForTimeout(3000);
 
@@ -155,7 +161,7 @@ test.describe('E-01 정지 정리', () => {
     const downloadButton = page.getByRole('button', { name: '다운로드' });
     await expect(downloadButton).toBeEnabled({ timeout: 5000 });
     const [download] = await Promise.all([page.waitForEvent('download'), downloadButton.click()]);
-    expect(download.suggestedFilename()).toMatch(/\.(webm|m4a|mp4|ogg|wav)$/);
+    expect(download.suggestedFilename()).toMatch(new RegExp(`\\.${extension}$`));
     const bytes = Array.from(readFileSync(await download.path()));
     expect(bytes.length).toBeGreaterThan(1000);
     const decodedSeconds = await page.evaluate(async (data: number[]) => {

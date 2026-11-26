@@ -101,7 +101,7 @@
 
 | 항목 | 판정 | 근거 (파일:줄) | 남은 것 → Step |
 |---|---|---|---|
-| RX-1 WAV 녹음 | 해결 | `recording.ts:50` `WavRecorder`, `audioStore.ts:581,691-693` 형식 선택(기본 `webm`) | 기본 형식·E2E → S5.1 축소 |
+| RX-1 WAV 녹음 | 충족(S5.1 후) | `recording.ts` `WavRecorder`·`encodePcmWav`(16·24비트, 최대 길이 한도), `audioStore.ts` 형식·비트 깊이·최대 길이 설정과 저장(기본 WAV), `Meter.tsx` 선택·남은 시간 | 설계의 워클릿+워커 인코딩은 안 함(`ScriptProcessor` 유지, L-347) |
 | RX-2 MIDI 확장 | 해결 | `midiAdvanced.ts`(프로그램 체인지·볼륨 CC·와와 CC), `MidiAdvancedControls.tsx` | S5.2 축소 |
 | RX-3 실행 취소·다시 실행 | 해결 | `historyStore.ts`, `HistoryControls.tsx`, `history-regression.mjs` | S5.3 축소 |
 | RX-4 캐비닛 IR 불러오기 | 해결 | `cabinetIr.ts`, `AudioEngine.ts:380-424`, `CabPedal.tsx` | S5.4 축소 |
@@ -186,7 +186,7 @@
 
 | Step | 설계서의 대상 | 실제 경로·함수·줄 | 위치 | 진행 |
 |---|---|---|---|---|
-| S5.1 | (WAV 녹음) | `recording.ts:50-94` `WavRecorder`, `audioStore.ts:411`(`finishActiveRecording`)·`:581,691-693`·`:1086`(시작)·`:1182`(정지) | 없음(대상 미지정) | 이미 구현(기본은 webm) |
+| S5.1 | (WAV 녹음) | `recording.ts:50-94` `WavRecorder`, `audioStore.ts:411`(`finishActiveRecording`)·`:581,691-693`·`:1086`(시작)·`:1182`(정지) | 없음(대상 미지정) | S5.1 완료(기본 WAV·24비트·최대 길이·남은 시간·설정 저장, 워클릿+워커는 안 함) |
 | S5.2 | (MIDI 확장) | `midiAdvanced.ts:1-50`, `MidiAdvancedControls.tsx`, `audioStore.ts:181-185` | 없음(대상 미지정) | 이미 구현 |
 | S5.3 | (실행 취소) | `historyStore.ts:1-88`, `HistoryControls.tsx`, `AppShell.tsx:2,92` | 없음(대상 미지정) | 이미 구현 |
 | S5.4 | (IR 불러오기) | `cabinetIr.ts:1-63`, `AudioEngine.ts:376-424`, `CabEffect.ts:19,59-77`, `CabPedal.tsx` | 없음(대상 미지정) | 이미 구현 |

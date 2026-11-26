@@ -2396,3 +2396,41 @@ H 신호는 모두 차단 뒤 출력이 완전한 무음(−200 dB)이다. '알�
   - `test:readme` 는 검사 범위 밖의 README 숫자(WAV 600만 프레임, 모드 개수 등)를 지키지 않는다.
 
 ---
+
+## S5.1 WAV 녹음
+
+- 브랜치·병합: `refactor/s5-1-wav-recording` → `phase/5`. 커밋: `325c789`(구현)·`b378498`(e2e)·`7d9b389`(변이 시험 보강 단언)
+- 해결 항목: R5-1(RX-1). 워클릿+워커 인코딩은 하지 않았다(L-347).
+- 변경 파일(`git diff --shortstat phase/5 HEAD`, 이 문서 커밋 전): 11 files changed, 502 insertions(+), 44 deletions(-). 제품 — `src/audio/recording.ts`(24비트·한도 함수·`WavRecorder` 옵션)·`src/store/audioStore.ts`(형식·비트 깊이·최대 길이 설정과 저장)·`src/components/Meter.tsx`·`src/styles/panels.css`. 시험 — `scripts/recording-regression.mjs`, e2e 5개 파일(`s5-1-wav-recording.spec.ts` 신설). 문서 — `README.md` 녹음 설명 3줄.
+
+| 수용 기준 | 결과 | 근거 |
+|---|---|---|
+| WAV 를 편집 프로그램·기본 플레이어에서 열면 길이가 정확히 보인다 | **충족**(편집 프로그램은 사람이 확인) | 머리말 크기·브라우저 디코딩 길이·녹음한 시간이 같다(16·24비트) |
+| Safari 압축 녹음의 확장자가 `.m4a` | **기존 경로 그대로**(Safari 는 사람이 확인) | MIME → 확장자 매핑 단위 시험 |
+
+**전후**
+
+| 항목 | 전 | 후 |
+|---|---|---|
+| 녹음 기본 형식 | 압축(WebM) | WAV(16비트), '작은 파일'은 압축 |
+| 비트 깊이 | 16비트만 | 16·24비트 |
+| WAV 최대 길이 | 2분·600만 프레임 고정 | 1·2·5분 선택(기본 5분), 1,500만 프레임 상한, 녹음 중 남은 시간 표시 |
+| 형식·비트 깊이·길이 저장 | 저장 안 됨 | 설정 저장소에 저장, 새로고침 뒤 유지 |
+| `npm test` | 54개 통과(S4.9, 약 620초) | 54개 통과(563초) |
+| 전체 e2e | 333개 통과(S4.9, 약 21분) | 341개(약 24분), 첫 실행 340개 통과·1개 시간 시험 흔들림(아래) |
+| 프로브 | 30개, 값 2,468개 | 다시 돌리지 않음 — `src/config`·기준선·오디오 그래프 불변(`npm test` 안의 `test:probe` 는 통과) |
+
+- 검증(최종 커밋 위에서)
+  - `npx tsc -b --noEmit`·`npx tsc -p tsconfig.e2e.json --noEmit`·`npx eslint e2e`·`npm run build`·`npm run lint` 오류 0, 정규식 단언 목록 `regex-assertions.md` 그대로(0곳), `npm test` 54개 통과(563초).
+  - 전체 e2e 341개: 340개 통과, S4.3 ① 1개가 4.2 ms 로 상한(4 ms)을 넘음 → 같은 코드에서 그 시험 3번·파일 전체 2번 모두 통과(L-349).
+  - **새 검사가 정말 잡는지**: 변이 13개 모두 실패(L-348) — 살아남은 1개로 단언 1개 보강.
+- 만난 문제
+  - 처음 e2e 에서 `Buffer` 타입이 없어(`e2e/types/node-shim.d.ts`) Uint8Array·DataView·`toBase64` 로 고쳤다. 60초 WAV 를 `Array.from` 으로 넘기다 작업자가 메모리 부족으로 죽어 base64 로 넘기게 했다.
+  - 오래된 `dist/` 로 시험이 돌아 결과가 틀린 적이 있다 — `npm run build`(`tsc -b`)가 타입 오류로 실패하면 이전 `dist/` 가 남는다. 빌드가 정말 성공했는지 확인하는 절차를 검증 목록에 유지한다.
+  - E-01·E-03·E-15 의 `getByText(/녹음 중/)` 가 WAV 안내 문구와 겹쳐(엄격 모드 위반) `.recording-status` 로 좁혔다.
+- 사람 확인 필요
+  - 실제 Safari `.m4a`, 휴대폰 5분 WAV 메모리, 24비트 WAV 가 편집 프로그램에서 열리는지, 녹음 소리 청취, `ScriptProcessor` → 워클릿+워커 전환 여부(L-347), 1,500만 프레임 상한.
+- 남은 위험
+  - `ScriptProcessorNode` 는 오래된 API 다. 5분 WAV 는 메모리를 약 115 MB 쓴다. S4.3 노브 시간 시험은 부하에서 4 ms 상한에 가까운 값이 나올 수 있다(이번 4.2 ms, 이전 1.4~3.3 ms).
+
+---

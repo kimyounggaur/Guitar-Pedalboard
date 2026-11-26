@@ -10,7 +10,7 @@
 // 화면이 어떤 상태여도 같은 시간 안에' 가 핵심이다.
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { connectButton, connectGuitar, disconnectButton, openApp, panicButton, setMobileDock } from '../helpers/app';
+import { chooseRecordingFormat, connectButton, connectGuitar, disconnectButton, openApp, panicButton, setMobileDock } from '../helpers/app';
 import { fixturePath } from '../helpers/env';
 import { expect, test } from '../helpers/fixtures';
 import { emulateHiddenDocument, markTriggers, observeGuard, readAudioTracking, readGuardObservation, trackAudioContexts, type GuardObservation } from '../helpers/mocks';
@@ -178,12 +178,17 @@ test.describe('E-03 하울링 차단', () => {
     expect((await readAudioTracking(page)).inputTracks.every((track) => track.readyState === 'live')).toBe(true);
   });
 
-  test('E-03 녹음 중 차단: 녹음 파일이 남고 소리가 들어 있다', async ({ launchWithMic }) => {
+  // S5.1: 기본 형식이 WAV 로 바뀌었으므로 WAV 와 작은 파일 두 경로 모두 차단 뒤에 파일이 남는지 본다.
+  for (const { format, label, extension } of [
+    { format: 'wav', label: 'WAV', extension: 'wav' },
+    { format: 'webm', label: '작은 파일', extension: '(webm|m4a|mp4|ogg)' },
+  ] as const) test(`E-03 녹음 중 차단(${label}): 녹음 파일이 남고 소리가 들어 있다`, async ({ launchWithMic }) => {
     const { page } = await launchWithMic('h-1.wav');
     await openForHowl(page);
     await connectGuitar(page);
+    await chooseRecordingFormat(page, format);
     await page.getByRole('button', { name: '녹음', exact: true }).click();
-    await expect(page.getByText(/녹음 중/)).toBeVisible();
+    await expect(page.locator('.recording-status', { hasText: '녹음 중' })).toBeVisible();
     const recordStartedAt = await page.evaluate(() => (window as unknown as { __lastTrigger: number }).__lastTrigger);
 
     const observation = await waitForCut(page);
@@ -195,7 +200,7 @@ test.describe('E-03 하울링 차단', () => {
     const downloadButton = page.getByRole('button', { name: '다운로드' });
     await expect(downloadButton).toBeEnabled({ timeout: 5000 });
     const [download] = await Promise.all([page.waitForEvent('download'), downloadButton.click()]);
-    expect(download.suggestedFilename()).toMatch(/\.(webm|m4a|mp4|ogg|wav)$/);
+    expect(download.suggestedFilename()).toMatch(new RegExp(`\\.${extension}$`));
     const bytes = Array.from(readFileSync(await download.path()));
     expect(bytes.length).toBeGreaterThan(1000);
     const decoded = await page.evaluate(async (data: number[]) => {

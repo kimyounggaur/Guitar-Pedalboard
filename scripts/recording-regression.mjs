@@ -22,7 +22,10 @@ const helperBundle = await build({
   write: false,
 });
 const helperUrl = `data:text/javascript;base64,${Buffer.from(helperBundle.outputFiles[0].text).toString('base64')}`;
-const { createRecordingFilename, selectRecorderMimeType, recordingFormatFromMime, encodePcmWav, WavRecorder } = await import(helperUrl);
+const {
+  createRecordingFilename, selectRecorderMimeType, recordingFormatFromMime, encodePcmWav, WavRecorder,
+  DEFAULT_WAV_MAX_SECONDS, MAX_WAV_FRAMES, WAV_MAX_SECONDS_OPTIONS, normalizeWavBitDepth, normalizeWavMaxSeconds, wavFrameLimit,
+} = await import(helperUrl);
 
 assert.equal(
   selectRecorderMimeType((mimeType) => mimeType === 'audio/webm;codecs=opus'),
@@ -83,15 +86,52 @@ assert.deepEqual([44, 46, 48, 50].map((offset) => captured.getInt16(offset, true
 assert.equal(MockWavContext.instances.at(-1).processor.onaudioprocess, null);
 assert.equal(MockWavContext.instances.at(-1).closed, true);
 assert.equal(limitCalls, 0);
-class ShortLimitContext extends MockWavContext { constructor() { super(); this.sampleRate = 1; } }
-globalThis.AudioContext = ShortLimitContext;
-const limitedRecorder = new WavRecorder({}, () => { limitCalls += 1; });
-const samples = new Float32Array(130).fill(0.5);
-MockWavContext.instances.at(-1).processor.onaudioprocess({ inputBuffer: { numberOfChannels: 1, getChannelData() { return samples; } } });
+class OneHertzContext extends MockWavContext { constructor() { super(); this.sampleRate = 1; } }
+globalThis.AudioContext = OneHertzContext;
+const block = (count, channels = 1) => ({ inputBuffer: { numberOfChannels: channels, getChannelData() { return new Float32Array(count).fill(0.5); } } });
+// 최대 길이를 안 주면 기본 5분(300초 = 샘플레이트 1 에서 300 프레임)이다: 130 프레임은 한도에 닿지 않는다.
+const defaultRecorder = new WavRecorder({}, () => { limitCalls += 1; });
+assert.equal(defaultRecorder.limitSeconds, 300, '기본 최대 길이는 5분');
+MockWavContext.instances.at(-1).processor.onaudioprocess(block(130));
+assert.equal(limitCalls, 0, '기본 한도(300프레임) 안이면 한도 콜백이 없다');
+assert.equal(new DataView(await (await defaultRecorder.stop()).arrayBuffer()).getUint32(40, true), 130 * 4);
+// 1분을 고르면 60 프레임에서 멈추고 한도 콜백이 한 번 불리며, 한도를 넘은 프레임은 담지 않는다.
+const limitedRecorder = new WavRecorder({}, () => { limitCalls += 1; }, { maxSeconds: 60 });
+assert.equal(limitedRecorder.limitSeconds, 60);
+MockWavContext.instances.at(-1).processor.onaudioprocess(block(130));
 assert.equal(limitCalls, 1);
 const limitedWav = new DataView(await (await limitedRecorder.stop()).arrayBuffer());
-assert.equal(limitedWav.getUint32(40, true), 120 * 4);
+assert.equal(limitedWav.getUint32(40, true), 60 * 4);
+// 선택지에 없는 값(45초)은 기본 5분으로 본다.
+assert.equal(new WavRecorder({}, () => {}, { maxSeconds: 45 }).limitSeconds, 300);
+// 24비트: 샘플 3바이트, 헤더가 24비트로 맞고, 값이 두 보수로 들어간다.
+const recorder24 = new WavRecorder({}, () => {}, { maxSeconds: 60, bitDepth: 24 });
+MockWavContext.instances.at(-1).processor.onaudioprocess({ inputBuffer: { numberOfChannels: 2, getChannelData(channel) { return channel ? new Float32Array([1, 0.5]) : new Float32Array([-1, 0]); } } });
+const wav24 = new DataView(await (await recorder24.stop()).arrayBuffer());
+assert.equal(wav24.getUint16(34, true), 24, '비트 깊이');
+assert.equal(wav24.getUint32(40, true), 4 * 3, '자료 바이트');
+assert.equal(wav24.getUint32(4, true), 36 + 4 * 3, 'RIFF 크기');
+assert.equal(wav24.getUint32(28, true), 1 * 2 * 3, '초당 바이트');
+assert.equal(wav24.getUint16(32, true), 6, '블록 정렬');
+const int24 = (offset) => { const v = wav24.getUint8(offset) | (wav24.getUint8(offset + 1) << 8) | (wav24.getUint8(offset + 2) << 16); return v >= 0x800000 ? v - 0x1000000 : v; };
+assert.deepEqual([44, 47, 50, 53].map(int24), [-8388608, 8388607, 0, 4194304]);
 delete globalThis.AudioContext;
+// 선택지·정규화·메모리 상한.
+assert.deepEqual([...WAV_MAX_SECONDS_OPTIONS], [60, 120, 300]);
+assert.equal(DEFAULT_WAV_MAX_SECONDS, 300);
+assert.equal(normalizeWavMaxSeconds(120), 120);
+assert.equal(normalizeWavMaxSeconds(121), 300);
+assert.equal(normalizeWavMaxSeconds('300'), 300);
+assert.equal(normalizeWavBitDepth(24), 24);
+assert.equal(normalizeWavBitDepth(32), 16);
+assert.equal(normalizeWavBitDepth(undefined), 16);
+assert.equal(wavFrameLimit(48000, 300), 14_400_000);
+assert.equal(wavFrameLimit(96000, 300), MAX_WAV_FRAMES, '샘플레이트가 높으면 메모리 상한이 먼저 닿는다');
+assert.equal(wavFrameLimit(44100, 60), 2_646_000);
+// 24비트로 인코딩해도 길이(초) = 자료 바이트 / 초당 바이트가 샘플레이트와 맞는다.
+const wavLong24 = encodePcmWav([new Float32Array(48000 * 2)], 48000, 24);
+const wavLong24View = new DataView(await wavLong24.arrayBuffer());
+assert.equal(wavLong24View.getUint32(40, true) / wavLong24View.getUint32(28, true), 1, '24비트 1초 길이');
 
 let now = 1_000;
 Object.defineProperty(globalThis, 'performance', {
@@ -350,7 +390,11 @@ engine.stop = async () => { directEngineStopCalls += 1; };
 
 assert.equal(useAudioStore.getState().recordingStatus, 'idle', '처음 녹음 상태는 idle');
 assert.equal(useAudioStore.getState().recordedUrl, null);
-useAudioStore.setState({ isRunning: true, inputMode: 'device', error: null });
+// S5.1: 처음 열면 WAV·16비트·최대 5분이다. 이 아래의 압축 녹음(MediaRecorder) 시험은 형식을 직접 고르고 시작한다.
+assert.equal(useAudioStore.getState().recordingFormat, 'wav', '기본 녹음 형식은 WAV');
+assert.equal(useAudioStore.getState().wavBitDepth, 16, '기본 비트 깊이');
+assert.equal(useAudioStore.getState().wavMaxSeconds, 300, '기본 최대 길이는 5분');
+useAudioStore.setState({ isRunning: true, inputMode: 'device', error: null, recordingFormat: 'webm' });
 assert.equal(useAudioStore.getState().recordingSupported, true);
 useAudioStore.getState().startRecording();
 let recorder = MockMediaRecorder.instances.at(-1);
@@ -499,17 +543,43 @@ await useAudioStore.getState().stopRecording();
 assert.equal(useAudioStore.getState().recordedFormat, 'ogg');
 assert.equal(createdBlobs.at(-1).type, 'audio/ogg;codecs=opus');
 
-globalThis.AudioContext = ShortLimitContext;
+// S5.1: WAV 녹음 — 1분·24비트를 고르면 저장되고, 샘플레이트 1 에서 60 프레임에 닿으면 자동 저장되며, 파일이 24비트다.
+globalThis.AudioContext = OneHertzContext;
 useAudioStore.setState({ isRunning: true, inputMode: 'device', error: null });
 useAudioStore.getState().setRecordingFormat('wav');
+useAudioStore.getState().setWavMaxSeconds(60);
+useAudioStore.getState().setWavBitDepth(24);
+const savedWavIo = JSON.parse(storage.get('guitar-pedalboard:io'));
+assert.equal(savedWavIo.recordingFormat, 'wav', '고른 녹음 형식이 저장된다');
+assert.equal(savedWavIo.wavMaxSeconds, 60, '고른 최대 길이가 저장된다');
+assert.equal(savedWavIo.wavBitDepth, 24, '고른 비트 깊이가 저장된다');
+assert.equal(savedWavIo.tuningReferenceHz, 442, '다른 설정은 그대로 남는다');
+// 다른 설정을 저장해도 녹음 설정이 지워지지 않는다(저장은 항상 전체 설정을 다시 쓴다).
+useAudioStore.getState().setTuningReferenceHz(444);
+const afterOtherSave = JSON.parse(storage.get('guitar-pedalboard:io'));
+assert.equal(afterOtherSave.tuningReferenceHz, 444);
+assert.deepEqual([afterOtherSave.recordingFormat, afterOtherSave.wavBitDepth, afterOtherSave.wavMaxSeconds], ['wav', 24, 60], '다른 설정을 저장해도 녹음 설정이 남는다');
+useAudioStore.getState().setWavMaxSeconds(45); // 선택지에 없는 값은 5분으로 본다
+assert.equal(useAudioStore.getState().wavMaxSeconds, 300);
+useAudioStore.getState().setWavMaxSeconds(60);
 useAudioStore.getState().startRecording();
 assert.equal(useAudioStore.getState().recordingStatus, 'recording');
-MockWavContext.instances.at(-1).processor.onaudioprocess({ inputBuffer: { numberOfChannels: 1, getChannelData() { return samples; } } });
+assert.equal(useAudioStore.getState().recordingLimitSeconds, 60, '이번 녹음이 담을 수 있는 길이');
+// 녹음 중에는 설정을 바꿀 수 없다.
+useAudioStore.getState().setWavBitDepth(16);
+useAudioStore.getState().setWavMaxSeconds(120);
+assert.equal(useAudioStore.getState().wavBitDepth, 24);
+assert.equal(useAudioStore.getState().wavMaxSeconds, 60);
+const wavSamples = new Float32Array(130).fill(0.5);
+MockWavContext.instances.at(-1).processor.onaudioprocess({ inputBuffer: { numberOfChannels: 1, getChannelData() { return wavSamples; } } });
 await new Promise((resolve) => setImmediate(resolve));
 assert.equal(useAudioStore.getState().recordingStatus, 'ready');
 assert.equal(useAudioStore.getState().recordedFormat, 'wav');
 assert.ok(useAudioStore.getState().recordedUrl);
 assert.equal(useAudioStore.getState().error, 'WAV 녹음 제한에 도달했거나 오디오를 시작할 수 없어 녹음을 종료했습니다.');
+const storedWav = new DataView(await createdBlobs.at(-1).arrayBuffer());
+assert.equal(storedWav.getUint16(34, true), 24, '저장된 파일은 24비트');
+assert.equal(storedWav.getUint32(40, true), 60 * 2 * 3, '저장된 파일은 60 프레임');
 useAudioStore.getState().disposeRecording();
 delete globalThis.AudioContext;
 
@@ -698,6 +768,10 @@ const meterHarness = await createSsrHarness({
         statusLive: status.attrs['aria-live'],
         selectDisabled: 'disabled' in select.attrs,
         panelText: textContent(panel),
+        selects: findAll(panel, byTag('select')).map((node) => ({
+          disabled: 'disabled' in node.attrs,
+          options: findAll(node, byTag('option')).map((option) => ({ text: textContent(option).trim(), selected: 'selected' in option.attrs })),
+        })),
       };
     } finally {
       restore();
@@ -733,19 +807,38 @@ const meterHarness = await createSsrHarness({
     '녹음 완료 01:01 · M4A',
   );
 
+  // S5.1: 녹음 형식 메뉴의 선택지·기본값, WAV 일 때만 보이는 비트 깊이·최대 길이 메뉴, 녹음 중 남은 시간.
+  const optionTexts = (panel, index) => panel.selects[index].options.map((option) => option.text);
+  const selectedText = (panel, index) => panel.selects[index].options.find((option) => option.selected)?.text;
+  const compressedPanel = panelFor({ isRunning: true });
+  assert.equal(compressedPanel.selects.length, 1, '압축 녹음에는 형식 메뉴만 있다');
+  assert.deepEqual(optionTexts(compressedPanel, 0), ['WAV (원본 음질, 길이 정확)', '작은 파일 (브라우저 지원 압축 형식)'], 'WAV 가 첫 선택지');
+  assert.equal(selectedText(compressedPanel, 0), '작은 파일 (브라우저 지원 압축 형식)');
+  const wavIdle = panelFor({ isRunning: true, recordingFormat: 'wav', wavBitDepth: 16, wavMaxSeconds: 300 });
+  assert.equal(wavIdle.selects.length, 3, 'WAV 에는 형식·비트 깊이·최대 길이 메뉴가 있다');
+  assert.deepEqual(optionTexts(wavIdle, 1), ['16비트', '24비트']);
+  assert.deepEqual(optionTexts(wavIdle, 2), ['1분', '2분', '5분']);
+  assert.equal(selectedText(wavIdle, 0), 'WAV (원본 음질, 길이 정확)');
+  assert.equal(selectedText(wavIdle, 1), '16비트');
+  assert.equal(selectedText(wavIdle, 2), '5분');
+  assert.equal(selectedText(panelFor({ isRunning: true, recordingFormat: 'wav', wavBitDepth: 24, wavMaxSeconds: 60 }), 1), '24비트');
+  assert.equal(selectedText(panelFor({ isRunning: true, recordingFormat: 'wav', wavBitDepth: 24, wavMaxSeconds: 60 }), 2), '1분');
+  assert.deepEqual(wavIdle.selects.map((menu) => menu.disabled), [false, false, false]);
+  assert.equal(recordingNow.status, '녹음 중 01:15', '압축 녹음 중에는 남은 시간을 보이지 않는다(길이 제한이 없다)');
+
   // 지원 여부는 '고른 형식' 기준이다: 압축 녹음은 MediaRecorder, WAV 는 ScriptProcessor 가 있어야 한다.
   const unsupported = panelFor({ isRunning: true, recordingSupported: false });
   assert.equal(unsupported.status, uiKo.meter.recordingUnsupported);
   assert.equal(unsupported.status, '이 브라우저에서는 녹음을 지원하지 않습니다.');
   assert.equal(unsupported.disabled[0], true, '지원하지 않으면 연결돼 있어도 녹음 버튼이 꺼진다');
   assert.ok(unsupported.panelText.includes('압축 녹음 형식은 브라우저에 따라'), '압축 녹음 안내가 보인다');
-  assert.equal(unsupported.panelText.includes('WAV 녹음은 최대 2분'), false);
+  assert.equal(unsupported.panelText.includes('WAV 녹음은 고른 최대 길이'), false);
 
   assert.equal(typeof globalThis.AudioContext, 'undefined');
   const wavWithoutProcessor = panelFor({ isRunning: true, recordingFormat: 'wav', recordingSupported: true });
   assert.equal(wavWithoutProcessor.disabled[0], true, 'ScriptProcessor 가 없으면 WAV 녹음은 꺼진다(압축 지원 여부와 무관)');
   assert.equal(wavWithoutProcessor.status, uiKo.meter.recordingUnsupported);
-  assert.ok(wavWithoutProcessor.panelText.includes('WAV 녹음은 최대 2분'), 'WAV 안내가 보인다');
+  assert.ok(wavWithoutProcessor.panelText.includes('WAV 녹음은 고른 최대 길이'), 'WAV 안내가 보인다');
   assert.equal(wavWithoutProcessor.panelText.includes('압축 녹음 형식은 브라우저에 따라'), false);
 
   globalThis.AudioContext = class { createScriptProcessor() {} };
@@ -753,6 +846,10 @@ const meterHarness = await createSsrHarness({
     const wavSupportedPanel = panelFor({ isRunning: true, recordingFormat: 'wav', recordingSupported: false });
     assert.equal(wavSupportedPanel.disabled[0], false, 'WAV 는 압축 녹음 지원 여부와 무관하게 ScriptProcessor 만 있으면 된다');
     assert.equal(wavSupportedPanel.status, '녹음 대기');
+    const wavRecording = panelFor({ isRunning: true, recordingFormat: 'wav', recordingStatus: 'recording', recordingElapsed: 75, recordingLimitSeconds: 300 });
+    assert.equal(wavRecording.status, '녹음 중 01:15 · 남은 시간 03:45', 'WAV 녹음 중에는 남은 시간이 보인다');
+    assert.deepEqual(wavRecording.selects.map((menu) => menu.disabled), [true, true, true], '녹음 중에는 세 메뉴 모두 바꿀 수 없다');
+    assert.equal(panelFor({ isRunning: true, recordingFormat: 'wav', recordingStatus: 'recording', recordingElapsed: 400, recordingLimitSeconds: 300 }).status, '녹음 중 06:40 · 남은 시간 00:00', '남은 시간은 0 밑으로 내려가지 않는다');
   } finally {
     delete globalThis.AudioContext;
   }

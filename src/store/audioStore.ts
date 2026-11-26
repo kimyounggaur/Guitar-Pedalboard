@@ -54,7 +54,17 @@ import {
   type MidiModeNotice,
   type MidiPermission,
 } from '../audio/midi';
-import { recordingFormatFromMime, selectRecorderMimeType, WavRecorder, type RecordingFileFormat } from '../audio/recording';
+import {
+  DEFAULT_WAV_BIT_DEPTH,
+  DEFAULT_WAV_MAX_SECONDS,
+  normalizeWavBitDepth,
+  normalizeWavMaxSeconds,
+  recordingFormatFromMime,
+  selectRecorderMimeType,
+  WavRecorder,
+  type RecordingFileFormat,
+  type WavBitDepth,
+} from '../audio/recording';
 import { ko } from '../i18n/ko';
 import { safeStorage, STORAGE_KEYS } from '../persistence';
 import { monitorSink } from './monitorStore';
@@ -88,6 +98,10 @@ interface IoSettings {
   inputChannels: Record<string, StoredInputChannel>;
   /** S2.13 에서 추가한 필드: 사용자가 마지막으로 고른 입력·출력 장치(id 와 이름). 기존 저장값에는 없고, 없으면 둘 다 null(기본 장치)로 읽는다. */
   devices: { input: RememberedDevice | null; output: RememberedDevice | null };
+  /** S5.1 에서 추가한 필드: 녹음 형식('wav' 가 기본)·WAV 비트 깊이·WAV 최대 길이(초). 기존 저장값에는 없고, 없으면 기본값으로 읽는다. */
+  recordingFormat: 'webm' | 'wav';
+  wavBitDepth: WavBitDepth;
+  wavMaxSeconds: number;
 }
 
 const defaultIoSettings: IoSettings = {
@@ -97,6 +111,9 @@ const defaultIoSettings: IoSettings = {
   tuningReferenceHz: 440,
   inputChannels: {},
   devices: { input: null, output: null },
+  recordingFormat: 'wav',
+  wavBitDepth: DEFAULT_WAV_BIT_DEPTH,
+  wavMaxSeconds: DEFAULT_WAV_MAX_SECONDS,
 };
 
 /** 기억해 두는 장치 수의 상한. 넘으면 가장 오래 전에 쓴 것부터 잊는다. */
@@ -167,6 +184,9 @@ function parseIoSettings(raw: string): IoSettings {
         : defaultIoSettings.tuningReferenceHz,
     inputChannels: readInputChannels(stored.inputChannels),
     devices: readRememberedDevices(stored.devices),
+    recordingFormat: stored.recordingFormat === 'webm' ? 'webm' : 'wav',
+    wavBitDepth: normalizeWavBitDepth(stored.wavBitDepth),
+    wavMaxSeconds: normalizeWavMaxSeconds(stored.wavMaxSeconds),
   };
 }
 
@@ -193,6 +213,9 @@ function ioSettingsOf(state: IoSettingsSource, overrides: Partial<IoSettings> = 
     tuningReferenceHz: state.tuningReferenceHz,
     inputChannels: state.inputChannels,
     devices: { input: state.rememberedInput, output: state.rememberedOutput },
+    recordingFormat: state.recordingFormat,
+    wavBitDepth: state.wavBitDepth,
+    wavMaxSeconds: state.wavMaxSeconds,
     ...overrides,
   };
 }
@@ -209,6 +232,9 @@ interface IoSettingsSource {
   inputChannels: Record<string, StoredInputChannel>;
   rememberedInput: RememberedDevice | null;
   rememberedOutput: RememberedDevice | null;
+  recordingFormat: 'webm' | 'wav';
+  wavBitDepth: WavBitDepth;
+  wavMaxSeconds: number;
 }
 
 function isSamePitch(left: PitchReading, right: PitchReading): boolean {
@@ -687,6 +713,13 @@ interface AudioStore {
   recordingFormat: 'webm' | 'wav';
   recordedFormat: RecordingFileFormat;
   setRecordingFormat: (format: 'webm' | 'wav') => void;
+  /** S5.1: WAV 비트 깊이(16 기본, 24 선택)와 최대 길이(초, 기본 300). 둘 다 저장한다. */
+  wavBitDepth: WavBitDepth;
+  setWavBitDepth: (depth: WavBitDepth) => void;
+  wavMaxSeconds: number;
+  setWavMaxSeconds: (seconds: number) => void;
+  /** 지금 WAV 녹음이 담을 수 있는 최대 길이(초). 녹음을 시작할 때 정해지고, 샘플레이트가 높아 메모리 상한이 먼저 닿으면 고른 값보다 작다. 녹음 중이 아니면 의미 없다. */
+  recordingLimitSeconds: number;
   recordingStatus: RecordingStatus;
   recordedUrl: string | null;
   recordingElapsed: number;
@@ -937,9 +970,28 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
   midiMappings: readMidiMappings(),
   midiError: null,
   recordingSupported: MEDIA_RECORDER_SUPPORTED,
-  recordingFormat: 'webm',
+  recordingFormat: initialIoSettings.recordingFormat,
   recordedFormat: 'webm',
-  setRecordingFormat: (format) => { if (get().recordingStatus !== 'recording') set({ recordingFormat: format }); },
+  setRecordingFormat: (format) => {
+    if (get().recordingStatus === 'recording') return;
+    set({ recordingFormat: format });
+    persistIoSettings(ioSettingsOf(get(), { recordingFormat: format }));
+  },
+  wavBitDepth: initialIoSettings.wavBitDepth,
+  setWavBitDepth: (depth) => {
+    if (get().recordingStatus === 'recording') return;
+    const wavBitDepth = normalizeWavBitDepth(depth);
+    set({ wavBitDepth });
+    persistIoSettings(ioSettingsOf(get(), { wavBitDepth }));
+  },
+  wavMaxSeconds: initialIoSettings.wavMaxSeconds,
+  setWavMaxSeconds: (seconds) => {
+    if (get().recordingStatus === 'recording') return;
+    const wavMaxSeconds = normalizeWavMaxSeconds(seconds);
+    set({ wavMaxSeconds });
+    persistIoSettings(ioSettingsOf(get(), { wavMaxSeconds }));
+  },
+  recordingLimitSeconds: initialIoSettings.wavMaxSeconds,
   recordingStatus: 'idle',
   recordedUrl: null,
   recordingElapsed: 0,
@@ -1398,9 +1450,9 @@ export const useAudioStore = create<AudioStore>((set, get) => ({
         activeWavRecorder = new WavRecorder(stream, () => {
           void finishActiveRecording('finalize');
           useAudioStore.setState({ error: ko.recording.wavLimit });
-        });
+        }, { maxSeconds: state.wavMaxSeconds, bitDepth: state.wavBitDepth });
         recordingTimer = window.setInterval(() => useAudioStore.setState({ recordingElapsed: Math.floor((recordingNow() - recordingStartedAt) / 1000) }), RECORDING_TIMER_INTERVAL_MS);
-        set({ recordingStatus: 'recording', recordingElapsed: 0 });
+        set({ recordingStatus: 'recording', recordingElapsed: 0, recordingLimitSeconds: activeWavRecorder.limitSeconds });
         return;
       }
       const mimeType = selectRecorderMimeType(

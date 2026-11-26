@@ -111,7 +111,7 @@ test.describe('E-15 키보드 단축키', () => {
 
     // 녹음 버튼을 눌러 시작한다 — 포커스는 버튼에 그대로 있다(연주 중 보통의 상태). 그래도 Esc 는 긴급 정지여야 한다.
     await page.getByRole('button', { name: '녹음', exact: true }).click();
-    await expect(page.getByText(/녹음 중/)).toBeVisible();
+    await expect(page.locator('.recording-status', { hasText: '녹음 중' })).toBeVisible();
     const recordStartedAt = await page.evaluate(() => (window as unknown as { __lastTrigger: number }).__lastTrigger);
     await page.waitForTimeout(3000);
 

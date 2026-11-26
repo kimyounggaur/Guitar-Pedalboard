@@ -85,3 +85,10 @@ export const connectButton = (page: Page): Locator => page.getByRole('button', {
 export const disconnectButton = (page: Page): Locator => page.getByRole('button', { name: '연결 해제' });
 /** 연결되어 있을 때만 그려지는 긴급 정지 버튼 */
 export const panicButton = (page: Page): Locator => page.locator('.panic-button');
+
+export type RecordingFormat = 'wav' | 'webm';
+
+/** 녹음 패널의 형식 메뉴를 고른다(S5.1: 처음 열면 'wav'. 'webm' 은 '작은 파일'). 데스크톱 화면 기준. */
+export async function chooseRecordingFormat(page: Page, format: RecordingFormat): Promise<void> {
+  await page.locator('.recording-panel label', { hasText: '녹음 형식' }).locator('select').selectOption(format);
+}
