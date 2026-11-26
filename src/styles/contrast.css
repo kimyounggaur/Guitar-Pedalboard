@@ -21,6 +21,15 @@
 
 /* 면 바탕 색 보정(같은 계열, 그라데이션 끝만 조정) */
 .pedal-card-compressor { background-color: #1898e4; }
+/* 코러스 'ENSEMBLE' 글자(#ecfbff)는 DejaVu Sans·FreeSans 에서 4.51:1 로 문턱(4.5)과 0.01 차였다 — 흰색으로 4.76:1. */
+.pedal-card .chorus-wave-panel > strong { color: #ffffff; }
+/* 컴프레서 바닥의 안쪽 그림자(알파 0.42)가 짙어, 카드가 낮은 화면(1366x768·1440x900)에서 바닥 11 px 위에 놓이는 ON/OFF 글자(잉크 #0a1620)가
+   4.37:1 까지 떨어졌다(CI 의 DejaVu Sans 에서 E-21 이 잡음). 알파를 0.18 로 옅게 해 가장 짙은 바닥 가장자리에서도 4.8:1 이상. */
+.pedal-card-compressor {
+  box-shadow:
+    inset 0 -18px 28px rgba(1, 73, 126, 0.18),
+    0 18px 36px rgba(0, 0, 0, 0.32);
+}
 .pedal-card-eq { background-color: #006c35; }
 .pedal-card-crunch { background-color: #aa1f1b; }
 .pedal-card-cab {
