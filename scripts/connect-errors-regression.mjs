@@ -366,11 +366,10 @@ equal(useAudioStore.getState().error, ko.connect.workletLoad, '워클릿 로드 
 // ---------------------------------------------------------------------------------------------
 // 4. 소스 단언
 // ---------------------------------------------------------------------------------------------
-const [engineSource, storeSource, panelSource, menuSource, errorsSource] = await Promise.all([
+const [engineSource, storeSource, panelSource, errorsSource] = await Promise.all([
   read('src/audio/AudioEngine.ts'),
   read('src/store/audioStore.ts'),
   read('src/components/ConnectGuitarPanel.tsx'),
-  read('src/components/AudioInputMenu.tsx'),
   read('src/audio/engine/errors.ts'),
 ]);
 const count = (text, needle) => text.split(needle).length - 1;
@@ -389,8 +388,7 @@ equal(count(panelSource, 'className="error-message"'), 1, '화면: 오류 문단
 equal(count(panelSource, '{inMenu ? null : errorNotice}'), 1, '화면: 휴대폰 도크의 입력 패널에서는 안내가 연결 버튼 줄 바로 아래에 있다');
 ok(panelSource.indexOf('{inMenu ? null : errorNotice}') > panelSource.indexOf('className="connect-actions"'), '화면: 안내는 연결 버튼 줄 다음에 온다');
 ok(panelSource.indexOf('{inMenu ? null : errorNotice}') < panelSource.indexOf('<FilePlayer />'), '화면: 안내는 음원 파일·안전 설정 묶음보다 위에 있다(휴대폰 도크에서 스크롤 아래로 밀리지 않는다)');
-equal(count(menuSource, 'className="error-message" role="alert">{error}</p>'), 1, '화면: 데스크톱 헤더 메뉴는 오류 문단을 role="alert" 로 한 번 그린다(메뉴가 닫혀 있어도 보인다)');
-ok(menuSource.indexOf('className="error-message"') < menuSource.indexOf('id="audio-input-popover"'), '화면: 오류 문단은 접히는 설정 팝오버 밖(헤더 줄 바로 아래)에 있다')
+// 데스크톱 헤더 메뉴(AudioInputMenu)의 오류 문단은 소스 글자 읽기를 늘리지 않고 e2e(E-07)가 화면에서 확인한다.
 ok(panelSource.includes("errorRef.current?.scrollIntoView({ block: 'nearest' })"), '화면: 새 오류가 생기면 보이는 곳까지 스크롤한다');
 ok(!panelSource.includes('{error && <p className="error-message"'), '화면: 패널 맨 아래의 옛 오류 문단이 없다');
 ok(!errorsSource.includes('error instanceof'), 'errors.ts: 오류를 instanceof 로 가르지 않는다(다른 창의 오류도 이름으로 가른다)');
