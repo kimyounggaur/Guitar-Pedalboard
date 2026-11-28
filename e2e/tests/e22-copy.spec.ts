@@ -6,7 +6,7 @@
 // 페달 얼굴에 인쇄된 이름·노브 약어(Drive, Tone, D.Time …)와 프리셋 이름은 영어로 남는다(설계서 4.6절) — 위 목록에 없다.
 // '쓰지 않는 키 0개'와 '문구를 코드에 직접 쓰지 않음'은 정적 검사(npm run test:ko-catalog)가 본다.
 import { expect, type Page } from '@playwright/test';
-import { connectGuitar, openApp, pedalCards, pedalSwitches, selectMobileTab, setSidebar } from '../helpers/app';
+import { connectGuitar, openApp, openAudioInputMenu, pedalCards, pedalSwitches, selectMobileTab, setSidebar } from '../helpers/app';
 import { test } from '../helpers/fixtures';
 import { saveUserPreset } from '../helpers/preset-io';
 import { toastOf } from '../helpers/storage';
@@ -164,6 +164,7 @@ test.describe('E-22 한국어 문구 통일', () => {
   test('E-22 ③ 처음 화면(데스크톱·연결 전)에 브라우저 기본 영어 파일 버튼이 없다', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await openApp(page);
+    await openAudioInputMenu(page);
     // 파일 입력은 있어도 화면에 그려지지 않는다(눌리는 것은 한국어 버튼이다).
     const visibleFileInputs = await page.evaluate(() =>
       Array.from(document.querySelectorAll('input[type=file]')).filter((input) => {
@@ -179,6 +180,7 @@ test.describe('E-22 한국어 문구 통일', () => {
   test('E-22 ①② 데스크톱: 연결 전·연결 후·사이드바 접힘 상태에 내부 이름과 영어 시스템 문구가 없다', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await openApp(page);
+    await openAudioInputMenu(page);
     await expectClean(page, '데스크톱·연결 전');
     await connectGuitar(page);
     await expectClean(page, '데스크톱·연결 후');
@@ -189,6 +191,7 @@ test.describe('E-22 한국어 문구 통일', () => {
   test('E-22 ①② 폰: 도크의 모든 탭에서 내부 이름과 영어 시스템 문구가 없다', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openApp(page);
+    await openAudioInputMenu(page);
     for (const tab of ['input', 'meter', 'preset', 'pedals'] as const) {
       await selectMobileTab(page, tab);
       await expectClean(page, `폰·연결 전·${tab} 탭`);
@@ -204,6 +207,7 @@ test.describe('E-22 한국어 문구 통일', () => {
   test('E-22 ② 알림: 저장·삭제(되돌리기)·초기화·순서 변경 때 뜨는 문구가 모두 한국어다', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await openApp(page);
+    await openAudioInputMenu(page);
 
     await saveUserPreset(page, 'E22');
     await expectClean(page, '프리셋 저장 직후');
@@ -249,6 +253,7 @@ test.describe('E-22 한국어 문구 통일', () => {
   test('E-22 ① 카드 이름: 모든 페달 카드·드래그 손잡이·MIDI 버튼이 한국어 이름을 가진다', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await openApp(page);
+    await openAudioInputMenu(page);
     const names = await page.evaluate(() =>
       Array.from(document.querySelectorAll('.pedal-board .pedal-card')).map((card) => ({
         region: card.getAttribute('aria-label') ?? '',

@@ -7,7 +7,7 @@
 // 문구는 설계서 4.13 표의 글자 그대로를 이 파일에 따로 적었다(앱의 카탈로그 src/i18n/ko.ts 를 가져다 쓰지 않는다 —
 // 카탈로그가 실수로 바뀌면 이 시험이 알아채야 하기 때문이다). 카탈로그와 설계서 문서의 일치는 `npm run test:connect-errors` 가 본다.
 import type { Page } from '@playwright/test';
-import { connectButton, disconnectButton, openApp, setMobileDock } from '../helpers/app';
+import { connectButton, disconnectButton, openApp, openAudioInputMenu, setMobileDock } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { GET_USER_MEDIA_ERRORS, mockGetUserMediaError, readAudioTracking, trackAudioContexts, type GetUserMediaErrorName } from '../helpers/mocks';
 import { PHONE_PROFILES } from '../helpers/screens';
@@ -69,6 +69,7 @@ test.describe('E-07 오류 안내', () => {
     test(`E-07 getUserMedia ${name}: 4.13 의 문구가 보이고 영어 원문은 없다`, async ({ page }) => {
       await mockGetUserMediaError(page, name);
       await openApp(page);
+      await openAudioInputMenu(page);
       await connectButton(page).click();
       await expect(errorMessage(page)).toHaveText(EXPECTED[name]);
       await expect(errorMessage(page)).toBeInViewport({ ratio: 1 });
@@ -88,6 +89,7 @@ test.describe('E-07 오류 안내', () => {
       });
     });
     await openApp(page);
+    await openAudioInputMenu(page);
     await connectButton(page).click();
     await expect(errorMessage(page)).toHaveText(TEXT.workletLoad);
     await expect(errorMessage(page)).not.toHaveText(TEXT.abort);
@@ -101,6 +103,7 @@ test.describe('E-07 오류 안내', () => {
       Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: undefined });
     });
     await openApp(page);
+    await openAudioInputMenu(page);
     await connectButton(page).click();
     await expect(errorMessage(page)).toHaveText(TEXT.security);
     await expectNoEnglishRaw(page);
@@ -121,6 +124,7 @@ test.describe('E-07 오류 안내', () => {
       });
     });
     await openApp(page);
+    await openAudioInputMenu(page);
     await connectButton(page).click();
     await expect(errorMessage(page)).toHaveText(TEXT.notAllowed);
     await connectButton(page).click();
@@ -168,6 +172,7 @@ test.describe('E-07 오류 안내', () => {
         await trackAudioContexts(page);
         await mockMissingDevice(page, exactError);
         await openApp(page);
+        await openAudioInputMenu(page);
         await chooseSomeDevice(page);
         await connectButton(page).click();
 
@@ -202,6 +207,7 @@ test.describe('E-07 오류 안내', () => {
       await trackAudioContexts(page);
       await mockMissingDevice(page, 'OverconstrainedError', 'NotFoundError');
       await openApp(page);
+      await openAudioInputMenu(page);
       await chooseSomeDevice(page);
       await connectButton(page).click();
       await expect(errorMessage(page)).toHaveText(TEXT.notFound);
@@ -214,6 +220,7 @@ test.describe('E-07 오류 안내', () => {
     test('E-07 장치는 있는데 열 수 없는 오류(NotReadableError)는 기본 장치로 몰래 바꾸지 않는다', async ({ page }) => {
       await mockMissingDevice(page, 'NotReadableError');
       await openApp(page);
+      await openAudioInputMenu(page);
       const deviceId = await chooseSomeDevice(page);
       await connectButton(page).click();
       await expect(errorMessage(page)).toHaveText(TEXT.notReadable);
@@ -230,6 +237,7 @@ test.describe('E-07 오류 안내', () => {
       test(`E-07 휴대폰 ${screen.name}: 입력 탭에서 연결에 실패하면 오류 문구 전체가 화면 안에 보인다`, async ({ page }) => {
         await mockGetUserMediaError(page, 'NotAllowedError');
         await openApp(page);
+        await openAudioInputMenu(page);
         await setMobileDock(page, true, 'input');
         await connectButton(page).tap();
         await expect(errorMessage(page)).toHaveText(TEXT.notAllowed);

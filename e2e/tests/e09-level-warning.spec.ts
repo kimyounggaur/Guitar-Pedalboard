@@ -11,7 +11,7 @@
 // 경고 문구는 설계서 4.12 표의 문장 그대로다. 문구를 바꾸면 src/i18n/ko.ts·`npm run test:level-warning` 과 이 시험을 같이 바꾼다.
 // 문턱값(−70·−60·−36·−30·−0.5 dBFS 와 1·3·5초 등)을 시험하는 쪽은 Node 시험(scripts/level-warning-regression.mjs)이고, 여기서는 '실제 브라우저에서 그 시간대로 화면에 뜬다' 를 본다.
 import type { BrowserContextOptions, Locator, Page } from '@playwright/test';
-import { connectGuitar, disconnectButton, openApp, selectMobileTab, setMobileDock, type MobileTab } from '../helpers/app';
+import { connectGuitar, disconnectButton, openApp, openAudioInputMenu, selectMobileTab, setMobileDock, type MobileTab } from '../helpers/app';
 import { fixturePath } from '../helpers/env';
 import { expect, test, type MicSession } from '../helpers/fixtures';
 import { describeEvents, observeLevelNotice, readLevelNotice, waitForAudioClock, type NoticeEvent } from '../helpers/level-notice';
@@ -84,6 +84,7 @@ async function openDesktop(launchWithMic: Launch, wav: string): Promise<Page> {
   const { page } = await launchWithMic(wav);
   await observeLevelNotice(page);
   await openApp(page);
+  await openAudioInputMenu(page);
   return page;
 }
 
@@ -92,6 +93,7 @@ async function openPhoneOnTab(launchWithMic: Launch, wav: string, tab: MobileTab
   const { page } = await launchWithMic(wav, PHONE);
   await observeLevelNotice(page);
   await openApp(page);
+  await openAudioInputMenu(page);
   await setMobileDock(page, true);
   await connectGuitar(page);
   await selectMobileTab(page, tab);

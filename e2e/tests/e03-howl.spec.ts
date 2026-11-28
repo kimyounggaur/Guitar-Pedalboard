@@ -10,7 +10,7 @@
 // 화면이 어떤 상태여도 같은 시간 안에' 가 핵심이다.
 import { readFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
-import { chooseRecordingFormat, connectButton, connectGuitar, disconnectButton, openApp, panicButton, setMobileDock } from '../helpers/app';
+import { chooseRecordingFormat, connectButton, connectGuitar, disconnectButton, openApp, openAudioInputMenu, panicButton, setMobileDock } from '../helpers/app';
 import { fixturePath } from '../helpers/env';
 import { expect, test } from '../helpers/fixtures';
 import { emulateHiddenDocument, markTriggers, observeGuard, readAudioTracking, readGuardObservation, trackAudioContexts, type GuardObservation } from '../helpers/mocks';
@@ -34,6 +34,7 @@ async function openForHowl(page: Page): Promise<void> {
   await markTriggers(page);
   await observeGuard(page);
   await openApp(page);
+  await openAudioInputMenu(page);
 }
 
 /** 가드가 차단을 알릴 때까지 기다린다(오디오 시계 값은 차단 메시지가 온 뒤에 읽는다). 시간 안에 안 오면 그때까지의 관찰을 담아 실패한다. */

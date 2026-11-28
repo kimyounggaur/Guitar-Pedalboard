@@ -739,34 +739,80 @@ h2 {
   .board-section > .section-heading .connect-panel {
     grid-area: panel;
   }
-
-  .board-section > .section-heading.is-connected {
-    grid-template-areas:
-      "brand panel"
-      "brand hint";
-    align-items: center;
-  }
-
-  .board-section > .section-heading.is-connected .hint {
-    align-self: start;
-  }
 }
 
-/* 연결한 뒤의 연결 패널: 장치·채널·지연·입력 트림·연결 해제·Panic 이 한 줄(좁으면 두 줄)로 이어지는 상태 표시줄 */
-.header-tools .connect-panel.is-connected {
+/* 상단 헤더의 '오디오 입력' 메뉴: 단추 줄 + 아래로 열리는 설정 팝오버 */
+.audio-input-menu {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: stretch;
   gap: 8px;
-  padding: 6px 10px;
+  min-width: 0;
 }
 
-.connect-status-bar {
+.audio-input-menu-bar {
   display: flex;
-  flex-wrap: wrap;
+  /* 한 줄로 유지한다: 좁아지면 장치 이름이 줄임표로 줄어든다(헤더 높이가 연결 여부로 바뀌면 보드가 밀린다 — E-06). */
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 6px 12px;
+  gap: 6px 10px;
   min-width: 0;
+}
+
+.audio-input-menu-bar > * {
+  flex: 0 0 auto;
+}
+
+.audio-input-menu-bar > .connect-status-device {
+  flex: 1 1 40px;
+  min-width: 0;
+}
+
+.audio-input-menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  height: 36px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.audio-input-menu-caret {
+  font-size: 0.72rem;
+}
+
+.audio-input-menu-bar .primary-button,
+.audio-input-menu-bar .danger-button,
+.audio-input-menu-bar .panic-button {
+  width: auto;
+  height: 36px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.audio-input-popover {
+  position: absolute;
+  top: calc(100% - 8px);
+  left: 0;
+  z-index: 30;
+  /* 메뉴 줄(헤더 왼쪽 열)에서 오른쪽으로 펼친다. 도킹한 오디오 패널(≈500px)을 가리지 않도록 폭을 줄이고, 좁은 화면에서는 화면 안에 맞춘다. */
+  width: min(720px, calc(100vw - 48px));
+  /* 화면 아래로 넘치면 안쪽에서 스크롤한다(문서는 스크롤되지 않는다). 위쪽 헤더·입력 경고 높이만큼 뺀다. */
+  max-height: max(260px, calc(100dvh - 300px));
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.5);
+}
+
+.audio-input-popover[hidden] {
+  display: none;
+}
+
+.audio-input-popover .connect-panel {
+  background: transparent;
+  border: 0;
 }
 
 .connect-status-dot {
@@ -776,6 +822,11 @@ h2 {
   border-radius: 50%;
   background: var(--success);
   box-shadow: 0 0 8px rgba(79, 209, 165, 0.7);
+}
+
+.connect-status-dot.is-idle {
+  background: var(--ink-muted);
+  box-shadow: none;
 }
 
 .connect-status-device,
@@ -809,86 +860,4 @@ h2 {
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.connect-status-channel {
-  display: flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.connect-status-channel label {
-  color: var(--ink-muted);
-  font-size: 0.72rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.connect-status-channel select {
-  width: auto;
-  min-width: 96px;
-  height: 32px;
-}
-
-.connect-status-channel .input-channel-note {
-  max-width: 190px;
-  overflow: hidden;
-  font-size: 0.74rem;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connect-status-bar .io-slider-control {
-  display: flex;
-  flex: 0 1 190px;
-  align-items: center;
-  gap: 8px;
-  min-width: 130px;
-}
-
-.connect-status-bar .io-slider-control .control-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--ink-muted);
-  font-size: 0.72rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.connect-status-bar .io-slider-control input[type="range"] {
-  flex: 1 1 60px;
-  min-width: 56px;
-}
-
-.header-tools .connect-panel.is-connected .connect-status-bar .danger-button,
-.header-tools .connect-panel.is-connected .connect-status-bar .panic-button,
-.header-tools .connect-panel.is-connected .connect-status-bar .secondary-button {
-  width: auto;
-  height: 34px;
-  /* 12 → 10 px: 'Panic' 이 '긴급 정지' 가 되며(S4.6) 단추가 넓어져, 1280 px 에서 '입력 설정' 이 다음 줄로 밀려 첫 페달 카드가 40 px 내려갔다(E-06). */
-  padding: 0 10px;
-  white-space: nowrap;
-}
-
-.connect-panel.is-connected .connect-panel-details {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 14px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-
-.connect-panel.is-connected .connect-panel-details > .panel-title,
-.connect-panel.is-connected .connect-panel-details > .audio-file-upload,
-.connect-panel.is-connected .connect-panel-details > .input-safety-controls {
-  grid-column: 1 / -1;
-}
-
-/* hidden 속성(접힘)이 위의 display: grid 에 눌리지 않도록 선택자 우선순위를 더 높인다 */
-.connect-panel.is-connected .connect-panel-details[hidden] {
-  display: none;
 }

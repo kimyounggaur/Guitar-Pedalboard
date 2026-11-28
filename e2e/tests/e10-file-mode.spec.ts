@@ -7,7 +7,7 @@
 // '이음매에서 큰 클릭이 없다'(수용 기준 1 의 뒷부분)는 설계서가 청취 확인으로 정한 항목이라 여기서 시험하지 않는다(사람 확인).
 // 파일은 `scripts/make-fixture-wavs.mjs` 가 만든 합성 WAV 다(e2e/fixtures). 1초 파일(REF-IMPULSE)로 반복·끝을, 60초 파일(G-1)로 탐색을 본다.
 import type { BrowserContextOptions, Page } from '@playwright/test';
-import { connectGuitar, disconnectButton, horizontalOverflow, openApp, selectMobileTab, setMobileDock } from '../helpers/app';
+import { connectGuitar, disconnectButton, horizontalOverflow, openApp, openAudioInputMenu, selectMobileTab, setMobileDock } from '../helpers/app';
 import { fixturePath } from '../helpers/env';
 import {
   closeFileButton,
@@ -45,6 +45,7 @@ async function openTracked(launchWithMic: Launch, contextOptions?: BrowserContex
   await trackAudioContexts(page);
   await trackFileMedia(page);
   await openApp(page);
+  await openAudioInputMenu(page);
   return page;
 }
 

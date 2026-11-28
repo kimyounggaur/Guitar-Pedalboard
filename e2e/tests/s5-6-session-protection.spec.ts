@@ -8,7 +8,7 @@
 //   ⑥ 요청이 거절돼도 연결·화면은 멀쩡하고, 다음에 다시 보일 때 다시 시도한다
 //   ⑧ 음원 파일 재생(연습) 중에도 화면 잠금을 쥐고, 파일을 닫으면 푼다
 //   ⑦ 이탈 경고: 녹음 중이 아니면 창 닫기에서 확인 창이 없고, 녹음 중이면 확인 창이 뜨며, 정지하면 다시 없다
-import { chooseRecordingFormat, connectGuitar, disconnectButton, openApp } from '../helpers/app';
+import { chooseRecordingFormat, connectGuitar, disconnectButton, openApp, openAudioInputMenu } from '../helpers/app';
 import { fixturePath } from '../helpers/env';
 import { closeFileButton } from '../helpers/file-media';
 import { expect, test } from '../helpers/fixtures';
@@ -93,6 +93,7 @@ test.describe('S5.6 화면 꺼짐 방지와 이탈 경고', () => {
     const { page } = await launchWithMic();
     await mockWakeLock(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     expect((await snapshot(page)).requests).toEqual([]);
 
     await connectGuitar(page);
@@ -108,6 +109,7 @@ test.describe('S5.6 화면 꺼짐 방지와 이탈 경고', () => {
     const { page } = await launchWithMic();
     await mockWakeLock(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await connectGuitar(page);
     await expect.poll(async () => (await snapshot(page)).active).toBe(1);
 
@@ -126,6 +128,7 @@ test.describe('S5.6 화면 꺼짐 방지와 이탈 경고', () => {
     const { page } = await launchWithMic();
     await mockWakeLock(page, { delayMs: 400 });
     await openApp(page);
+    await openAudioInputMenu(page);
     await connectGuitar(page);
     // 첫 요청이 끝나기 전에 '보임' 신호를 여러 번 보낸다(탭을 빠르게 오가는 경우).
     for (let i = 0; i < 3; i += 1) await setVisibility(page, 'visible');
@@ -142,6 +145,7 @@ test.describe('S5.6 화면 꺼짐 방지와 이탈 경고', () => {
     const { page } = await launchWithMic();
     await mockWakeLock(page, { delayMs: 500 });
     await openApp(page);
+    await openAudioInputMenu(page);
     await connectGuitar(page);
     await disconnectButton(page).click();
     await page.waitForTimeout(1000);
@@ -156,6 +160,7 @@ test.describe('S5.6 화면 꺼짐 방지와 이탈 경고', () => {
     page.on('pageerror', (error) => errors.push(error.message));
     await mockWakeLock(page, { supported: false });
     await openApp(page);
+    await openAudioInputMenu(page);
     expect(await page.evaluate(() => 'wakeLock' in navigator)).toBe(false);
     await connectGuitar(page);
     await expect(disconnectButton(page)).toBeVisible();
@@ -170,6 +175,7 @@ test.describe('S5.6 화면 꺼짐 방지와 이탈 경고', () => {
     const { page } = await launchWithMic();
     await mockWakeLock(page, { denyFirst: true });
     await openApp(page);
+    await openAudioInputMenu(page);
     await connectGuitar(page);
     await expect.poll(async () => (await snapshot(page)).requests.length).toBe(1);
     expect((await snapshot(page)).active).toBe(0);
@@ -185,6 +191,7 @@ test.describe('S5.6 화면 꺼짐 방지와 이탈 경고', () => {
     const { page } = await launchWithMic();
     await mockWakeLock(page);
     await openApp(page);
+    await openAudioInputMenu(page);
     await page.setInputFiles('#audio-file', fixturePath('ref-pc.wav'));
     await expect(closeFileButton(page)).toBeEnabled();
     await expect.poll(async () => (await snapshot(page)).active).toBe(1);
@@ -197,6 +204,7 @@ test.describe('S5.6 화면 꺼짐 방지와 이탈 경고', () => {
   test('⑦ 이탈 경고: 녹음 중이 아니면 창을 닫을 때 확인 창이 없고, 녹음 중이면 뜨며, 정지하면 다시 없다', async ({ launchWithMic }) => {
     const { page } = await launchWithMic();
     await openApp(page);
+    await openAudioInputMenu(page);
     await connectGuitar(page);
     await chooseRecordingFormat(page, 'wav');
 

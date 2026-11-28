@@ -6,7 +6,7 @@
 // 값 계산의 모든 경우(0~127 전부·경계)는 Node 시험(test:midi)이, 소리가 계단 없이 움직이는지는 test:volume-smoothing 이 본다.
 // 여기서는 실제 브라우저의 화면 반영과 시간이다. 실제 MIDI 장치·익스프레션 페달은 사람이 본다(보고서 '사람 확인 필요').
 import type { Page } from '@playwright/test';
-import { connectGuitar, openApp } from '../helpers/app';
+import { connectGuitar, openApp, openAudioInputMenu } from '../helpers/app';
 import { expect, test } from '../helpers/fixtures';
 import { mockMidi, type MidiMock } from '../helpers/mocks';
 import { pedalGroup, seedStorage } from '../helpers/storage';
@@ -28,6 +28,7 @@ async function openWithAdvanced(page: Page, config: Record<string, unknown>): Pr
   const midi = await mockMidi(page, { permission: 'granted' });
   await seedStorage(page, { [ADVANCED_KEY]: advancedConfig(config) });
   await openApp(page);
+  await openAudioInputMenu(page);
   const id = await midi.connect('Foot Controller');
   // 저장된 설정(프로그램·CC)이 있으면 앱이 열 때 저절로 연결해 입력을 듣는다.
   await expect.poll(() => midi.listening()).toBe(1);

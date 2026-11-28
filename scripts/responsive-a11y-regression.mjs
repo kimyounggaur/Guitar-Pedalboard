@@ -802,6 +802,9 @@ async function verifyDesktopLayout() {
   const app = await openApp({ purpose: 'Responsive desktop/tablet styles', viewport: { width: 1280, height: 900 }, waitFor: '.header-tools .connect-panel' });
   if (!app) return;
   try {
+    // 입력 설정은 헤더의 '오디오 입력' 메뉴 안에 접혀 있다. 크기를 재려면 먼저 연다.
+    await app.evaluate(`(() => { document.querySelector('.audio-input-menu-toggle').click(); return true; })()`);
+    await app.waitFor(`document.querySelector('#audio-input-popover') && !document.querySelector('#audio-input-popover').hidden`, { label: '오디오 입력 메뉴 열림' });
     const desktop = await app.evaluate(`(() => {
       ${COLOR_PROBE}
       const all = (selector) => [...document.querySelectorAll(selector)];
